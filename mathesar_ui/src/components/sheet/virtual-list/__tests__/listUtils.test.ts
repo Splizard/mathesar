@@ -30,27 +30,35 @@ function renderedRange(
 
 describe('getItemsInfo', () => {
   test('overscans on both sides', () => {
-    expect(renderedRange(500)).toEqual([45, 59]);
+    expect(renderedRange(500)).toEqual([45, 60]);
   });
 
   test('moves overscan that does not fit at the start to the end', () => {
-    expect(renderedRange(0)).toEqual([0, 14]);
-    expect(renderedRange(20)).toEqual([0, 14]);
+    expect(renderedRange(0)).toEqual([0, 15]);
+    expect(renderedRange(20)).toEqual([0, 15]);
+  });
+
+  test('renders the same number of items whatever the alignment', () => {
+    const counts = [500, 503, 505, 509].map((offset) => {
+      const [start, stop] = renderedRange(offset);
+      return stop - start + 1;
+    });
+    expect(new Set(counts)).toEqual(new Set([16]));
   });
 
   test('moves overscan that does not fit at the end to the start', () => {
-    expect(renderedRange(950)).toEqual([85, 99]);
+    expect(renderedRange(950)).toEqual([84, 99]);
   });
 
   test('shifts overscan towards the scroll direction by twice the step', () => {
     const forward = { scrollDirection: 'forward', scrollDelta: 10 } as const;
-    expect(renderedRange(500, forward)).toEqual([47, 61]);
+    expect(renderedRange(500, forward)).toEqual([47, 62]);
     const backward = { scrollDirection: 'backward', scrollDelta: 10 } as const;
-    expect(renderedRange(500, backward)).toEqual([43, 57]);
+    expect(renderedRange(500, backward)).toEqual([43, 58]);
   });
 
   test('keeps one item behind when scrolling fast', () => {
     const fast = { scrollDirection: 'forward', scrollDelta: 400 } as const;
-    expect(renderedRange(500, fast)).toEqual([49, 63]);
+    expect(renderedRange(500, fast)).toEqual([49, 64]);
   });
 });

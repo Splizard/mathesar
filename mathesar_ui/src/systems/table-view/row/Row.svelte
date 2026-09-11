@@ -121,7 +121,7 @@
     class:created={creationStatus === 'success'}
     class:is-group-header={isGroupHeaderRow(row)}
     class:is-add-placeholder={isPlaceholderRecordRow(row)}
-    {...htmlAttributes}
+    data-sheet-element={htmlAttributes['data-sheet-element']}
     style="--cell-height:{ROW_HEIGHT_PX - 1}px;{styleString}"
   >
     {#if isRecordRow(row)}
@@ -168,11 +168,7 @@
             : undefined}
         {#if plain}
           <div
-            class="plain-cell"
-            class:align-right={plain.alignRight}
-            class:tabular={plain.tabular}
-            class:record-key={plain.recordLink}
-            class:disabled={plain.disabled}
+            class={plain.className}
             data-sheet-element="data-cell"
             data-sheet-row-type="data"
             data-cell-selection-id={cellId}

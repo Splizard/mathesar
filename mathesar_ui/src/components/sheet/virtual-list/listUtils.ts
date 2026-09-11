@@ -177,6 +177,7 @@ function getRangeToRender(props: Props): number[] {
     scrollDirection,
     scrollDelta,
     estimatedItemSize,
+    height,
   } = props;
 
   if (itemCount === 0) {
@@ -204,13 +205,15 @@ function getRangeToRender(props: Props): number[] {
     scrollDirection === 'forward' ? overscan - lead : overscan + lead;
   const after = 2 * overscan - before;
 
-  // Overscan that doesn't fit before the first item goes after the viewport
-  // instead, and vice versa, so the same number of items is rendered anywhere
-  // in the list. Scrolling away from either end then reuses rendered rows
-  // rather than creating new ones in the middle of a fast scroll.
+  // Render the same number of items wherever the list is scrolled to, so that
+  // scrolling reuses rendered rows rather than creating and destroying them:
+  // as many as can be visible, whatever the viewport's alignment (with items
+  // of the estimated size), and overscan that doesn't fit before the first
+  // item goes after the viewport instead, and vice versa.
+  const maxVisibleCount = Math.ceil(height / estimatedItemSize) + 1;
   const lastIndex = itemCount - 1;
   let start = startIndex - before;
-  let stop = stopIndex + after;
+  let stop = Math.max(stopIndex, startIndex + maxVisibleCount - 1) + after;
   if (start < 0) {
     stop -= start;
     start = 0;

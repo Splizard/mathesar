@@ -34,10 +34,21 @@ const plainCellKinds = new Map<unknown, PlainCellKind>([
 export interface PlainCell {
   /** `null` renders as NULL and `undefined` as DEFAULT, like `CellValue` */
   display: unknown;
-  alignRight: boolean;
-  tabular: boolean;
   recordLink: boolean;
-  disabled: boolean;
+  /**
+   * All of the element's classes, as one string: setting it only touches the
+   * DOM when it changes, unlike a `class:` directive per class.
+   */
+  className: string;
+}
+
+function getClassName(kind: PlainCellKind, disabled: boolean): string {
+  let className = 'plain-cell';
+  if (kind.alignRight) className += ' align-right';
+  if (kind.tabular) className += ' tabular';
+  if (kind.recordLink) className += ' record-key';
+  if (disabled) className += ' disabled';
+  return className;
 }
 
 /**
@@ -66,10 +77,10 @@ export function getPlainCell(
   if (kind.recordLink && tableId !== tableOid) return undefined;
   // Same as `SteppedInputCell`: `formatValue?.(value) ?? value`
   const display = formatForDisplay?.(value) ?? value;
+  const disabled = !(canUpdateRecords && columnFabric.isEditable);
   return {
     display,
-    recordLink: false,
-    ...kind,
-    disabled: !(canUpdateRecords && columnFabric.isEditable),
+    recordLink: !!kind.recordLink,
+    className: getClassName(kind, disabled),
   };
 }
