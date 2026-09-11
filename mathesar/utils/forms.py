@@ -3,6 +3,7 @@ from collections import defaultdict
 
 from django.db import transaction
 
+from db.connection import set_mathesar_user
 from db.forms import get_tab_col_info_map, form_insert
 from db.roles import get_current_role_from_db
 from mathesar.models.base import (
@@ -246,7 +247,7 @@ def _inject_user_tracking_fields(field_info_list, values, user, database_id):
             "table_oid": table_oid,
             "depth": depth,
         })
-        values[key] = user.id
+        values[key] = str(user.id)
         existing_columns.add(key_tuple)
 
 
@@ -282,6 +283,8 @@ def submit_form(form_token, values, user=None):
         _inject_user_tracking_fields(field_info_list, values, user, form_model.database.id)
 
     with form_model.connection as conn:
+        if user and user.is_authenticated:
+            set_mathesar_user(conn, user.id)
         form_insert(field_info_list, values, conn)
 
 

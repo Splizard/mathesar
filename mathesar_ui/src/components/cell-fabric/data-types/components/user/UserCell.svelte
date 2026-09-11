@@ -61,14 +61,14 @@
   $: showBrokenLink =
     hasUserIdValue &&
     hasCollaboratorsSettled &&
-    !users.some((u) => u.id === Number(value));
+    !users.some((u) => u.id === value);
 
   // Get previous value for row seeker
   function getPreviousValue(): SummarizedRecordReference | undefined {
     if (value === undefined || value === null) {
       return undefined;
     }
-    const user = users.find((u) => u.id === Number(value));
+    const user = users.find((u) => u.id === value);
     if (!user) {
       return {
         key: value,
@@ -97,7 +97,7 @@
           createUserRecordStore(users, userDisplayField),
         onSelect: (v) => {
           if (v) {
-            const user = users.find((u) => u.id === Number(v.key));
+            const user = users.find((u) => u.id === v.key);
             if (user && setRecordSummary) {
               const userApiFormat = user;
               const userDisplayValue = getUserLabel(
@@ -111,9 +111,9 @@
       });
 
       if (selection) {
-        const newValue = selection.key as number;
+        const newValue = selection.key as string;
         setValue(newValue);
-        const user = users.find((u) => u.id === Number(selection.key));
+        const user = users.find((u) => u.id === selection.key);
         if (user && setRecordSummary) {
           const userDisplayValue = getUserLabel(user, userDisplayField);
           setRecordSummary(String(selection.key), userDisplayValue);

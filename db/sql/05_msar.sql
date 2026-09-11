@@ -932,23 +932,40 @@ END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
+CREATE OR REPLACE FUNCTION mathesar_types.current_mathesar_user() RETURNS uuid AS $$/*
+Return the UUID of the Mathesar user on whose behalf the current transaction runs, or NULL if it
+doesn't run on behalf of one (it doesn't come from Mathesar, or comes from an anonymous form).
+
+Mathesar puts the UUID in the transaction-local 'mathesar.user' setting. "Created By" columns have
+this as their default, and mathesar_types.stamp_updated_at keeps "Updated By" columns at it.
+
+This lives in mathesar_types rather than msar since column defaults depend on it: reinstalling
+Mathesar's SQL drops and recreates the msar functions, but keeps this one.
+*/
+SELECT NULLIF(current_setting('mathesar.user', true), '')::uuid;
+$$ LANGUAGE SQL STABLE;
+
+
 CREATE OR REPLACE FUNCTION mathesar_types.stamp_updated_at() RETURNS trigger AS $$/*
-Keep an "Updated At" column at the time its record was last changed.
+Keep an "Updated At" column at the time its record was last changed, or an "Updated By" column (one
+of type uuid) at the Mathesar user who last changed it (see mathesar_types.current_mathesar_user).
 
 For a BEFORE INSERT OR UPDATE row trigger whose argument is the attnum of the column (see
 msar.set_updated_at_column), the attnum rather than the name so that renaming the column doesn't
-break it. On insert, the column is set to the current time. On update, it's set to the current time
-if the value of any other column changed, and otherwise kept as it was. It's also kept as it was
-while the 'mathesar.keep_updated_at' setting is 'on', which Mathesar's own structural changes (e.g.,
-extracting columns into a new table) use. Values written to the column itself are always replaced.
+break it. On insert, the column is set to the current time (or user). On update, it's set to the
+current time (or user) if the value of any other column changed, and otherwise kept as it was. It's
+also kept as it was while the 'mathesar.keep_updated_at' setting is 'on', which Mathesar's own
+structural changes (e.g., extracting columns into a new table) use. Values written to the column
+itself are always replaced.
 
 This lives in mathesar_types rather than msar since triggers depend on it: reinstalling Mathesar's
 SQL drops and recreates the msar functions, but keeps this one.
 */
 DECLARE
   col_name text;
+  col_type regtype;
 BEGIN
-  SELECT attname INTO col_name FROM pg_catalog.pg_attribute
+  SELECT attname, atttypid INTO col_name, col_type FROM pg_catalog.pg_attribute
   WHERE attrelid = TG_RELID AND attnum = TG_ARGV[0]::smallint AND NOT attisdropped;
   IF col_name IS NULL THEN
     RETURN NEW;
@@ -960,7 +977,10 @@ BEGIN
   ) THEN
     RETURN jsonb_populate_record(NEW, jsonb_build_object(col_name, to_jsonb(OLD) -> col_name));
   END IF;
-  RETURN jsonb_populate_record(NEW, jsonb_build_object(col_name, now()));
+  RETURN jsonb_populate_record(NEW, jsonb_build_object(col_name, CASE
+    WHEN col_type = 'uuid'::regtype THEN to_jsonb(mathesar_types.current_mathesar_user())
+    ELSE to_jsonb(now())
+  END));
 END;
 $$ LANGUAGE plpgsql;
 
@@ -985,10 +1005,12 @@ $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 CREATE OR REPLACE FUNCTION
 msar.set_updated_at_column(tab_id regclass, col_id smallint, updated_at boolean) RETURNS void AS $$/*
-Make the given column an "Updated At" column, or stop it being one.
+Make the given column an "Updated At" column (or, if it's of type uuid, an "Updated By" column), or
+stop it being one.
 
-An "Updated At" column is kept at the time its record was last changed by a trigger; see
-mathesar_types.stamp_updated_at. Existing values are left as they are.
+An "Updated At" column is kept at the time its record was last changed by a trigger, and an "Updated
+By" column at the Mathesar user who last changed it; see mathesar_types.stamp_updated_at. Existing
+values are left as they are.
 
 Args:
   tab_id: The OID of the table containing the column.
@@ -1029,7 +1051,7 @@ CREATE OR REPLACE FUNCTION msar.column_info_table(tab_id regclass) RETURNS TABLE
   nullable boolean, -- is the column nullable.
   primary_key boolean, -- whether the column has primary key constraint.
   "default" jsonb, -- the default for the column(if any).
-  updated_at_trigger boolean, -- whether a trigger keeps the column at its record's update time.
+  updated_at_trigger boolean, -- whether a trigger keeps the column at its record's update time/user.
   has_dependents boolean, -- is the column referenced by others.
   description text, -- The description of the column on the database.
   current_role_priv jsonb -- Privileges of the current role on the column.
@@ -1079,7 +1101,8 @@ object has the keys:
   value: A string giving the value (as an SQL expression) of the default.
   is_dynamic: A boolean giving whether the default is (likely to be) dynamic.
 `updated_at_trigger` gives whether a trigger keeps the column at the time its record was last
-changed; see msar.set_updated_at_column.
+changed (or, for a uuid column, at the Mathesar user who last changed it); see
+msar.set_updated_at_column.
 */
 SELECT coalesce(jsonb_agg(column_data ORDER BY column_data.id ASC), '[]'::jsonb)
 FROM msar.column_info_table(tab_id) AS column_data;
@@ -3828,7 +3851,8 @@ Sets a dynamic default for a given column, returning the text of the expression 
 
 The default is written into the column definition as an SQL expression rather than a literal, so
 only the expressions giving the current date and/or time are accepted (case-insensitively): now(),
-CURRENT_TIMESTAMP, LOCALTIMESTAMP, CURRENT_DATE, CURRENT_TIME, and LOCALTIME.
+CURRENT_TIMESTAMP, LOCALTIMESTAMP, CURRENT_DATE, CURRENT_TIME, and LOCALTIME, and the one giving the
+current Mathesar user, mathesar_types.current_mathesar_user(), which "Created By" columns have.
 
 Args:
   tab_id: The OID of the table containing the column whose default we'll alter.
@@ -3846,6 +3870,7 @@ BEGIN
     WHEN 'current_date' THEN 'CURRENT_DATE'
     WHEN 'current_time' THEN 'CURRENT_TIME'
     WHEN 'localtime' THEN 'LOCALTIME'
+    WHEN 'mathesar_types.current_mathesar_user()' THEN 'mathesar_types.current_mathesar_user()'
   END;
   IF default_expr IS NULL THEN
     RAISE EXCEPTION 'Unsupported dynamic default: %', default_;
@@ -6184,6 +6209,58 @@ where raising exceptions isn't otherwise possible.
 */
 BEGIN
   RAISE EXCEPTION '%', err_msg;
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION msar.convert_to_user_column(tab_id regclass, col_id smallint, users jsonb)
+RETURNS void AS $$/*
+Change a column holding the ids of Mathesar users, as "User" columns did before users had UUIDs, to
+type uuid, holding their UUIDs instead.
+
+Ids missing from `users` become NULL. A constant default is changed to the UUID it maps to (or
+dropped if it maps to none), and any other default is dropped.
+
+Args:
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the integer column.
+  users: The UUID of each user, of the form {<id>: <uuid>, ...}.
+*/
+DECLARE
+  col_name text := msar.get_column_name(tab_id, col_id);
+  col_type regtype;
+  old_default text;
+  new_default uuid;
+BEGIN
+  SELECT atttypid, pg_catalog.pg_get_expr(adbin, adrelid) INTO col_type, old_default
+  FROM pg_catalog.pg_attribute LEFT JOIN pg_catalog.pg_attrdef ON attrelid = adrelid AND attnum = adnum
+  WHERE attrelid = tab_id AND attnum = col_id;
+  IF col_type NOT IN ('smallint'::regtype, 'integer'::regtype, 'bigint'::regtype) THEN
+    RAISE EXCEPTION 'Column % of % is of type %, not an integer type', col_name, tab_id, col_type;
+  END IF;
+  IF old_default IS NOT NULL AND NOT msar.is_default_possibly_dynamic(tab_id, col_id) THEN
+    EXECUTE format('SELECT (%L::jsonb ->> (%s)::text)::uuid', users, old_default) INTO new_default;
+  END IF;
+  EXECUTE format(
+    $a$
+      ALTER TABLE %1$I.%2$I
+        ALTER COLUMN %3$I DROP DEFAULT,
+        ALTER COLUMN %3$I TYPE uuid USING (%4$L::jsonb ->> %3$I::text)::uuid
+    $a$,
+    msar.get_relation_schema_name(tab_id),
+    msar.get_relation_name(tab_id),
+    col_name,
+    users
+  );
+  IF new_default IS NOT NULL THEN
+    EXECUTE format(
+      'ALTER TABLE %I.%I ALTER COLUMN %I SET DEFAULT %L::uuid',
+      msar.get_relation_schema_name(tab_id),
+      msar.get_relation_name(tab_id),
+      col_name,
+      new_default
+    );
+  END IF;
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 

@@ -124,7 +124,7 @@ export class Database {
   }
 
   addCollaborator(
-    userId: number,
+    userId: string,
     configuredRoleId: ConfiguredRole['id'],
   ): CancellablePromise<Collaborator> {
     const promise = api.collaborators

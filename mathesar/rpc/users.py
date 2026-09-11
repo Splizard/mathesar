@@ -24,14 +24,14 @@ class UserInfo(TypedDict):
     Information about a mathesar user.
 
     Attributes:
-        id: The Django id of the user.
+        id: The Django id of the user, a UUID.
         username: The username of the user.
         is_superuser: Specifies whether the user is a superuser.
         email: The email of the user.
         full_name: The full name of the user.
         display_language: Specifies the display language for the user, can be either `en` or `ja`.
     """
-    id: int
+    id: str
     username: str
     is_superuser: bool
     email: str
@@ -41,7 +41,7 @@ class UserInfo(TypedDict):
     @classmethod
     def from_model(cls, model):
         return cls(
-            id=model.id,
+            id=str(model.id),
             username=model.username,
             is_superuser=model.is_superuser,
             email=model.email,
@@ -89,7 +89,7 @@ def add(*, user_def: UserDef) -> UserInfo:
 
 
 @mathesar_rpc_method(name='users.delete')
-def delete(*, user_id: int) -> None:
+def delete(*, user_id: str) -> None:
     """
     Delete a mathesar user.
 
@@ -103,7 +103,7 @@ def delete(*, user_id: int) -> None:
 
 
 @mathesar_rpc_method(name="users.get")
-def get(*, user_id: int) -> UserInfo:
+def get(*, user_id: str) -> UserInfo:
     """
     Get information about a mathesar user.
 
@@ -166,7 +166,7 @@ def patch_self(
 @mathesar_rpc_method(name='users.patch_other')
 def patch_other(
     *,
-    user_id: int,
+    user_id: str,
     username: str,
     is_superuser: bool,
     email: str,
@@ -226,7 +226,7 @@ def replace_own(
 @mathesar_rpc_method(name='users.password.revoke')
 def revoke(
     *,
-    user_id: int,
+    user_id: str,
     new_password: str,
 ) -> None:
     """

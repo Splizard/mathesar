@@ -17,7 +17,7 @@ class CollaboratorInfo(TypedDict):
         configured_role_id: The Django ID of the ConfiguredRole model instance for the collaborator.
     """
     id: int
-    user_id: int
+    user_id: str
     database_id: int
     configured_role_id: int
     user_info: UserInfo
@@ -26,7 +26,7 @@ class CollaboratorInfo(TypedDict):
     def from_model(cls, model):
         return cls(
             id=model.id,
-            user_id=model.user.id,
+            user_id=str(model.user.id),
             database_id=model.database.id,
             configured_role_id=model.configured_role.id,
             user_info=UserInfo.from_model(model.user)
@@ -52,7 +52,7 @@ def list_(*, database_id: int, **kwargs) -> list[CollaboratorInfo]:
 def add(
         *,
         database_id: int,
-        user_id: int,
+        user_id: str,
         configured_role_id: int,
         **kwargs
 ) -> CollaboratorInfo:

@@ -12,7 +12,7 @@
 
   import { createUserRecordStore } from './userRecordUtils';
 
-  export let value: number | undefined = undefined;
+  export let value: string | undefined = undefined;
   export let disabled = false;
   export let placeholder: string | undefined = undefined;
   export let userDisplayField: UserDisplayField = 'full_name';

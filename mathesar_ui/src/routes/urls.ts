@@ -160,7 +160,7 @@ export const ADMIN_USERS_PAGE_ADD_NEW_URL = `${ADMIN_URL}users/new/`;
 export const ADMIN_SETTINGS_PAGE_URL = `${ADMIN_URL}settings/`;
 export const LOGOUT_URL = '/auth/logout/';
 
-export function getEditUsersPageUrl(userId: number) {
+export function getEditUsersPageUrl(userId: string) {
   return `${ADMIN_USERS_PAGE_URL}${userId}/`;
 }
 

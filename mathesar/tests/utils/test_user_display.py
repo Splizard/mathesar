@@ -5,6 +5,7 @@ These tests verify the functions in mathesar/utils/user_display.py which
 build user display values for user-type columns.
 """
 from unittest.mock import MagicMock
+from uuid import UUID
 
 from mathesar.utils import user_display as ud
 
@@ -34,68 +35,71 @@ def _make_table_meta(user_tracking_attnum=None):
     return meta
 
 
+def _uuid(n):
+    return UUID(int=n)
+
+
 class TestGetUserDisplayValues:
     def test_empty_user_ids(self):
         result = ud.get_user_display_values(set(), "full_name")
         assert result == {}
 
     def test_single_user_full_name(self, monkeypatch):
-        mock_user = _make_user(1, full_name="Alice Smith")
+        mock_user = _make_user(_uuid(1), full_name="Alice Smith")
 
         def mock_filter(**kwargs):
-            assert kwargs == {"id__in": {1}}
+            assert kwargs == {"id__in": {_uuid(1)}}
             return [mock_user]
 
         monkeypatch.setattr(ud.User.objects, "filter", mock_filter)
-        result = ud.get_user_display_values({1}, "full_name")
-        assert result == {"1": "Alice Smith"}
+        result = ud.get_user_display_values({_uuid(1)}, "full_name")
+        assert result == {str(_uuid(1)): "Alice Smith"}
 
     def test_multiple_users_email(self, monkeypatch):
         users = [
-            _make_user(1, email="alice@example.com"),
-            _make_user(2, email="bob@example.com"),
+            _make_user(_uuid(1), email="alice@example.com"),
+            _make_user(_uuid(2), email="bob@example.com"),
         ]
 
         def mock_filter(**kwargs):
-            assert kwargs == {"id__in": {1, 2}}
+            assert kwargs == {"id__in": {_uuid(1), _uuid(2)}}
             return users
 
         monkeypatch.setattr(ud.User.objects, "filter", mock_filter)
-        result = ud.get_user_display_values({1, 2}, "email")
-        assert result == {"1": "alice@example.com", "2": "bob@example.com"}
+        result = ud.get_user_display_values({_uuid(1), _uuid(2)}, "email")
+        assert result == {str(_uuid(1)): "alice@example.com", str(_uuid(2)): "bob@example.com"}
 
     def test_username_field(self, monkeypatch):
-        mock_user = _make_user(5, username="charlie")
+        mock_user = _make_user(_uuid(5), username="charlie")
 
         def mock_filter(**kwargs):
             return [mock_user]
 
         monkeypatch.setattr(ud.User.objects, "filter", mock_filter)
-        result = ud.get_user_display_values({5}, "username")
-        assert result == {"5": "charlie"}
+        result = ud.get_user_display_values({_uuid(5)}, "username")
+        assert result == {str(_uuid(5)): "charlie"}
 
     def test_missing_user_excluded(self, monkeypatch):
         """If a user_id is requested but doesn't exist, it's omitted."""
-        mock_user = _make_user(1, full_name="Alice")
+        mock_user = _make_user(_uuid(1), full_name="Alice")
 
         def mock_filter(**kwargs):
             return [mock_user]
 
         monkeypatch.setattr(ud.User.objects, "filter", mock_filter)
-        result = ud.get_user_display_values({1, 99}, "full_name")
-        assert result == {"1": "Alice"}
-        assert "99" not in result
+        result = ud.get_user_display_values({_uuid(1), _uuid(99)}, "full_name")
+        assert result == {str(_uuid(1)): "Alice"}
 
     def test_empty_field_value(self, monkeypatch):
         """If the display field is empty, returns empty string."""
-        mock_user = _make_user(1, full_name="")
+        mock_user = _make_user(_uuid(1), full_name="")
 
         def mock_filter(**kwargs):
             return [mock_user]
 
         monkeypatch.setattr(ud.User.objects, "filter", mock_filter)
-        result = ud.get_user_display_values({1}, "full_name")
-        assert result == {"1": ""}
+        result = ud.get_user_display_values({_uuid(1)}, "full_name")
+        assert result == {str(_uuid(1)): ""}
 
 
 class TestGetUserLinkedRecordSummaries:
@@ -114,18 +118,18 @@ class TestGetUserLinkedRecordSummaries:
             _make_column_meta(3, user_display_field="full_name"),
         ]
         results = [
-            {"1": "foo", "3": 10},
-            {"1": "bar", "3": 20},
+            {"1": "foo", "3": str(_uuid(10))},
+            {"1": "bar", "3": str(_uuid(20))},
         ]
 
         def mock_get_user_display_values(user_ids, display_field):
-            assert user_ids == {10, 20}
+            assert user_ids == {_uuid(10), _uuid(20)}
             assert display_field == "full_name"
-            return {"10": "Alice", "20": "Bob"}
+            return {str(_uuid(10)): "Alice", str(_uuid(20)): "Bob"}
 
         monkeypatch.setattr(ud, "get_user_display_values", mock_get_user_display_values)
         result = ud.get_user_linked_record_summaries(cols, results)
-        assert result == {"3": {"10": "Alice", "20": "Bob"}}
+        assert result == {"3": {str(_uuid(10)): "Alice", str(_uuid(20)): "Bob"}}
 
     def test_multiple_user_columns(self, monkeypatch):
         cols = [
@@ -133,56 +137,41 @@ class TestGetUserLinkedRecordSummaries:
             _make_column_meta(5, user_display_field="username"),
         ]
         results = [
-            {"2": 1, "5": 3},
-            {"2": 2, "5": 3},
+            {"2": str(_uuid(1)), "5": str(_uuid(3))},
+            {"2": str(_uuid(2)), "5": str(_uuid(3))},
         ]
 
-        call_log = []
-
         def mock_get_user_display_values(user_ids, display_field):
-            call_log.append((user_ids, display_field))
             if display_field == "email":
-                return {"1": "a@b.com", "2": "c@d.com"}
+                return {str(_uuid(1)): "a@b.com", str(_uuid(2)): "c@d.com"}
             elif display_field == "username":
-                return {"3": "charlie"}
+                return {str(_uuid(3)): "charlie"}
             return {}
 
         monkeypatch.setattr(ud, "get_user_display_values", mock_get_user_display_values)
         result = ud.get_user_linked_record_summaries(cols, results)
         assert result == {
-            "2": {"1": "a@b.com", "2": "c@d.com"},
-            "5": {"3": "charlie"},
+            "2": {str(_uuid(1)): "a@b.com", str(_uuid(2)): "c@d.com"},
+            "5": {str(_uuid(3)): "charlie"},
         }
 
-    def test_null_values_in_results(self, monkeypatch):
-        """Null user IDs in results should be skipped."""
+    def test_null_and_non_uuid_values_in_results(self, monkeypatch):
+        """Null user IDs, and values that aren't UUIDs (as in an old integer User column), are skipped."""
         cols = [_make_column_meta(3, user_display_field="full_name")]
         results = [
-            {"3": 10},
+            {"3": str(_uuid(10))},
             {"3": None},
-            {"3": 20},
+            {"3": 7},
+            {"3": str(_uuid(20))},
         ]
 
         def mock_get_user_display_values(user_ids, display_field):
-            assert user_ids == {10, 20}
-            return {"10": "Alice", "20": "Bob"}
+            assert user_ids == {_uuid(10), _uuid(20)}
+            return {str(_uuid(10)): "Alice", str(_uuid(20)): "Bob"}
 
         monkeypatch.setattr(ud, "get_user_display_values", mock_get_user_display_values)
         result = ud.get_user_linked_record_summaries(cols, results)
-        assert result == {"3": {"10": "Alice", "20": "Bob"}}
-
-    def test_string_attnum_keys_in_results(self, monkeypatch):
-        """Results may have string keys for attnums."""
-        cols = [_make_column_meta(3, user_display_field="full_name")]
-        results = [{"3": 10}]
-
-        def mock_get_user_display_values(user_ids, display_field):
-            assert user_ids == {10}
-            return {"10": "Alice"}
-
-        monkeypatch.setattr(ud, "get_user_display_values", mock_get_user_display_values)
-        result = ud.get_user_linked_record_summaries(cols, results)
-        assert result == {"3": {"10": "Alice"}}
+        assert result == {"3": {str(_uuid(10)): "Alice", str(_uuid(20)): "Bob"}}
 
     def test_returns_none_when_no_user_values(self, monkeypatch):
         """If all user columns have null values in results, returns None."""

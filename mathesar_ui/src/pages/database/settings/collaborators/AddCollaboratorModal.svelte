@@ -32,7 +32,7 @@
   export let collaboratorsMap: ImmutableMap<number, Collaborator>;
   export let onAdd: (collaborator: Collaborator) => void;
 
-  const userId = requiredField<number | undefined>(undefined);
+  const userId = requiredField<User['id'] | undefined>(undefined);
   const configuredRoleId = requiredField<number | undefined>(undefined);
   const form = makeForm({ userId, configuredRoleId });
 

@@ -8574,3 +8574,105 @@ BEGIN
   );
 END;
 $$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_current_mathesar_user() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(mathesar_types.current_mathesar_user(), NULL, 'NULL outside Mathesar');
+  PERFORM set_config('mathesar.user', '', true);
+  RETURN NEXT is(mathesar_types.current_mathesar_user(), NULL, 'NULL when unset');
+  PERFORM set_config('mathesar.user', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', true);
+  RETURN NEXT is(
+    mathesar_types.current_mathesar_user(), 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_created_by_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE cb (id integer PRIMARY KEY, title text, author uuid);
+  PERFORM msar.alter_columns(
+    'cb'::regclass::oid,
+    '[{"attnum": 3, "default": "mathesar_types.current_mathesar_user()", "default_is_dynamic": true}]'
+  );
+  RETURN NEXT is(
+    msar.get_column_info('cb') -> 2 -> 'default',
+    '{"value": "mathesar_types.current_mathesar_user()", "is_dynamic": true}'
+  );
+  PERFORM set_config('mathesar.user', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', true);
+  INSERT INTO cb (id, title) VALUES (1, 'mine');
+  RETURN NEXT is((SELECT author FROM cb), 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid);
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_updated_by_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE ub (id integer PRIMARY KEY, title text, editor uuid);
+  INSERT INTO ub VALUES (1, 'existing', NULL);
+  PERFORM msar.alter_columns('ub'::regclass::oid, '[{"attnum": 3, "updated_at_trigger": true}]');
+  RETURN NEXT is(
+    (msar.get_column_info('ub') -> 2 ->> 'updated_at_trigger')::boolean, true,
+    'column info reports the trigger'
+  );
+
+  PERFORM set_config('mathesar.user', 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', true);
+  INSERT INTO ub VALUES (2, 'new', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11');
+  RETURN NEXT is(
+    (SELECT editor FROM ub WHERE id = 2), 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid,
+    'inserting sets it to the current user, whatever was given'
+  );
+
+  PERFORM set_config('mathesar.user', 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', true);
+  UPDATE ub SET title = 'changed' WHERE id = 1;
+  RETURN NEXT is(
+    (SELECT editor FROM ub WHERE id = 1), 'c0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid,
+    'changing a value sets it'
+  );
+  RETURN NEXT is(
+    (SELECT editor FROM ub WHERE id = 2), 'a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid,
+    'other records are left alone'
+  );
+
+  PERFORM set_config('mathesar.user', '', true);
+  UPDATE ub SET title = 'outside' WHERE id = 1;
+  RETURN NEXT is((SELECT editor FROM ub WHERE id = 1), NULL, 'edits from outside Mathesar clear it');
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_convert_to_user_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE issues (id integer PRIMARY KEY, title text, assignee integer DEFAULT 2, reviewer integer);
+  INSERT INTO issues VALUES (1, 'a', 1, NULL), (2, 'b', 2, 1), (3, 'c', 99, NULL), (4, 'd', NULL, 2);
+  PERFORM msar.convert_to_user_column(
+    'issues'::regclass,
+    3::smallint,
+    '{"1": "a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11", "2": "b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11"}'
+  );
+  RETURN NEXT col_type_is('issues', 'assignee', 'uuid');
+  RETURN NEXT results_eq(
+    'SELECT assignee FROM issues ORDER BY id',
+    $v$VALUES
+      ('a0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid),
+      ('b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11'::uuid),
+      (NULL::uuid),
+      (NULL::uuid)
+    $v$,
+    'ids become UUIDs, and unknown ids NULL'
+  );
+  RETURN NEXT col_default_is(
+    'issues', 'assignee', 'b0eebc99-9c0b-4ef8-bb6d-6bb9bd380a11', 'the default is mapped too'
+  );
+
+  PERFORM msar.convert_to_user_column('issues'::regclass, 4::smallint, '{}');
+  RETURN NEXT results_eq('SELECT count(reviewer)::integer FROM issues', $v$VALUES (0)$v$);
+  RETURN NEXT col_hasnt_default('issues', 'reviewer');
+
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.convert_to_user_column('issues'::regclass, 2::smallint, '{}')$q$,
+    'Column title of issues is of type text, not an integer type'
+  );
+END;
+$f$ LANGUAGE plpgsql;

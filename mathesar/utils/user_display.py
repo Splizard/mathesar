@@ -5,11 +5,13 @@ This module provides functions to fetch user display values from the Django User
 and format them for display in cells (similar to linked record summaries).
 """
 
+from uuid import UUID
+
 from mathesar.models import User
 
 
 def get_user_display_values(
-    user_ids: set[int],
+    user_ids: set[UUID],
     display_field: str,
 ) -> dict[str, str]:
     """
@@ -25,17 +27,10 @@ def get_user_display_values(
     if not user_ids:
         return {}
 
-    users = User.objects.filter(id__in=user_ids)
-    user_map = {user.id: user for user in users}
-
-    display_values = {}
-    for user_id in user_ids:
-        user = user_map.get(user_id)
-        if user:
-            value = getattr(user, display_field, None)
-            display_values[str(user_id)] = value or ""
-
-    return display_values
+    return {
+        str(user.id): getattr(user, display_field, None) or ""
+        for user in User.objects.filter(id__in=user_ids)
+    }
 
 
 def get_user_linked_record_summaries(columns_meta_data, results):
@@ -65,8 +60,8 @@ def get_user_linked_record_summaries(columns_meta_data, results):
             user_id = record.get(str(column_attnum))
             if user_id is not None:
                 try:
-                    user_ids.add(int(user_id) if not isinstance(user_id, int) else user_id)
-                except (ValueError, TypeError):
+                    user_ids.add(UUID(str(user_id)))
+                except ValueError:
                     continue
         if user_ids:
             user_display_values = get_user_display_values(user_ids, display_field)

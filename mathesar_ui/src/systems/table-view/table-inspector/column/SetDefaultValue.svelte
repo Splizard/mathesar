@@ -3,6 +3,7 @@
 
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import DynamicInput from '@mathesar/components/cell-fabric/DynamicInput.svelte';
+  import { currentUserDefaultExpression } from '@mathesar/stores/abstract-types/currentUserDefault';
   import {
     type ProcessedColumn,
     getTabularDataStoreFromContext,
@@ -20,6 +21,12 @@
   } from './defaultValueOptions';
 
   export let column: ProcessedColumn;
+
+  /** Ways a user column can be filled in with the user changing the record */
+  const userFillModes: { mode: DefaultValueMode; label: string }[] = [
+    { mode: 'current_user', label: 'default_value_current_user' },
+    { mode: 'last_editor', label: 'default_value_last_editor' },
+  ];
 
   const tabularData = getTabularDataStoreFromContext();
   $: ({ table, columnsDataStore, recordsData } = $tabularData);
@@ -85,15 +92,21 @@
     typeChangeState = { state: 'processing' };
     try {
       const defaultRequest = (() => {
-        if (isDefaultNull) return null;
+        if (isDefaultNull || defaultMode === 'last_editor') return null;
         if (defaultMode === 'current_time' && options.currentTimeExpression) {
           return { is_dynamic: true, value: options.currentTimeExpression };
+        }
+        if (defaultMode === 'current_user') {
+          return { is_dynamic: true, value: currentUserDefaultExpression };
         }
         return { is_dynamic: false, value: String(value) };
       })();
       await columnsDataStore.patch({
         id: column.column.id,
         default: defaultRequest,
+        ...(options.availableModes.includes('last_editor')
+          ? { updated_at_trigger: defaultMode === 'last_editor' }
+          : {}),
       });
 
       typeChangeState = { state: 'success' };
@@ -148,6 +161,18 @@
       />
     </LabeledInput>
   {/if}
+  {#each userFillModes as { mode, label } (mode)}
+    {#if options.availableModes.includes(mode)}
+      <LabeledInput layout="inline-input-first">
+        <span slot="label">{$_(label)}</span>
+        <Radio
+          checked={defaultMode === mode}
+          on:change={() => setDefaultMode(mode)}
+          {disabled}
+        />
+      </LabeledInput>
+    {/if}
+  {/each}
   {#if options.availableModes.includes('set_default_user')}
     <LabeledInput layout="inline-input-first">
       <span slot="label">{$_(options.customValueLabel)}</span>

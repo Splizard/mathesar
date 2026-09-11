@@ -26,6 +26,8 @@ import {
   getPreprocFunctionsForAbstractType,
   isAutoFilledAbstractType,
 } from '@mathesar/stores/abstract-types';
+import { isCurrentUserDefault } from '@mathesar/stores/abstract-types/currentUserDefault';
+import { isUserColumn } from '@mathesar/stores/abstract-types/type-configs/uuid';
 import type {
   AbstractType,
   AbstractTypePreprocFunctionDefinition,
@@ -198,6 +200,14 @@ export class ProcessedColumn implements CellColumnFabric {
       }
       // Their values record when the record was created or last changed
       if (isAutoFilledAbstractType(this.abstractType)) {
+        return false;
+      }
+      // Theirs record who created the record or last changed it
+      if (
+        isUserColumn(this.column.metadata) &&
+        (this.column.updated_at_trigger ||
+          isCurrentUserDefault(this.column.default))
+      ) {
         return false;
       }
       return true;

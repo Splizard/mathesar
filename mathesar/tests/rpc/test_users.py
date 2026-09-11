@@ -37,7 +37,7 @@ def test_users_list(rf, monkeypatch):
     monkeypatch.setattr(users, 'list_users', mock_list_users)
     expected_users_list = [
         {
-            'id': 1,
+            'id': '1',
             'username': 'alice',
             'is_superuser': True,
             'email': 'alice@mathesar.org',
@@ -45,7 +45,7 @@ def test_users_list(rf, monkeypatch):
             'display_language': 'en'
         },
         {
-            'id': 2,
+            'id': '2',
             'username': 'bob',
             'is_superuser': False,
             'email': 'bob@mathesar.org',
@@ -75,7 +75,7 @@ def test_users_get(rf, monkeypatch):
         )
     monkeypatch.setattr(users, 'get_user', mock_get_user)
     expected_user_info = {
-        'id': 1,
+        'id': '1',
         'username': 'alice',
         'is_superuser': True,
         'email': 'alice@mathesar.org',
@@ -111,7 +111,7 @@ def test_users_add(rf, monkeypatch):
         )
     monkeypatch.setattr(users, 'add_user', mock_add_user)
     expected_user_info = {
-        'id': 2,
+        'id': '2',
         'username': 'Bob',
         'is_superuser': False,
         'email': 'bob@mathesar.org',
@@ -163,7 +163,7 @@ def test_users_patch_self(rf, monkeypatch):
         )
     monkeypatch.setattr(users, 'update_self_user_info', mock_patch_self)
     expected_user_info = {
-        'id': 2,
+        'id': '2',
         'username': 'alice_liddell',
         'is_superuser': False,
         'email': 'alice@mathesar.org',
@@ -210,7 +210,7 @@ def test_users_other(rf, monkeypatch):
         )
     monkeypatch.setattr(users, 'update_other_user_info', mock_patch_other)
     expected_user_info = {
-        'id': 2,
+        'id': '2',
         'username': 'bob_marley',
         'is_superuser': False,
         'email': 'bobm@mathesar.org',

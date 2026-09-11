@@ -91,7 +91,7 @@ def list_or_create_data_file(request):
         return {
             "id": df.id,
             "file": request.build_absolute_uri(df.file.url),
-            "user": df.user.id,
+            "user": str(df.user.id),
             "header": df.header,
             "delimiter": df.delimiter,
             "escapechar": df.escapechar,
@@ -166,7 +166,7 @@ def get_or_patch_data_file(request, data_file_id):
         return {
             "id": df.id,
             "file": request.build_absolute_uri(df.file.url),
-            "user": df.user.id,
+            "user": str(df.user.id),
             "header": df.header,
             "delimiter": df.delimiter,
             "escapechar": df.escapechar,

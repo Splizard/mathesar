@@ -3,6 +3,20 @@ from psycopg.rows import dict_row
 from uuid import uuid4
 
 
+def set_mathesar_user(conn, user_id):
+    """
+    Note the Mathesar user on whose behalf the connection's transaction runs.
+
+    It's put in the transaction-local 'mathesar.user' setting, where "Created
+    By" and "Updated By" columns get it (see mathesar_types.current_mathesar_user).
+
+    Args:
+        conn: a psycopg connection
+        user_id: The (UUID) id of the Mathesar user
+    """
+    conn.execute("SELECT set_config('mathesar.user', %s, true)", (str(user_id),))
+
+
 def exec_msar_func(conn, func_name, *args):
     """
     Execute an msar function using a psycopg (3) connection.

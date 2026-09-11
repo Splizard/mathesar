@@ -9,6 +9,9 @@ def get_database(conn):
 
 def drop_database(database_oid, conn):
     cursor = conn.cursor()
+    # DROP DATABASE can't run in a transaction, so end the one the connection
+    # may have begun (e.g., by noting the current Mathesar user).
+    conn.commit()
     conn.autocommit = True
     drop_database_query = db_conn.exec_msar_func(
         conn,

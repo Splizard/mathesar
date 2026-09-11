@@ -23,7 +23,7 @@
   const userProfileStore = getUserProfileStoreFromContext();
   const usersStore = getUsersStoreFromContext();
 
-  export let userId: number;
+  export let userId: string;
 
   $: requestStatus = usersStore?.requestStatus;
   $: userDetailsPromise = usersStore?.getUserDetails(userId);

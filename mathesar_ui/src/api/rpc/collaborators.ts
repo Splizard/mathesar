@@ -6,7 +6,7 @@ import type { User } from './users';
 
 export interface RawCollaborator {
   id: number;
-  user_id: number;
+  user_id: string;
   database_id: RawDatabase['id'];
   configured_role_id: RawConfiguredRole['id'];
   user_info: User;
@@ -22,7 +22,7 @@ export const collaborators = {
   add: rpcMethodTypeContainer<
     {
       database_id: RawDatabase['id'];
-      user_id: number;
+      user_id: string;
       configured_role_id: RawConfiguredRole['id'];
     },
     RawCollaborator

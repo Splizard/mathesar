@@ -30,5 +30,5 @@
   <NewUserPage />
 </Route>
 <Route path="/:userId" let:meta>
-  <EditUserPage userId={parseInt(meta.params.userId, 10)} />
+  <EditUserPage userId={meta.params.userId} />
 </Route>

@@ -459,7 +459,7 @@ def add(
     user = kwargs.get(REQUEST_KEY).user
     columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     table_meta_data = get_table_meta_data(table_oid, database_id)
-    record_def = apply_track_editing_user(record_def, table_meta_data, user.id)
+    record_def = apply_track_editing_user(record_def, table_meta_data, str(user.id))
 
     with connect(database_id, user) as conn:
         record_info = add_record_to_table(
@@ -515,7 +515,7 @@ def patch(
     user = kwargs.get(REQUEST_KEY).user
     columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     table_meta_data = get_table_meta_data(table_oid, database_id)
-    record_def = apply_track_editing_user(record_def, table_meta_data, user.id)
+    record_def = apply_track_editing_user(record_def, table_meta_data, str(user.id))
 
     with connect(database_id, user) as conn:
         record_info = patch_record_in_table(

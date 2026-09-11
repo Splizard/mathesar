@@ -14,7 +14,7 @@ interface UserDef extends BaseUser {
 }
 
 export interface User extends BaseUser {
-  readonly id: number;
+  readonly id: string;
   readonly is_superuser: boolean;
 }
 

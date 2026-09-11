@@ -122,18 +122,20 @@ Used to store valid email addresses
 ### Files
 
 - **PostgreSQL types**
-    - `JSONB`
+    - `mathesar_types.file`
 
-This is a custom type implemented in Mathesar's UI. To enable this data type, you must [configure a file backend](../administration/file-backend-config.md).
+        This is a custom PostgreSQL type implemented by Mathesar. It is a composite of the file's link, its media type, and a signature Mathesar makes over them (see [how files are stored](../administration/file-backend-config.md#how-files-are-stored)).
+
+To enable this data type, you must [configure a file backend](../administration/file-backend-config.md).
 
 Learn more about [Mathesar's file feature](./files.md).
 
 ### User
 
 - **PostgreSQL types**
-    - `integer`
+    - `uuid`
 
-This is a custom type implemented in Mathesar's UI. User columns store Mathesar user IDs, allowing you to reference Mathesar users directly in your database tables. Only users who are collaborators on the database can be stored in a user column.
+User columns are UUID columns shown as users (set **Show as** to **User** in a UUID column's display options). They store Mathesar user IDs, which are UUIDs, allowing you to reference Mathesar users directly in your database tables. Only users who are collaborators on the database can be stored in a user column.
 
 Learn more about [working with user columns](./user-type.md).
 

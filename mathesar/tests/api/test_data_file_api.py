@@ -14,7 +14,7 @@ def verify_data_file_data(data_file, data_file_dict):
     assert data_file_dict['file'] == f'http://testserver/media/{data_file.file.name}'
     assert data_file_dict['created_from'] == data_file.created_from
     if data_file.user:
-        assert data_file_dict['user'] == data_file.user.id
+        assert data_file_dict['user'] == str(data_file.user.id)
     else:
         assert data_file_dict['user'] is None
     assert data_file_dict['delimiter'] == data_file.delimiter

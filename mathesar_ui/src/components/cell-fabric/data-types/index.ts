@@ -16,7 +16,7 @@ import type {
   SimpleCellDataTypes,
 } from './typeDefinitions';
 import uri from './uri';
-import user from './user';
+import uuid from './uuid';
 
 const simpleDataTypeComponentFactories: Record<
   SimpleCellDataTypes,
@@ -32,7 +32,7 @@ const simpleDataTypeComponentFactories: Record<
   time,
   datetime,
   file,
-  user,
+  uuid,
   enum: enumFactory,
 };
 

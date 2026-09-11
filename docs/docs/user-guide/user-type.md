@@ -1,12 +1,12 @@
 # Working with the user data type
 
-Mathesar's **user data type** allows you to store references to Mathesar users directly in your database tables. This makes it easy to track who created records, who is assigned to tasks, or who last edited a record.
+Mathesar's **user columns** allow you to store references to Mathesar users directly in your database tables. This makes it easy to track who created records, who is assigned to tasks, or who last edited a record.
 
-- User columns store Mathesar user IDs (integer values).
+- User columns are UUID columns shown as users: they store Mathesar user IDs, which are UUIDs.
 - Users are displayed using their username, display name, or email address (configurable).
 - Only users who are collaborators on the database can be stored in a user column.
 - You can select users from a searchable list of the database's collaborators when editing cells.
-- User columns support default values.
+- User columns support default values, and can record who created each record or who last changed it.
 - A table can designate one user column to automatically record who last edited each record.
 
 ## Adding user columns
@@ -16,12 +16,15 @@ Mathesar's **user data type** allows you to store references to Mathesar users d
 A library administrator adding an "Instructor" column to track which staff member conducted each training session.
 ///
 
-Adding a user column works just like adding any other column type in Mathesar:
+A user column is a UUID column shown as users:
 
 1. Open the table where you want to add a user column.
 2. Click the "+" icon **Add Column**.
-3. Choose **User** as the column type and name the column.
+3. Choose **UUID** as the column type and name the column.
 4. Save your changes.
+5. In the column inspector's **Display Options** section, set **Show as** to **User**.
+
+Any existing UUID column can be shown as users the same way.
 
 Once the user column is created, you'll be able to select a user for each cell directly from the Mathesar UI.
 
@@ -54,7 +57,7 @@ In the column inspector, you can choose whether to display users by their userna
 
 1. Open the table containing the user column.
 1. Click on the column header to open the column inspector.
-1. In the **Display Options** section, find **Field to represent each user**.
+1. In the **Display Options** section, with **Show as** set to **User**, find **Field to represent each user**.
 1. Choose from:
    - **Username** - The user's login username (default)
    - **Display Name** - The user's full name
@@ -64,7 +67,7 @@ The selected display field will be used throughout Mathesar when showing this co
 
 ## Setting default values
 
-User columns support two default value options, which you can configure in the column inspector's **Default Value** section: no default, or a specific default user.
+User columns support four options, which you can configure in the column inspector's **Default Value** section: no default, a specific default user, the user who creates the record, or the user who last changes it.
 
 ### No default
 
@@ -80,6 +83,14 @@ To set a default user:
 1. In the **Default Value** section, select **Set a default user**.
 1. Choose the user from the user selection dialog.
 1. Save your changes.
+
+### The user who creates the record (Created By)
+
+New records get the user who adds them, however they're added through Mathesar (including by signed-in users submitting forms). Records added some other way, or by anonymous form submissions, are left empty. The column's cells can't be edited.
+
+### The user who last changes the record (Updated By)
+
+The column is kept at the user who last added or changed the record, by a trigger in the database. Changes made outside Mathesar (or by anonymous form submissions) empty it, since Mathesar can't tell who made them. The column's cells can't be edited.
 
 ## Tracking who edits records
 

@@ -58,7 +58,7 @@ export class UserModel {
 export class AnonymousViewerUserModel extends UserModel {
   constructor() {
     super({
-      id: 0,
+      id: '',
       is_superuser: false,
       username: 'Anonymous',
       full_name: 'Anonymous',
@@ -111,7 +111,7 @@ class WritableUsersStore {
     }
   }
 
-  async getUserDetails(userId: number) {
+  async getUserDetails(userId: string) {
     const requestStatus = get(this.requestStatus);
     if (requestStatus?.state === 'success') {
       return get(this.users).find((user) => user.id === userId);
@@ -126,7 +126,7 @@ class WritableUsersStore {
     return undefined;
   }
 
-  async delete(userId: number) {
+  async delete(userId: string) {
     this.requestStatus.set({
       state: 'processing',
     });

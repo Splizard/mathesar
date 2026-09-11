@@ -284,3 +284,19 @@ def convert_to_file_column(table_oid, column_attnum, files, conn):
     db_conn.exec_msar_func(
         conn, 'convert_to_file_column', table_oid, column_attnum, json.dumps(files)
     )
+
+
+def convert_to_user_column(table_oid, column_attnum, users, conn):
+    """
+    Change an integer column holding users' old ids to a uuid column holding
+    their ids.
+
+    Args:
+        table_oid: The OID of the table containing the column.
+        column_attnum: The attnum of the column.
+        users: The id of each user, as {<old id>: <uuid>}.
+        conn: A psycopg connection to the relevant database.
+    """
+    db_conn.exec_msar_func(
+        conn, 'convert_to_user_column', table_oid, column_attnum, json.dumps(users)
+    )
