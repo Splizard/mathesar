@@ -99,8 +99,9 @@
   $: innerStyle =
     `height:${estimatedTotalSize + paddingBottom}px;` +
     // eslint-disable-next-line @typescript-eslint/restrict-template-expressions
-    `width:${width ? `${width}px` : '100%'};` +
-    `${isScrolling ? 'pointer-events:none;' : ''}`;
+    // Not toggling `pointer-events` while scrolling: it restyles every
+    // rendered cell at the start and end of each scroll gesture.
+    `width:${width ? `${width}px` : '100%'};`;
 
   function onHscrollChange(_hscrollOffset: number) {
     if (

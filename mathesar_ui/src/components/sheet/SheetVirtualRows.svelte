@@ -26,6 +26,7 @@
       {paddingBottom}
       {itemSize}
       estimatedItemSize={ROW_HEIGHT_PX}
+      overscanCount={Math.max(10, Math.ceil(height / ROW_HEIGHT_PX))}
       {itemKey}
       let:items
       let:api={virtualListApi}

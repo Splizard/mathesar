@@ -169,7 +169,7 @@ function getStopIndexForStartIndex(props: Props, startIndex: number): number {
 }
 
 function getRangeToRender(props: Props): number[] {
-  const { isScrolling, scrollDirection, itemCount, overscanCount } = props;
+  const { itemCount, overscanCount } = props;
 
   if (itemCount === 0) {
     return [0, 0, 0, 0];
@@ -178,20 +178,15 @@ function getRangeToRender(props: Props): number[] {
   const startIndex = findNearestItem(props);
   const stopIndex = getStopIndexForStartIndex(props, startIndex);
 
-  // Overscan by one item in each direction so that tab/focus works.
-  // If there isn't at least one extra item, tab loops back around.
-  const overscanBackward =
-    !isScrolling || scrollDirection === 'backward'
-      ? Math.max(1, overscanCount)
-      : 1;
-  const overscanForward =
-    !isScrolling || scrollDirection === 'forward'
-      ? Math.max(1, overscanCount)
-      : 1;
+  // Overscan in both directions, even while scrolling. With native (async)
+  // scrolling the browser moves the viewport before we get to render, so it
+  // can only show rows that already exist in the DOM. Overscan by at least one
+  // item so that tab/focus works; without it, tab loops back around.
+  const overscan = Math.max(1, overscanCount);
 
   return [
-    Math.max(0, startIndex - overscanBackward),
-    Math.max(0, Math.min(itemCount - 1, stopIndex + overscanForward)),
+    Math.max(0, startIndex - overscan),
+    Math.max(0, Math.min(itemCount - 1, stopIndex + overscan)),
     startIndex,
     stopIndex,
   ];
