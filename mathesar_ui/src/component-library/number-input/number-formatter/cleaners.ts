@@ -4,20 +4,22 @@ import type { DerivedOptions } from './options';
 
 type Cleaner = (input: string) => string;
 
+const otherMinusSigns = [
+  '\u2010',
+  '\u2011',
+  '\u2012',
+  '\u2013',
+  '\u2014',
+  '\u2015',
+  '\u2043',
+  '\u2212',
+  '\uFE63',
+  '\uFF0D',
+];
+const otherMinusSignsPattern = new RegExp(`[${otherMinusSigns.join('')}]`, 'g');
+
 export function forceAsciiMinusSign(input: string): string {
-  const otherSigns = [
-    '\u2010',
-    '\u2011',
-    '\u2012',
-    '\u2013',
-    '\u2014',
-    '\u2015',
-    '\u2043',
-    '\u2212',
-    '\uFE63',
-    '\uFF0D',
-  ];
-  return input.replace(new RegExp(`[${otherSigns.join('')}]`, 'g'), '-');
+  return input.replace(otherMinusSignsPattern, '-');
 }
 
 /**

@@ -3,7 +3,16 @@
  * fractional parts of a number. If no locale is passed, then it will be
  * inferred from the environment.
  */
+const decimalSeparatorCache = new Map<string | undefined, string>();
+
 export function getDecimalSeparator(locale?: string): string {
+  // Constructing an `Intl.NumberFormat` is slow (especially in Firefox) and
+  // this runs for every number formatted in the table, so cache per locale.
+  const cached = decimalSeparatorCache.get(locale);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   // We are formatting a number and then reading the second character of the
   // result. Will this work for all locales? It seems to!
   //
@@ -22,5 +31,6 @@ export function getDecimalSeparator(locale?: string): string {
     // this decimal separator inside a regular expression.
     throw new Error(`Unsupported decimal separator: ${decimalSeparator}`);
   }
+  decimalSeparatorCache.set(locale, decimalSeparator);
   return decimalSeparator;
 }

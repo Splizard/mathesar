@@ -73,9 +73,12 @@
     on:movementKeyDown
   />
 
-  <div class="loader">
-    <div class="bg" />
-  </div>
+  {#if showAsSkeleton}
+    <!-- Only rendered when needed: two extra elements per cell add up in the table view -->
+    <div class="loader">
+      <div class="bg" />
+    </div>
+  {/if}
 </div>
 
 <style lang="scss">
@@ -112,9 +115,6 @@
     bottom: var(--cell-padding);
     position: absolute;
     background: var(--color-bg-input-hover);
-  }
-  .cell-fabric:not(.show-as-skeleton) .loader {
-    display: none;
   }
   .light-text {
     color: var(--cell-text-color-processing);

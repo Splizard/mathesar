@@ -3,6 +3,25 @@ import { type DerivedOptions, getDerivedOptions } from './options';
 
 type Parts = Intl.NumberFormatPart[];
 
+const numberFormatCache = new Map<string, Intl.NumberFormat>();
+
+/**
+ * Constructing an `Intl.NumberFormat` is slow (especially in Firefox) and
+ * every number cell in the table view gets formatted, so reuse instances.
+ */
+function getNumberFormat(
+  locale: string | undefined,
+  options: Intl.NumberFormatOptions,
+): Intl.NumberFormat {
+  const key = JSON.stringify([locale, options]);
+  let numberFormat = numberFormatCache.get(key);
+  if (!numberFormat) {
+    numberFormat = new Intl.NumberFormat(locale, options);
+    numberFormatCache.set(key, numberFormat);
+  }
+  return numberFormat;
+}
+
 function factoryToAddTrailingDecimalSeparator(
   opts: Pick<DerivedOptions, 'decimalSeparator'>,
 ): (parts: Parts) => Parts {
@@ -38,7 +57,7 @@ export function makeFormatter(
       throw new Error(`Unable to format value. ${validationErrors.join(', ')}`);
     }
 
-    const parts = Intl.NumberFormat(opts.locale, {
+    const parts = getNumberFormat(opts.locale, {
       // Override the numbering system which is inferred from the locale so that
       // we don't end up with 1.2 formatted as "১.২", "۱٫۲", or "१.२". Users
       // need to be able to enter numbers in the same format which they are
