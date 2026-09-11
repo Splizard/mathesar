@@ -295,15 +295,6 @@
     --z-index__sheet__positionable-cell: 5;
     --z-index__sheet__column-header-cell: 6;
     --z-index__sheet__origin-cell: 7;
-    --z-index__sheet__horizontal-scrollbar: 8;
-    --z-index__sheet__vertical-scrollbar: 9;
-
-    --virtual-list-horizontal-scrollbar-z-index: var(
-      --z-index__sheet__horizontal-scrollbar
-    );
-    --virtual-list-vertical-scrollbar-z-index: var(
-      --z-index__sheet__vertical-scrollbar
-    );
 
     &.has-border {
       border: 1px solid var(--color-border-header);

@@ -11,7 +11,9 @@
    * This fork contains the following changes:
    * 1. Ported to Svelte, TS
    * 2. Stripped down to vertical variable size list essentials
-   * 3. Added perfect scrollbar, utilized it's event instead of native
+   * 3. Uses native scrolling (a passive `scroll` listener) so browsers can
+   *    scroll asynchronously; JS-driven wheel handling made scrolling
+   *    sluggish, particularly in Firefox
    */
 
   const IS_SCROLLING_DEBOUNCE_INTERVAL = 150;
@@ -19,7 +21,6 @@
 </script>
 
 <script lang="ts">
-  import PerfectScrollbar from 'perfect-scrollbar';
   import {
     afterUpdate,
     createEventDispatcher,
@@ -67,7 +68,6 @@
   let resetIsScrollingTimeoutId: Timeout | undefined;
 
   let requestGetItemStyleCache = false;
-  let psRef: PerfectScrollbar | undefined;
 
   let itemInfo: ItemInfo;
 
@@ -140,41 +140,18 @@
     }
   }
 
-  function onHorizontalScroll(event: Event): void {
-    const { scrollLeft } = event.target as HTMLElement;
-    if (horizontalScrollOffset !== scrollLeft) {
-      horizontalScrollOffset = scrollLeft;
-      dispatch('h-scroll', horizontalScrollOffset);
-    }
-  }
-
   onMount(() => {
     if (typeof scrollOffset === 'number') {
       outerRef.scrollTop = scrollOffset;
     }
     onHscrollChange(horizontalScrollOffset);
 
-    psRef = new PerfectScrollbar(outerRef, {
-      minScrollbarLength: 40,
-      wheelPropagation: false,
-    });
-
-    const callback = (ev: Event) => {
-      onScroll(ev);
-    };
-    const hCallback = (ev: Event) => {
-      onHorizontalScroll(ev);
-    };
-
     dispatch('refetch', itemInfo);
 
-    outerRef.addEventListener('ps-scroll-y', callback);
-    outerRef.addEventListener('ps-scroll-x', hCallback);
+    outerRef.addEventListener('scroll', onScroll, { passive: true });
 
     return () => {
-      outerRef.removeEventListener('ps-scroll-y', callback);
-      outerRef.removeEventListener('ps-scroll-x', hCallback);
-      psRef?.destroy();
+      outerRef.removeEventListener('scroll', onScroll);
     };
   });
 
@@ -205,9 +182,6 @@
       requestGetItemStyleCache = false;
       instanceProps.styleCache = {};
     }
-    if (psRef) {
-      psRef.update();
-    }
   });
 
   onDestroy(() => {
@@ -231,36 +205,28 @@
     _scrollOffset: number,
     _horizontalScrollOffset: number,
   ): void {
-    if (outerRef && psRef) {
+    if (outerRef) {
       const newOffset = Math.max(_scrollOffset, 0);
       const newHOffset = Math.max(_horizontalScrollOffset, 0);
 
-      let isUpdateRequired = false;
       if (scrollOffset !== newOffset) {
         outerRef.scrollTop = newOffset;
-        isUpdateRequired = true;
       }
       if (horizontalScrollOffset !== newHOffset) {
         outerRef.scrollLeft = newHOffset;
-        isUpdateRequired = true;
-      }
-      if (isUpdateRequired) {
-        psRef.update();
       }
     }
   }
 
   export function scrollToBottom(): void {
-    if (outerRef && psRef) {
+    if (outerRef) {
       outerRef.scrollTop = outerRef.scrollHeight;
-      psRef.update();
     }
   }
 
   export function scrollToTop(): void {
-    if (outerRef && psRef) {
+    if (outerRef) {
       outerRef.scrollTop = 0;
-      psRef.update();
     }
   }
 
