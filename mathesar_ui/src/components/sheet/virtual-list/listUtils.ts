@@ -184,12 +184,23 @@ function getRangeToRender(props: Props): number[] {
   // item so that tab/focus works; without it, tab loops back around.
   const overscan = Math.max(1, overscanCount);
 
-  return [
-    Math.max(0, startIndex - overscan),
-    Math.max(0, Math.min(itemCount - 1, stopIndex + overscan)),
-    startIndex,
-    stopIndex,
-  ];
+  // Overscan that doesn't fit before the first item goes after the viewport
+  // instead, and vice versa, so the same number of items is rendered anywhere
+  // in the list. Scrolling away from either end then reuses rendered rows
+  // rather than creating new ones in the middle of a fast scroll.
+  const lastIndex = itemCount - 1;
+  let start = startIndex - overscan;
+  let stop = stopIndex + overscan;
+  if (start < 0) {
+    stop -= start;
+    start = 0;
+  }
+  if (stop > lastIndex) {
+    start = Math.max(0, start - (stop - lastIndex));
+    stop = lastIndex;
+  }
+
+  return [start, Math.max(0, stop), startIndex, stopIndex];
 }
 
 function getItemStyle(props: Props, index: number): Item['style'] {

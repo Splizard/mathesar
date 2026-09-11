@@ -70,6 +70,12 @@
     -webkit-user-select: none; /* Safari */
     background: var(--cell-bg-color-base);
     line-height: 1.2;
+    // Keeps the blending of the cell's background layers (`CellBackground`)
+    // within the cell. Otherwise the blend's backdrop includes the sticky
+    // elements behind the rows, and Chrome gives every such cell (and all
+    // that overlaps it) its own compositing layer, which makes scrolling on
+    // mobile slow to paint.
+    isolation: isolate;
   }
 
   [data-cell-active] {

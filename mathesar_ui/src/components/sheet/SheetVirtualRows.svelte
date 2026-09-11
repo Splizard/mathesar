@@ -143,9 +143,13 @@
     background-color: var(--cell-bg-color-base);
     pointer-events: none;
   }
+  // Above the data cells but under the row header cells, like the row header
+  // cells themselves. Being sticky, it gets its own compositing layer, and
+  // anything painted after it that it overlaps would need one too.
   .empty-rows-grid-row-header {
     position: sticky;
     left: 0;
+    z-index: calc(var(--z-index__sheet__row-header-cell) - 1);
     background-color: var(--cell-bg-color-header);
     pointer-events: none;
   }
