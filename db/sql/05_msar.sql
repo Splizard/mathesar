@@ -932,6 +932,94 @@ END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
+CREATE OR REPLACE FUNCTION mathesar_types.stamp_updated_at() RETURNS trigger AS $$/*
+Keep an "Updated At" column at the time its record was last changed.
+
+For a BEFORE INSERT OR UPDATE row trigger whose argument is the attnum of the column (see
+msar.set_updated_at_column), the attnum rather than the name so that renaming the column doesn't
+break it. On insert, the column is set to the current time. On update, it's set to the current time
+if the value of any other column changed, and otherwise kept as it was. It's also kept as it was
+while the 'mathesar.keep_updated_at' setting is 'on', which Mathesar's own structural changes (e.g.,
+extracting columns into a new table) use. Values written to the column itself are always replaced.
+
+This lives in mathesar_types rather than msar since triggers depend on it: reinstalling Mathesar's
+SQL drops and recreates the msar functions, but keeps this one.
+*/
+DECLARE
+  col_name text;
+BEGIN
+  SELECT attname INTO col_name FROM pg_catalog.pg_attribute
+  WHERE attrelid = TG_RELID AND attnum = TG_ARGV[0]::smallint AND NOT attisdropped;
+  IF col_name IS NULL THEN
+    RETURN NEW;
+  END IF;
+  IF TG_OP = 'UPDATE' AND (
+    current_setting('mathesar.keep_updated_at', true) = 'on'
+    -- Comparing as JSON works for every type, even those without an equality operator.
+    OR to_jsonb(NEW) - col_name = to_jsonb(OLD) - col_name
+  ) THEN
+    RETURN jsonb_populate_record(NEW, jsonb_build_object(col_name, to_jsonb(OLD) -> col_name));
+  END IF;
+  RETURN jsonb_populate_record(NEW, jsonb_build_object(col_name, now()));
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.get_updated_at_triggers(tab_id regclass, col_id smallint) RETURNS SETOF name AS $$/*
+Return the names of the (enabled) triggers keeping the given column at the time its record was last
+changed, i.e., running mathesar_types.stamp_updated_at for it.
+
+Args:
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the column.
+*/
+SELECT tgname FROM pg_catalog.pg_trigger
+WHERE
+  tgrelid = tab_id
+  AND tgfoid = 'mathesar_types.stamp_updated_at()'::regprocedure
+  AND tgenabled <> 'D'
+  AND tgargs = (col_id::text || '\000')::bytea;
+$$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_updated_at_column(tab_id regclass, col_id smallint, updated_at boolean) RETURNS void AS $$/*
+Make the given column an "Updated At" column, or stop it being one.
+
+An "Updated At" column is kept at the time its record was last changed by a trigger; see
+mathesar_types.stamp_updated_at. Existing values are left as they are.
+
+Args:
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the column.
+  updated_at: Whether the column should be an "Updated At" column.
+*/
+DECLARE
+  trigger_name name;
+BEGIN
+  FOR trigger_name IN SELECT msar.get_updated_at_triggers(tab_id, col_id) LOOP
+    EXECUTE format(
+      'DROP TRIGGER %I ON %I.%I',
+      trigger_name,
+      msar.get_relation_schema_name(tab_id),
+      msar.get_relation_name(tab_id)
+    );
+  END LOOP;
+  IF updated_at THEN
+    EXECUTE format(
+      'CREATE TRIGGER %I BEFORE INSERT OR UPDATE ON %I.%I'
+      ' FOR EACH ROW EXECUTE FUNCTION mathesar_types.stamp_updated_at(%L)',
+      'mathesar_updated_at_' || col_id,
+      msar.get_relation_schema_name(tab_id),
+      msar.get_relation_name(tab_id),
+      col_id
+    );
+  END IF;
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+
 CREATE OR REPLACE FUNCTION msar.column_info_table(tab_id regclass) RETURNS TABLE
 (
   id smallint, -- The OID of the column.
@@ -941,6 +1029,7 @@ CREATE OR REPLACE FUNCTION msar.column_info_table(tab_id regclass) RETURNS TABLE
   nullable boolean, -- is the column nullable.
   primary_key boolean, -- whether the column has primary key constraint.
   "default" jsonb, -- the default for the column(if any).
+  updated_at_trigger boolean, -- whether a trigger keeps the column at its record's update time.
   has_dependents boolean, -- is the column referenced by others.
   description text, -- The description of the column on the database.
   current_role_priv jsonb -- Privileges of the current role on the column.
@@ -955,6 +1044,7 @@ SELECT
   NOT attnotnull AS nullable,
   COALESCE(pgi.indisprimary, false) AS primary_key,
   msar.describe_column_default(tab_id, attnum) AS default,
+  EXISTS (SELECT msar.get_updated_at_triggers(tab_id, attnum)) AS updated_at_trigger,
   msar.has_dependents(tab_id, attnum) AS has_dependents,
   msar.col_description(tab_id, attnum) AS description,
   msar.list_column_privileges_for_current_role(tab_id, attnum) AS current_role_priv
@@ -978,6 +1068,7 @@ Each returned JSON object in the array will have the form:
     "nullable": <bool>,
     "primary_key": <bool>,
     "default": {"value": <str>, "is_dynamic": <bool>},
+    "updated_at_trigger": <bool>,
     "has_dependents": <bool>,
     "description": <str>,
     "current_role_priv": [<str>, <str>, ...]
@@ -987,6 +1078,8 @@ The `type_options` object is described in the docstring of `msar.get_type_option
 object has the keys:
   value: A string giving the value (as an SQL expression) of the default.
   is_dynamic: A boolean giving whether the default is (likely to be) dynamic.
+`updated_at_trigger` gives whether a trigger keeps the column at the time its record was last
+changed; see msar.set_updated_at_column.
 */
 SELECT coalesce(jsonb_agg(column_data ORDER BY column_data.id ASC), '[]'::jsonb)
 FROM msar.column_info_table(tab_id) AS column_data;
@@ -2114,6 +2207,9 @@ Args:
 BEGIN
   col_ids := array_remove(col_ids, null);
   IF array_length(col_ids, 1) IS NOT NULL THEN
+    -- Triggers survive dropping their column, so drop any keeping it at its record's update time.
+    PERFORM msar.set_updated_at_column(tab_id, col_id::smallint, false)
+    FROM unnest(col_ids) AS x(col_id);
     EXECUTE format(
       'ALTER TABLE %I.%I %s',
       msar.get_relation_schema_name(tab_id),
@@ -2986,6 +3082,8 @@ BEGIN
     WHERE attrelid=tab_id AND attnum=col_id;
 
   IF copy_data THEN
+    -- Copying a column doesn't change the records; see mathesar_types.stamp_updated_at.
+    PERFORM set_config('mathesar.keep_updated_at', 'on', true);
     EXECUTE format(
       'UPDATE %I.%I SET %I=%I',
       msar.get_relation_schema_name(tab_id),
@@ -2993,6 +3091,7 @@ BEGIN
       msar.get_column_name(tab_id, created_col_id),
       msar.get_column_name(tab_id, col_id)
     );
+    PERFORM set_config('mathesar.keep_updated_at', 'off', true);
   END IF;
   IF copy_constraints THEN
     PERFORM msar.copy_constraint(oid, col_id, created_col_id)
@@ -3850,6 +3949,7 @@ The col_alters JSONB should have the form:
     "type": <obj> (optional),
     "default": <any> (optional),
     "default_is_dynamic": <bool> (optional),
+    "updated_at_trigger": <bool> (optional),
     "not_null": <bool> (optional),
     "delete": <bool> (optional),
     "name": <str> (optional),
@@ -3861,7 +3961,8 @@ The col_alters JSONB should have the form:
 ]
 
 If "default_is_dynamic" is true, "default" is an SQL expression rather than a literal value; see
-msar.set_col_dynamic_default for the accepted expressions.
+msar.set_col_dynamic_default for the accepted expressions. "updated_at_trigger" makes the column an
+"Updated At" column, or stops it being one; see msar.set_updated_at_column.
 
 Note that for all alterations, we create and execute separate SQL queries rather than combining them
 into a giant SQL statement. This has the benefit of providing better error messages(for users)
@@ -3883,6 +3984,7 @@ BEGIN
       pg_catalog.pg_get_expr(adbin, tab_id) AS old_default,
       col_alter_obj -> 'default' AS new_default,
       COALESCE((col_alter_obj -> 'default_is_dynamic')::boolean, false) AS new_default_is_dynamic,
+      (col_alter_obj -> 'updated_at_trigger')::boolean AS updated_at_trigger,
 
       col_alter_obj->>'description' AS comment_,
       __msar.jsonb_key_exists(col_alter_obj, 'description') AS has_comment
@@ -3923,6 +4025,9 @@ BEGIN
       -- Note: We don't want to preserve old default for jsonb_typeof(col.new_default)='null'
       -- as we consider it as an intent to drop the default.
       PERFORM msar.set_old_col_default(tab_id, col.attnum, col.old_default, col.new_type, is_default_dynamic, col.cast_options);
+    END IF;
+    IF col.updated_at_trigger IS NOT NULL THEN
+      PERFORM msar.set_updated_at_column(tab_id, col.attnum, col.updated_at_trigger);
     END IF;
 
     -- PG13 doesn't allow concat b/w integer[] and smallint need to typecast
@@ -4107,7 +4212,8 @@ BEGIN
   fkey_attnum := msar.add_foreign_key_column(fkey_name, tab_id, extracted_table_id);
   -- Insert the data from the original table's columns into the extracted columns, and add
   -- appropriate fkey values to the new fkey column in the original table to give the proper
-  -- mapping.
+  -- mapping. That doesn't change the records; see mathesar_types.stamp_updated_at.
+  PERFORM set_config('mathesar.keep_updated_at', 'on', true);
   EXECUTE format($t$
     WITH fkey_cte AS (
       SELECT id, %1$s, dense_rank() OVER (ORDER BY %1$s) AS __msar_tmp_id
@@ -4128,6 +4234,7 @@ BEGIN
     -- %4$I  This is the name of the fkey column in the remainder table.
     fkey_name
   ) FROM jsonb_array_elements(extracted_col_defs) AS col_def;
+  PERFORM set_config('mathesar.keep_updated_at', 'off', true);
   -- Drop the original versions of the extracted columns from the original table.
   PERFORM msar.drop_columns(tab_id, variadic col_ids);
   -- In case the user wanted to give a name to the fkey column matching one of the extracted
@@ -4281,6 +4388,8 @@ BEGIN
     RAISE EXCEPTION 'The joining column cannot be moved.';
   END IF;
   added_col_ids := msar.add_columns(target_tab_id, move_col_defs, true);
+  -- Moving columns doesn't change the records; see mathesar_types.stamp_updated_at.
+  PERFORM set_config('mathesar.keep_updated_at', 'on', true);
   EXECUTE format(
     $q$WITH merged_cte AS (
       SELECT DISTINCT %1$s, %2$s
@@ -4323,6 +4432,7 @@ BEGIN
     ),
     msar.build_source_update_move_cols_equal_expr(source_tab_id, move_col_ids, 'insert_cte')
   );
+  PERFORM set_config('mathesar.keep_updated_at', 'off', true);
   PERFORM msar.add_constraints(target_tab_id, move_con_defs);
   PERFORM msar.drop_columns(source_tab_id, variadic move_col_ids);
 END;
@@ -6083,6 +6193,8 @@ DECLARE
   tab_name text := msar.get_relation_name(tab_id);
   col_name text := msar.get_column_name(tab_id, col_id);
 BEGIN
+  -- Refreshing a file's mash doesn't change the record; see mathesar_types.stamp_updated_at.
+  PERFORM set_config('mathesar.keep_updated_at', 'on', true);
   EXECUTE format(
     $j$
       UPDATE %1$I.%2$I
@@ -6095,6 +6207,7 @@ BEGIN
     col_name,
     uri_mash_map
   );
+  PERFORM set_config('mathesar.keep_updated_at', 'off', true);
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 

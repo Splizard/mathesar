@@ -18,8 +18,9 @@ export interface ColumnWithAbstractType
     'id' | 'type' | 'type_options' | 'metadata'
   > {
   abstractType: AbstractType;
-  /** Needed to recognise, and change to or from, the "Created At" type */
+  /** Needed to recognise the "Created At" and "Updated At" types */
   default?: RawColumnWithMetadata['default'];
+  updated_at_trigger?: RawColumnWithMetadata['updated_at_trigger'];
 }
 
 export type ColumnTypeOptionsSaveArgs = Pick<
@@ -31,6 +32,8 @@ export type ColumnTypeOptionsSaveArgs = Pick<
    * drops the default, `undefined` leaves it alone.
    */
   default?: RawColumnWithMetadata['default'];
+  /** Whether the type change adds or drops an "Updated At" trigger */
+  updated_at_trigger?: boolean;
 };
 
 export function getFormValueStore(

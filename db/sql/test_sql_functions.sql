@@ -2351,6 +2351,125 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION __setup_updated_at() RETURNS SETOF TEXT AS $$
+BEGIN
+  CREATE TABLE ua (id integer PRIMARY KEY, title text, note json, changed timestamptz);
+  INSERT INTO ua VALUES (1, 'existing', '{"a": 1}', NULL);
+  PERFORM msar.alter_columns('ua'::regclass::oid, '[{"attnum": 4, "updated_at_trigger": true}]');
+END;
+$$ LANGUAGE plpgsql;
+
+
+-- Sets the "Updated At" column of every row to a fixed time in the past, bypassing the trigger.
+CREATE OR REPLACE FUNCTION __backdate_updated_at() RETURNS void AS $$
+BEGIN
+  ALTER TABLE ua DISABLE TRIGGER USER;
+  UPDATE ua SET changed = '2000-01-01 00:00Z';
+  ALTER TABLE ua ENABLE TRIGGER USER;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_updated_at_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_updated_at();
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 1), NULL, 'existing records are left empty'
+  );
+  RETURN NEXT is(
+    (msar.get_column_info('ua') -> 3 ->> 'updated_at_trigger')::boolean, true,
+    'column info reports the trigger'
+  );
+  RETURN NEXT is(
+    (msar.get_column_info('ua') -> 1 ->> 'updated_at_trigger')::boolean, false,
+    'other columns have none'
+  );
+
+  INSERT INTO ua VALUES (2, 'new', NULL, '1999-01-01 00:00Z');
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 2), now(), 'inserting sets it, whatever was given'
+  );
+
+  PERFORM __backdate_updated_at();
+  UPDATE ua SET title = 'changed' WHERE id = 1;
+  RETURN NEXT is((SELECT changed FROM ua WHERE id = 1), now(), 'changing a value sets it');
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 2), '2000-01-01 00:00Z', 'other records are left alone'
+  );
+
+  PERFORM __backdate_updated_at();
+  UPDATE ua SET title = title, note = note;
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 1), '2000-01-01 00:00Z',
+    'writing the same values leaves it, even with a json column'
+  );
+  UPDATE ua SET changed = '2020-01-01 00:00Z' WHERE id = 1;
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 1), '2000-01-01 00:00Z', 'writing it directly does nothing'
+  );
+
+  PERFORM set_config('mathesar.keep_updated_at', 'on', true);
+  UPDATE ua SET title = 'kept' WHERE id = 1;
+  PERFORM set_config('mathesar.keep_updated_at', 'off', true);
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 1), '2000-01-01 00:00Z',
+    'mathesar.keep_updated_at keeps it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_updated_at_column_renamed() RETURNS SETOF TEXT AS $f$
+BEGIN
+  -- The rename comes before the trigger first runs: within a single function call like this one,
+  -- jsonb_populate_record keeps using the row's column names from its first call.
+  PERFORM __setup_updated_at();
+  PERFORM msar.alter_columns('ua'::regclass::oid, '[{"attnum": 4, "name": "Last change"}]');
+  UPDATE ua SET title = 'renamed' WHERE id = 1;
+  RETURN NEXT is(
+    (SELECT "Last change" FROM ua WHERE id = 1), now(), 'renaming the column keeps it working'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_updated_at_column_removed() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_updated_at();
+  PERFORM msar.alter_columns('ua'::regclass::oid, '[{"attnum": 4, "updated_at_trigger": false}]');
+  RETURN NEXT is(
+    (msar.get_column_info('ua') -> 3 ->> 'updated_at_trigger')::boolean, false,
+    'turning it off drops the trigger'
+  );
+  UPDATE ua SET title = 'changed';
+  RETURN NEXT is((SELECT changed FROM ua WHERE id = 1), NULL, 'and the column is left alone');
+
+  PERFORM msar.alter_columns('ua'::regclass::oid, '[{"attnum": 4, "updated_at_trigger": true}]');
+  PERFORM msar.drop_columns('ua'::regclass::oid, 4);
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_trigger WHERE tgrelid = 'ua'::regclass), 0,
+    'dropping the column drops its trigger'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_updated_at_kept_by_extracting_columns() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_updated_at();
+  PERFORM __backdate_updated_at();
+  PERFORM msar.extract_columns_from_table('ua'::regclass::oid, ARRAY[2], 'titles', 'title_id');
+  RETURN NEXT is(
+    (SELECT changed FROM ua WHERE id = 1), '2000-01-01 00:00Z',
+    'extracting columns into a new table leaves it'
+  );
+  RETURN NEXT is(
+    current_setting('mathesar.keep_updated_at', true), 'off', 'and turns the setting back off'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_alter_columns_combo() RETURNS SETOF TEXT AS $f$
 DECLARE
   col_alters_jsonb jsonb := $j$[
@@ -3153,7 +3272,7 @@ BEGIN
       "id": 1, "name": "id", "type": "integer",
       "default": {"value": "identity", "is_dynamic": true},
       "nullable": false, "description": null, "primary_key": true, "type_options": null,
-      "has_dependents": true
+      "has_dependents": true, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3167,7 +3286,7 @@ BEGIN
     $j${
       "id": 2, "name": "num_plain", "type": "numeric", "default": null, "nullable": false,
       "description": null, "primary_key": false, "type_options": {"scale": null, "precision": null},
-      "has_dependents": false
+      "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3181,7 +3300,7 @@ BEGIN
     $j${
       "id": 3, "name": "var_128", "type": "character varying", "default": null, "nullable": true,
       "description": null, "primary_key": false, "type_options": {"length": 128},
-      "has_dependents": false
+      "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3195,7 +3314,7 @@ BEGIN
     $j${
       "id": 4, "name": "txt", "type": "text", "default": {"value": "abc", "is_dynamic": false},
       "nullable": true, "description": "A super comment ;", "primary_key": false,
-      "type_options": null, "has_dependents": false
+      "type_options": null, "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3209,7 +3328,7 @@ BEGIN
     $j${
       "id": 5, "name": "tst", "type": "timestamp without time zone",
       "default": {"value": "now()", "is_dynamic": true}, "nullable": true, "description": null,
-      "primary_key": false, "type_options": {"precision": null}, "has_dependents": false
+      "primary_key": false, "type_options": {"precision": null}, "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3223,7 +3342,7 @@ BEGIN
     $j${
       "id": 6, "name": "int_arr", "type": "_array", "default": null, "nullable": true,
       "description": null, "primary_key": false, "type_options": {"item_type": "integer"},
-      "has_dependents": false
+      "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3238,7 +3357,7 @@ BEGIN
       "id": 7, "name": "num_opt_arr", "type": "_array", "default": null, "nullable": true,
       "description": null, "primary_key": false,
       "type_options": {"scale": 10, "item_type": "numeric", "precision": 15},
-      "has_dependents": false
+      "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(
@@ -3253,7 +3372,7 @@ BEGIN
       "id": 8, "name": "enum_col", "type": "_enum", "default": null, "nullable": true,
       "description": null, "primary_key": false,
       "type_options": {"original_type": "col_variety_enum", "enum_values": ["x", "y"]},
-      "has_dependents": false
+      "has_dependents": false, "updated_at_trigger": false
     }$j$
   );
   RETURN NEXT ok(

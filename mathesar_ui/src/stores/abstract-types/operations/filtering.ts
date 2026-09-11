@@ -12,11 +12,13 @@ const allDateTimeTypes = [
   abstractTypeCategory.Time,
   abstractTypeCategory.DateTime,
   abstractTypeCategory.CreatedAt,
+  abstractTypeCategory.UpdatedAt,
 ];
 
 const numericallyOperableTypesParams = {
   [abstractTypeCategory.DateTime]: [abstractTypeCategory.DateTime],
   [abstractTypeCategory.CreatedAt]: [abstractTypeCategory.CreatedAt],
+  [abstractTypeCategory.UpdatedAt]: [abstractTypeCategory.UpdatedAt],
   [abstractTypeCategory.Date]: [abstractTypeCategory.Date],
   [abstractTypeCategory.Time]: [abstractTypeCategory.Time],
   [abstractTypeCategory.Duration]: [abstractTypeCategory.Duration],

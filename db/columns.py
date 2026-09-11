@@ -82,7 +82,8 @@ def _transform_column_alter_dict(data):
         "type_options": <dict>,
         "nullable": <bool>,
         "default": {"value": <any>, "is_dynamic": <bool>}
-        "description": <str>
+        "description": <str>,
+        "updated_at_trigger": <bool>
     }
 
     Output form:
@@ -94,7 +95,8 @@ def _transform_column_alter_dict(data):
         "not_null": <bool>,
         "default": <any>,
         "default_is_dynamic": <bool>,
-        "description": <str>
+        "description": <str>,
+        "updated_at_trigger": <bool>
     }
 
     Note that keys with empty values will be dropped, except "default"
@@ -113,7 +115,8 @@ def _transform_column_alter_dict(data):
         "cast_options": cast_options,
         "not_null": not_null,
         "name": column_name,
-        "description": data.get("description")
+        "description": data.get("description"),
+        "updated_at_trigger": data.get("updated_at_trigger"),
     }
     alter_def = {k: v for k, v in raw_alter_def.items() if v is not None}
 
@@ -167,22 +170,32 @@ def add_columns_to_table(table_oid, column_data_list, conn):
 
     ).fetchone()[0]
     # Dynamic defaults (e.g., the current time) are SQL expressions, which
-    # msar.add_columns only takes unchecked, so set them once the columns
-    # exist. Existing rows are left empty rather than getting the default.
-    dynamic_defaults = [
-        {"attnum": attnum, "default": col[DEFAULT]["value"], "default_is_dynamic": True}
+    # msar.add_columns only takes unchecked, and "Updated At" triggers need the
+    # column to exist, so set both once the columns exist. Existing rows are
+    # left empty rather than getting the default.
+    later_alters = [
+        _get_alter_def_for_added_column(attnum, col)
         for attnum, col in zip(result, column_data_list)
-        if _has_dynamic_default(col)
     ]
-    if dynamic_defaults:
+    later_alters = [alter_def for alter_def in later_alters if len(alter_def) > 1]
+    if later_alters:
         db_conn.exec_msar_func(
-            conn, 'alter_columns', table_oid, json.dumps(dynamic_defaults)
+            conn, 'alter_columns', table_oid, json.dumps(later_alters)
         )
     return result
 
 
 def _has_dynamic_default(data):
     return bool((data.get(DEFAULT) or {}).get("is_dynamic"))
+
+
+def _get_alter_def_for_added_column(attnum, data):
+    alter_def = {"attnum": attnum}
+    if _has_dynamic_default(data):
+        alter_def.update(default=data[DEFAULT]["value"], default_is_dynamic=True)
+    if data.get("updated_at_trigger"):
+        alter_def.update(updated_at_trigger=True)
+    return alter_def
 
 
 # TODO This function wouldn't be needed if we had the same form in the DB
@@ -210,7 +223,8 @@ def _transform_column_create_dict(data):
         "description": <str>
     }
 
-    A dynamic default is left out, to be set after the column is added.
+    A dynamic default and the "Updated At" trigger are left out, to be set
+    after the column is added.
     """
     return {
         "name": (data.get(NAME) or '').strip() or None,

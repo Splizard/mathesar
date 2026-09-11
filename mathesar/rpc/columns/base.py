@@ -117,6 +117,8 @@ class CreatableColumnInfo(TypedDict):
         nullable: Whether or not the column is nullable.
         default: The default value.
         description: The description of the column.
+        updated_at_trigger: Whether a trigger keeps the column at the time
+            its record was last changed (an "Updated At" column).
     """
     name: Optional[str]
     type: Optional[str]
@@ -124,6 +126,7 @@ class CreatableColumnInfo(TypedDict):
     nullable: Optional[bool]
     default: Optional[ColumnDefault]
     description: Optional[str]
+    updated_at_trigger: Optional[bool]
 
 
 class SettableColumnInfo(TypedDict):
@@ -151,6 +154,8 @@ class SettableColumnInfo(TypedDict):
         nullable: Whether or not the column is nullable.
         default: The default value.
         description: The description of the column.
+        updated_at_trigger: Whether a trigger keeps the column at the time
+            its record was last changed (an "Updated At" column).
     """
     id: int
     name: Optional[str]
@@ -160,6 +165,7 @@ class SettableColumnInfo(TypedDict):
     nullable: Optional[bool]
     default: Optional[ColumnDefault]
     description: Optional[str]
+    updated_at_trigger: Optional[bool]
 
 
 class PreviewableColumnInfo(TypedDict):
@@ -188,6 +194,8 @@ class ColumnInfo(TypedDict):
         nullable: Whether or not the column is nullable.
         primary_key: Whether the column is in the primary key.
         default: The default value and whether it's dynamic.
+        updated_at_trigger: Whether a trigger keeps the column at the time
+            its record was last changed (an "Updated At" column).
         has_dependents: Whether the column has dependent objects.
         description: The description of the column.
         current_role_priv: The privileges available to the user for the column.
@@ -199,6 +207,7 @@ class ColumnInfo(TypedDict):
     nullable: bool
     primary_key: bool
     default: ColumnDefault
+    updated_at_trigger: bool
     has_dependents: bool
     description: str
     current_role_priv: list[Literal['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']]
@@ -213,6 +222,7 @@ class ColumnInfo(TypedDict):
             nullable=col_info["nullable"],
             primary_key=col_info["primary_key"],
             default=ColumnDefault.from_dict(col_info.get("default")),
+            updated_at_trigger=col_info.get("updated_at_trigger", False),
             has_dependents=col_info["has_dependents"],
             description=col_info.get("description"),
             current_role_priv=col_info["current_role_priv"]

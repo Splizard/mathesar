@@ -4,10 +4,9 @@
 
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import {
-    getDefaultForAbstractType,
+    getAutoFillChangesForTypeChange,
     mergeMetadataOnTypeChange,
   } from '@mathesar/stores/abstract-types';
-  import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
   import { toast } from '@mathesar/stores/toast';
   import { columnTypeOptionsAreEqual } from '@mathesar/utils/columnUtils';
   import {
@@ -30,8 +29,11 @@
   export let save: (options: ColumnTypeOptionsSaveArgs) => Promise<unknown>;
   export let showWarnings = true;
   export let disabled = false;
-  /** Whether `save` handles `default`, which the "Created At" type needs */
-  export let allowCreatedAt = false;
+  /**
+   * Whether `save` handles `default` and `updated_at_trigger`, which the
+   * "Created At" and "Updated At" types need
+   */
+  export let allowAutoFilledTypes = false;
 
   let selectedAbstractType: ColumnWithAbstractType['abstractType'] =
     column.abstractType;
@@ -83,22 +85,6 @@
     dispatch('cancel');
   }
 
-  /**
-   * "Created At" is a Date & Time column defaulting to the current time, so
-   * changing to it sets that default and changing away from it drops it.
-   */
-  function getDefaultForTypeChange(): ColumnTypeOptionsSaveArgs['default'] {
-    const isCreatedAt = (type: typeof selectedAbstractType) =>
-      type?.identifier === abstractTypeCategory.CreatedAt;
-    if (isCreatedAt(selectedAbstractType)) {
-      if (isCreatedAt(column.abstractType) && selectedDbType === column.type) {
-        return undefined;
-      }
-      return getDefaultForAbstractType(selectedAbstractType, selectedDbType);
-    }
-    return isCreatedAt(column.abstractType) ? null : undefined;
-  }
-
   async function onSave() {
     typeChangeState = { state: 'processing' };
     try {
@@ -106,7 +92,10 @@
         type: selectedDbType,
         type_options: { ...typeOptions },
         metadata,
-        default: getDefaultForTypeChange(),
+        ...getAutoFillChangesForTypeChange(
+          { abstractType: column.abstractType, dbType: column.type },
+          { abstractType: selectedAbstractType, dbType: selectedDbType },
+        ),
       });
       typeChangeState = { state: 'success' };
     } catch (err) {
@@ -126,7 +115,7 @@
 <AbstractTypeSelector
   {selectedAbstractType}
   {column}
-  {allowCreatedAt}
+  {allowAutoFilledTypes}
   on:change={(e) => selectTypeAndAbstractType(e.detail)}
   on:reset={() => resetAbstractType(column)}
   disabled={typeChangeState?.state === 'processing' || disabled}

@@ -197,6 +197,8 @@ export class ColumnsDataStore extends EventHandler<{
     metadata: ColumnMetadata | null;
     /** `null` drops the default, `undefined` leaves it alone */
     default?: RawColumnWithMetadata['default'];
+    /** Adds or drops an "Updated At" trigger; `undefined` leaves it alone */
+    updated_at_trigger?: boolean;
   }): Promise<void> {
     await api.columns
       .patch({
@@ -207,6 +209,9 @@ export class ColumnsDataStore extends EventHandler<{
             type: spec.type,
             type_options: spec.type_options,
             ...(spec.default !== undefined ? { default: spec.default } : {}),
+            ...(spec.updated_at_trigger !== undefined
+              ? { updated_at_trigger: spec.updated_at_trigger }
+              : {}),
           },
         ],
       })

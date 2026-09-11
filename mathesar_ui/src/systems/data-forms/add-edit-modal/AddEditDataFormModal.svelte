@@ -81,7 +81,9 @@
           fields: [...tableStructureSubstance.processedColumns.values()]
             .filter(
               (pc) =>
-                !pc.column.default?.is_dynamic && !pc.isUserTrackingColumn,
+                !pc.column.default?.is_dynamic &&
+                !pc.column.updated_at_trigger &&
+                !pc.isUserTrackingColumn,
             )
             .map((c, index) => processedColumnToRawDataFormField(c, index)),
         };

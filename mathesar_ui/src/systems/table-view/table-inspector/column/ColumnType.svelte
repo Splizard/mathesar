@@ -24,6 +24,7 @@
       type_options: columnInfo.type_options,
       metadata: columnInfo.metadata,
       default: columnInfo.default,
+      updated_at_trigger: columnInfo.updated_at_trigger,
     });
   }
   $: disallowDataTypeChange =
@@ -47,7 +48,7 @@
   <AbstractTypeControl
     column={columnWithAbstractType}
     {save}
-    allowCreatedAt
+    allowAutoFilledTypes
     disabled={disallowDataTypeChange}
   />
 {/key}

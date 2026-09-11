@@ -894,6 +894,7 @@
   "update_primary_key_column": "Update primary key column",
   "update_stored_password": "Update Stored Role",
   "update_stored_password_for_role": "Update stored role [role]",
+  "updated_at_type_help": "Records the date and time each record was last changed. It is filled in automatically and can't be edited.",
   "upgrade": "Upgrade",
   "upgrade_all_databases": "Upgrade All Databases",
   "upgrade_all_databases_notice": "Now you'll need to upgrade the Mathesar code inside each of your connected databases to continue using Mathesar.",

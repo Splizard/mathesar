@@ -4,6 +4,7 @@ export const abstractTypeCategory = {
   Time: 'time',
   DateTime: 'datetime',
   CreatedAt: 'createdAt',
+  UpdatedAt: 'updatedAt',
   Duration: 'duration',
   Enum: 'enum',
   Email: 'email',

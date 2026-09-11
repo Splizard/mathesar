@@ -18,6 +18,7 @@ export function getColumnIconProps(column: {
   type: RawColumnWithMetadata['type'];
   type_options: RawColumnWithMetadata['type_options'];
   default?: RawColumnWithMetadata['default'];
+  updated_at_trigger?: RawColumnWithMetadata['updated_at_trigger'];
   constraintsType?: ConstraintType[];
   metadata: ColumnMetadata | null;
 }): IconProps | IconProps[] {
@@ -29,15 +30,13 @@ export function getColumnIconProps(column: {
     return iconTableLink;
   }
 
-  return getAbstractTypeForDbType(
-    column.type,
-    column.metadata,
-    column.default,
-  ).getIcon({
-    dbType: column.type,
-    typeOptions: column.type_options,
-    metadata: column.metadata,
-  });
+  return getAbstractTypeForDbType(column.type, column.metadata, column).getIcon(
+    {
+      dbType: column.type,
+      typeOptions: column.type_options,
+      metadata: column.metadata,
+    },
+  );
 }
 
 export function getSuggestedFkColumnName(

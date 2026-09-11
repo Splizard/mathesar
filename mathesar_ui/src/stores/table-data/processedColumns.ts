@@ -24,8 +24,8 @@ import {
   getEqualityFiltersForAbstractType,
   getFiltersForAbstractType,
   getPreprocFunctionsForAbstractType,
+  isAutoFilledAbstractType,
 } from '@mathesar/stores/abstract-types';
-import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
 import type {
   AbstractType,
   AbstractTypePreprocFunctionDefinition,
@@ -124,7 +124,7 @@ export class ProcessedColumn implements CellColumnFabric {
     this.abstractType = getAbstractTypeForDbType(
       this.column.type,
       this.column.metadata,
-      this.column.default,
+      this.column,
     );
 
     this.initialInputValue = getInitialInputValue(
@@ -196,8 +196,8 @@ export class ProcessedColumn implements CellColumnFabric {
       ) {
         return false;
       }
-      // Its value records when the record was created
-      if (this.abstractType.identifier === abstractTypeCategory.CreatedAt) {
+      // Their values record when the record was created or last changed
+      if (isAutoFilledAbstractType(this.abstractType)) {
         return false;
       }
       return true;

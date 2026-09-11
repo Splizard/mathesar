@@ -62,6 +62,11 @@ interface RawColumn {
   nullable: boolean;
   primary_key: boolean;
   default: ColumnDefault | null;
+  /**
+   * Whether a trigger keeps the column at the time its record was last
+   * changed, i.e. it's an "Updated At" column.
+   */
+  updated_at_trigger?: boolean;
   has_dependents: boolean;
   current_role_priv: ColumnPrivilege[];
 }
@@ -120,6 +125,7 @@ export interface ColumnCreationSpec {
   type_options?: ColumnTypeOptions;
   nullable?: boolean;
   default?: ColumnDefault;
+  updated_at_trigger?: boolean;
 }
 
 export interface ColumnPatchSpec {
@@ -131,6 +137,7 @@ export interface ColumnPatchSpec {
   cast_options?: ColumnCastOptions;
   nullable?: boolean;
   default?: ColumnDefault | null;
+  updated_at_trigger?: boolean;
 }
 
 type ColumnMetadataBlob = ColumnMetadata & { attnum: number };

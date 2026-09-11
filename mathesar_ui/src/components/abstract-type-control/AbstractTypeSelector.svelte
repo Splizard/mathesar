@@ -5,8 +5,8 @@
   import {
     getAllowedAbstractTypesForDbTypeAndItsTargetTypes,
     isAbstractTypeDisabled,
+    isAutoFilledAbstractType,
   } from '@mathesar/stores/abstract-types';
-  import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
   import type { AbstractType } from '@mathesar/stores/abstract-types/types';
   import { LabeledInput, Select } from '@mathesar-component-library';
 
@@ -24,19 +24,21 @@
   export let column: ColumnWithAbstractType;
   export let selectedAbstractType: AbstractType;
   export let disabled = false;
-  /** "Created At" is set up through the column's default, so needs support */
-  export let allowCreatedAt = false;
+  /**
+   * "Created At" and "Updated At" are set up through the column's default and
+   * a trigger, so need support for those
+   */
+  export let allowAutoFilledTypes = false;
 
-  $: excludedTypes = [
-    'jsonlist',
-    'map',
-    ...(allowCreatedAt ? [] : [abstractTypeCategory.CreatedAt]),
-  ];
   $: allowedTypeConversions = getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
     column.type,
     column.metadata,
-    column.default,
-  ).filter((item) => !excludedTypes.includes(item.identifier));
+    column,
+  ).filter(
+    (item) =>
+      !['jsonlist', 'map'].includes(item.identifier) &&
+      (allowAutoFilledTypes || !isAutoFilledAbstractType(item)),
+  );
 
   function selectAbstractType(
     newAbstractType: ColumnWithAbstractType['abstractType'] | undefined,
@@ -49,10 +51,10 @@
       if (newAbstractType.identifier === column.abstractType.identifier) {
         dispatch('reset');
       } else if (
-        column.abstractType.identifier === abstractTypeCategory.CreatedAt &&
+        isAutoFilledAbstractType(column.abstractType) &&
         newAbstractType.dbTypes.has(column.type)
       ) {
-        // From Created At to Date & Time, keeping time zone support as it is
+        // E.g. from Created At to Date & Time, keeping time zone support
         dispatch('change', {
           type: column.type,
           abstractType: newAbstractType,

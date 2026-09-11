@@ -144,6 +144,36 @@ def test_add_columns_dynamic_default():
     ]
 
 
+def test_add_columns_updated_at_trigger():
+    """
+    The "Updated At" trigger is added with msar.alter_columns once the
+    column exists.
+    """
+    with patch.object(connection, "exec_msar_func") as mock_exec:
+        mock_exec.return_value.fetchone = lambda: ([5],)
+        columns.add_columns_to_table(
+            123,
+            [{"name": "changed", "type": "timestamp with time zone",
+              "updated_at_trigger": True}],
+            "conn"
+        )
+    add_call, alter_call = mock_exec.call_args_list
+    assert "updated_at_trigger" not in json.loads(add_call.args[3])[0]
+    assert json.loads(alter_call.args[3]) == [
+        {"attnum": 5, "updated_at_trigger": True}
+    ]
+
+
+def test_alter_columns_updated_at_trigger():
+    with patch.object(connection, 'exec_msar_func') as mock_exec:
+        columns.alter_columns_in_table(
+            123, [{"id": 5, "updated_at_trigger": False}], 'conn'
+        )
+    assert json.loads(mock_exec.call_args.args[3]) == [
+        {"attnum": 5, "updated_at_trigger": False}
+    ]
+
+
 def test_drop_columns():
     with patch.object(connection, 'exec_msar_func') as mock_exec:
         mock_exec.return_value.fetchone = lambda: (3,)

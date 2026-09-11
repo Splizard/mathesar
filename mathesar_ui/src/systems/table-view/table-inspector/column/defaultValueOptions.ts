@@ -39,6 +39,8 @@ const currentTimeLabels: Record<string, string> = {
  * columns, which the inspector knows how to set.
  */
 export function canSetDefaultValue(column: ProcessedColumn): boolean {
+  // The trigger of an "Updated At" column overrides any default
+  if (column.column.updated_at_trigger) return false;
   if (!column.column.default?.is_dynamic) return true;
   return (
     column.column.type in currentTimeLabels &&

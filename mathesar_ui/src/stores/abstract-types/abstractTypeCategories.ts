@@ -36,6 +36,7 @@ import Money from './type-configs/money';
 import Number from './type-configs/number';
 import Text from './type-configs/text';
 import Time from './type-configs/time';
+import UpdatedAt from './type-configs/updatedAt';
 import Uri from './type-configs/uri';
 import User from './type-configs/user/user';
 import Uuid from './type-configs/uuid';
@@ -303,6 +304,21 @@ const createdAtAbstractType: AbstractType = {
   ...CreatedAt,
 };
 
+const updatedAtAbstractType: AbstractType = {
+  identifier: abstractTypeCategory.UpdatedAt,
+  name: 'Updated At',
+  dbTypes: new Set([DB_TYPES.TIMESTAMP_WITH_TZ, DB_TYPES.TIMESTAMP_WITHOUT_TZ]),
+  ...UpdatedAt,
+};
+
+/**
+ * What the database fills in for a column, which is how the "Created At" and
+ * "Updated At" types are recognised.
+ */
+export type ColumnAutoFillInfo = Partial<
+  Pick<RawColumnWithMetadata, 'default' | 'updated_at_trigger'>
+>;
+
 const abstractTypesMap = constructAbstractTypeMapFromResponse(typesResponse);
 
 export const defaultAbstractType = (() => {
@@ -329,20 +345,26 @@ function isUserAbstractType(dbType: DbType, metadata: ColumnMetadata | null) {
   return metadata?.user_display_field != null && dbType === DB_TYPES.INTEGER;
 }
 
-function isCreatedAtAbstractType(
+function identifyAutoFilledAbstractType(
   dbType: DbType,
-  columnDefault: RawColumnWithMetadata['default'] | undefined,
-) {
-  return (
-    createdAtAbstractType.dbTypes.has(dbType) &&
-    isCurrentTimeDefault(columnDefault)
-  );
+  autoFill: ColumnAutoFillInfo | undefined,
+): AbstractType | undefined {
+  if (!createdAtAbstractType.dbTypes.has(dbType)) {
+    return undefined;
+  }
+  if (autoFill?.updated_at_trigger) {
+    return updatedAtAbstractType;
+  }
+  if (isCurrentTimeDefault(autoFill?.default)) {
+    return createdAtAbstractType;
+  }
+  return undefined;
 }
 
 function identifyAbstractTypeForDbType(
   dbType: DbType,
   metadata: ColumnMetadata | null,
-  columnDefault?: RawColumnWithMetadata['default'],
+  autoFill?: ColumnAutoFillInfo,
 ): AbstractType | undefined {
   if (isFileAbstractType(dbType, metadata)) {
     return fileAbstractType;
@@ -350,8 +372,12 @@ function identifyAbstractTypeForDbType(
   if (isUserAbstractType(dbType, metadata)) {
     return userAbstractType;
   }
-  if (isCreatedAtAbstractType(dbType, columnDefault)) {
-    return createdAtAbstractType;
+  const autoFilledAbstractType = identifyAutoFilledAbstractType(
+    dbType,
+    autoFill,
+  );
+  if (autoFilledAbstractType) {
+    return autoFilledAbstractType;
   }
   let abstractTypeOfDbType;
   for (const [, abstractType] of abstractTypesMap) {
@@ -375,6 +401,7 @@ function identifyAllPossibleAbstractTypesForDbType(
   }
   if (createdAtAbstractType.dbTypes.has(dbType)) {
     allPossibleAbstractTypes.add(createdAtAbstractType);
+    allPossibleAbstractTypes.add(updatedAtAbstractType);
   }
   for (const [, abstractType] of abstractTypesMap) {
     if (abstractType.dbTypes.has(dbType)) {
@@ -385,18 +412,19 @@ function identifyAllPossibleAbstractTypesForDbType(
 }
 
 /**
- * Pass the column's default where known: the "Created At" type is recognised
- * by it, and without it such a column is taken to be a Date & Time.
+ * Pass what the database fills in for the column where known: the "Created
+ * At" and "Updated At" types are recognised by it, and without it such columns
+ * are taken to be Date & Time ones.
  */
 export function getAbstractTypeForDbType(
   dbType: DbType,
   metadata: ColumnMetadata | null,
-  columnDefault?: RawColumnWithMetadata['default'],
+  autoFill?: ColumnAutoFillInfo,
 ): AbstractType {
   let abstractTypeOfDbType = identifyAbstractTypeForDbType(
     dbType,
     metadata,
-    columnDefault,
+    autoFill,
   );
   if (!abstractTypeOfDbType) {
     abstractTypeOfDbType = unknownAbstractType;
@@ -407,14 +435,14 @@ export function getAbstractTypeForDbType(
 export function getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
   dbType: DbType,
   metadata: ColumnMetadata | null,
-  columnDefault?: RawColumnWithMetadata['default'],
+  autoFill?: ColumnAutoFillInfo,
 ): AbstractType[] {
   const abstractTypeSet: Set<AbstractType> = new Set();
 
   const abstractTypeOfDbType = identifyAbstractTypeForDbType(
     dbType,
     metadata,
-    columnDefault,
+    autoFill,
   );
   if (abstractTypeOfDbType) {
     abstractTypeSet.add(abstractTypeOfDbType);
@@ -436,27 +464,73 @@ export function getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
   return abstractTypeList;
 }
 
+type AutoFillSpec = Pick<ColumnCreationSpec, 'default' | 'updated_at_trigger'>;
+
+export function isAutoFilledAbstractType(abstractType: AbstractType) {
+  return (
+    abstractType.identifier === abstractTypeCategory.CreatedAt ||
+    abstractType.identifier === abstractTypeCategory.UpdatedAt
+  );
+}
+
 /**
- * The default a column needs in order to be of the given abstract type, if any.
- * Only "Created At" needs one: the current time.
+ * What a new column needs in order to be of the given abstract type: "Created
+ * At" defaults to the current time, and "Updated At" has a trigger.
  */
-export function getDefaultForAbstractType(
+function getAutoFillSpecForAbstractType(
   abstractType: AbstractType,
   dbType: DbType,
-): ColumnCreationSpec['default'] {
-  if (abstractType.identifier !== abstractTypeCategory.CreatedAt) {
-    return undefined;
+): AutoFillSpec {
+  if (abstractType.identifier === abstractTypeCategory.UpdatedAt) {
+    return { updated_at_trigger: true };
   }
   const expression = currentTimeDefaultExpressions[dbType];
-  return expression ? { is_dynamic: true, value: expression } : undefined;
+  if (
+    abstractType.identifier === abstractTypeCategory.CreatedAt &&
+    expression
+  ) {
+    return { default: { is_dynamic: true, value: expression } };
+  }
+  return {};
+}
+
+/**
+ * The changes to a column's default and trigger that changing its abstract
+ * type needs, if any: setting up "Created At" or "Updated At" when changing to
+ * them, and undoing that when changing away. Keys left out are left alone.
+ */
+export function getAutoFillChangesForTypeChange(
+  from: { abstractType: AbstractType; dbType: DbType },
+  to: { abstractType: AbstractType; dbType: DbType },
+): {
+  default?: ColumnCreationSpec['default'] | null;
+  updated_at_trigger?: boolean;
+} {
+  const isFrom = (identifier: string) =>
+    from.abstractType.identifier === identifier;
+  const isTo = (identifier: string) =>
+    to.abstractType.identifier === identifier;
+  const createdAt = abstractTypeCategory.CreatedAt;
+  const updatedAt = abstractTypeCategory.UpdatedAt;
+  return {
+    ...(isFrom(createdAt) && !isTo(createdAt) ? { default: null } : {}),
+    ...(isTo(createdAt) && (!isFrom(createdAt) || from.dbType !== to.dbType)
+      ? getAutoFillSpecForAbstractType(to.abstractType, to.dbType)
+      : {}),
+    ...(isFrom(updatedAt) && !isTo(updatedAt)
+      ? { updated_at_trigger: false }
+      : {}),
+    ...(isTo(updatedAt) && !isFrom(updatedAt)
+      ? { updated_at_trigger: true }
+      : {}),
+  };
 }
 
 export function abstractTypeToColumnSaveSpec(abstractType: AbstractType): {
   dbOptions: {
     type: DbType;
     typeOptions: ColumnTypeOptions;
-    default?: ColumnCreationSpec['default'];
-  };
+  } & AutoFillSpec;
   metadata: ColumnMetadata | null;
 } {
   const type = (() => {
@@ -486,7 +560,7 @@ export function abstractTypeToColumnSaveSpec(abstractType: AbstractType): {
     dbOptions: {
       type,
       typeOptions: {},
-      default: getDefaultForAbstractType(abstractType, type),
+      ...getAutoFillSpecForAbstractType(abstractType, type),
     },
     metadata,
   };
@@ -542,6 +616,7 @@ export function getAllowedAbstractTypesForNewColumn() {
     fileAbstractType,
     userAbstractType,
     createdAtAbstractType,
+    updatedAtAbstractType,
   ]
     .filter((type) => !typesDisallowedForNewColumnCreation.has(type.identifier))
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -558,6 +633,9 @@ export function getDbTypesForAbstractType(
   }
   if (abstractTypeIdentifier === abstractTypeCategory.CreatedAt) {
     return createdAtAbstractType.dbTypes;
+  }
+  if (abstractTypeIdentifier === abstractTypeCategory.UpdatedAt) {
+    return updatedAtAbstractType.dbTypes;
   }
   return abstractTypesMap.get(abstractTypeIdentifier)?.dbTypes ?? new Set();
 }
