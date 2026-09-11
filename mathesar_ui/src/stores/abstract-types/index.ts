@@ -3,6 +3,8 @@ export {
   getAllowedAbstractTypesForNewColumn,
   defaultAbstractType,
   abstractTypeToColumnSaveSpec,
+  canCastDbType,
+  getDefaultDbType,
   getAbstractTypeForDbType,
   getAutoFillChangesForTypeChange,
   isAutoFilledAbstractType,
@@ -18,4 +20,16 @@ export {
 } from './operations/filtering';
 export { getPreprocFunctionsForAbstractType } from './operations/preprocFunctions';
 export { getSummarizationFunctionsForAbstractType } from './operations/summarization';
-export { type TypeFamily, getTypeFamily, groupByFamily } from './typeFamilies';
+export {
+  type FamilyOption,
+  type KindOption,
+  type Modifiers,
+  type TypeChoice,
+  type TypeFamily,
+  chooseKind,
+  getColumnSaveSpec,
+  getKindOf,
+  getTypeFamily,
+  groupByFamily,
+  withModifiers,
+} from './typeFamilies';

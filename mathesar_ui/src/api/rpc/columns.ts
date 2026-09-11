@@ -30,6 +30,9 @@ export interface ColumnTypeOptions {
   /** The member type for arrays.  */
   item_type?: string | null;
 
+  /** When creating or changing a column, whether it holds arrays of the type */
+  array?: boolean | null;
+
   /** The actual PostgreSQL type name for enum and composite types. */
   original_type?: string | null;
 

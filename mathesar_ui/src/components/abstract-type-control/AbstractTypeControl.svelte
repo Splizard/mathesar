@@ -5,6 +5,7 @@
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import {
     getAutoFillChangesForTypeChange,
+    getKindOf,
     mergeMetadataOnTypeChange,
   } from '@mathesar/stores/abstract-types';
   import { toast } from '@mathesar/stores/toast';
@@ -106,6 +107,18 @@
     }
   }
 
+  // The options offered are those of the kind, whichever of its DB types
+  $: selectedKind = getKindOf({
+    abstractType: selectedAbstractType,
+    dbType: selectedDbType,
+    itemType: column.type_options?.item_type ?? undefined,
+  });
+  $: selectedKindKey = [
+    selectedKind.kind.identifier,
+    selectedKind.isRange,
+    selectedKind.isArray,
+  ].join(':');
+
   $: isSaveDisabled =
     !selectedAbstractType ||
     typeChangeState?.state === 'processing' ||
@@ -114,6 +127,7 @@
 
 <AbstractTypeSelector
   {selectedAbstractType}
+  {selectedDbType}
   {column}
   {allowAutoFilledTypes}
   on:change={(e) => selectTypeAndAbstractType(e.detail)}
@@ -122,7 +136,7 @@
 />
 
 {#if selectedAbstractType && selectedDbType}
-  {#key selectedAbstractType}
+  {#key selectedKindKey}
     <AbstractTypeDBOptions
       {selectedAbstractType}
       bind:selectedDbType

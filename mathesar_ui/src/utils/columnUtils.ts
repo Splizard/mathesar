@@ -96,6 +96,7 @@ export function columnTypeOptionsAreEqual(
     enum_values: true,
     composite_fields: false,
     domain: false,
+    array: false,
   };
   const fields = (Object.keys(fieldsObj) as TypeOption[]).filter(
     (field) => fieldsObj[field],

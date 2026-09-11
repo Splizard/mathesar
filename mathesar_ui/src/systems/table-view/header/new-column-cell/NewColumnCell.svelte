@@ -9,10 +9,12 @@
   } from '@mathesar/components/form';
   import { iconAddNew } from '@mathesar/icons';
   import {
-    abstractTypeToColumnSaveSpec,
+    type TypeChoice,
     defaultAbstractType,
+    getColumnSaveSpec,
+    getDefaultDbType,
   } from '@mathesar/stores/abstract-types';
-  import type { AbstractType } from '@mathesar/stores/abstract-types/types';
+  import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { columnNameIsAvailable } from '@mathesar/utils/columnUtils';
   import {
@@ -30,16 +32,21 @@
 
   $: columnName = requiredField('', [columnNameIsAvailable($columns)]);
 
-  const columnAbstractType = requiredField<AbstractType>(defaultAbstractType);
-  $: form = makeForm({ columnName, columnAbstractType });
+  const columnType = requiredField<TypeChoice>({
+    abstractType: defaultAbstractType,
+    dbType: getDefaultDbType(defaultAbstractType) ?? DB_TYPES.TEXT,
+  });
+  $: form = makeForm({ columnName, columnType });
   $: ({ isSubmitting } = form);
 
   async function addColumn(closeDropdown: () => void) {
-    const spec = abstractTypeToColumnSaveSpec($columnAbstractType);
+    const spec = getColumnSaveSpec($columnType);
+    const { typeOptions, ...dbOptions } = spec.dbOptions;
     await columnsDataStore.addWithMetadata(
       {
         name: $columnName,
-        ...spec.dbOptions,
+        ...dbOptions,
+        type_options: typeOptions,
       },
       spec.metadata,
     );
@@ -65,7 +72,7 @@
   <div slot="content" class="new-column-dropdown" let:close use:focusTrap>
     <Field field={columnName} label={$_('column_name')} layout="stacked" />
     <Field
-      field={columnAbstractType}
+      field={columnType}
       input={{ component: ColumnTypeSelector }}
       label={$_('select_type')}
       layout="stacked"

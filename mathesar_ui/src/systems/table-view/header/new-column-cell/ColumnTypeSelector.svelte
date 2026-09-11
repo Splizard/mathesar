@@ -1,35 +1,45 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
 
-  import { AbstractTypeName } from '@mathesar/components/abstract-type-control';
   import {
-    defaultAbstractType,
+    AbstractTypeName,
+    TypeModifiers,
+  } from '@mathesar/components/abstract-type-control';
+  import {
+    type FamilyOption,
+    type KindOption,
+    type TypeChoice,
+    chooseKind,
     getAllowedAbstractTypesForNewColumn,
-    getTypeFamily,
+    getKindOf,
     groupByFamily,
     isAbstractTypeDisabled,
+    withModifiers,
   } from '@mathesar/stores/abstract-types';
-  import type { AbstractType } from '@mathesar/stores/abstract-types/types';
   import { Select, SelectionList } from '@mathesar-component-library';
 
-  export let value: AbstractType;
+  export let value: TypeChoice;
   export let disabled = false;
 
-  // Families are offered, then the kinds of the chosen one
-  type Group = ReturnType<typeof groupByFamily>[number];
-  $: groups = groupByFamily(getAllowedAbstractTypesForNewColumn());
-  $: selectedGroup = groups.find(
-    (group) => group.family === getTypeFamily(value),
-  );
+  // Families are offered, then the kinds of the chosen one, which can hold
+  // ranges or arrays of their values
+  $: families = groupByFamily(getAllowedAbstractTypesForNewColumn());
+  $: selected = getKindOf(value);
+  $: selectedFamily = families.find((f) => f.family === selected.family);
+  $: selectedKind = selectedFamily?.kinds.find((k) => k.kind === selected.kind);
 
-  function selectGroup(group: Group | undefined) {
-    if (!group) {
-      value = defaultAbstractType;
-      return;
-    }
-    if (group === selectedGroup) return;
-    value =
-      group.members.find((m) => !isAbstractTypeDisabled(m)) ?? group.members[0];
+  function isKindDisabled(option?: KindOption) {
+    return option ? isAbstractTypeDisabled(option.abstractType) : false;
+  }
+
+  function selectKind(option: KindOption | undefined) {
+    if (!option) return;
+    value = chooseKind(option, { modifiers: selected }) ?? value;
+  }
+
+  function selectFamily(option: FamilyOption | undefined) {
+    if (!option || option === selectedFamily) return;
+    selectKind(option.kinds.find((k) => !isKindDisabled(k)) ?? option.kinds[0]);
   }
 </script>
 
@@ -39,51 +49,62 @@
 -->
 <div on:click|preventDefault>
   <SelectionList
-    options={groups}
-    getLabel={(group) => group?.family.name ?? ''}
-    value={selectedGroup}
-    on:change={(e) => selectGroup(e.detail)}
+    options={families}
+    getLabel={(option) => option?.family.name ?? ''}
+    value={selectedFamily}
+    on:change={(e) => selectFamily(e.detail)}
     valuesAreEqual={(a, b) => a?.family === b?.family}
     offsetOnFocus={2}
-    isOptionDisabled={(group) =>
-      group.members.every((m) => isAbstractTypeDisabled(m))}
+    isOptionDisabled={(option) => option.kinds.every((k) => isKindDisabled(k))}
     {disabled}
     let:option
   >
     <AbstractTypeName
-      abstractType={option.members[0]}
+      abstractType={option.kinds[0].abstractType}
       label={option.family.name}
       icon={option.family.icon}
-      showHelp={option.members.length === 1}
+      showHelp={option.kinds.length === 1}
     />
   </SelectionList>
 </div>
 
-{#if selectedGroup && selectedGroup.members.length > 1}
+{#if selectedFamily && selectedFamily.family.kinds.length > 1}
   <div class="kind">
     <Select
-      options={selectedGroup.members}
-      {value}
-      getLabel={(entry) => entry?.name ?? ''}
+      options={selectedFamily.kinds}
+      value={selectedKind}
+      getLabel={(option) => option?.name ?? ''}
       autoSelect="none"
-      isOptionDisabled={(t) => (t ? isAbstractTypeDisabled(t) : false)}
-      on:change={(e) => {
-        value = e.detail ?? value;
-      }}
+      isOptionDisabled={isKindDisabled}
+      on:change={(e) => selectKind(e.detail)}
       triggerAppearance="default"
       ariaLabel={$_('kind')}
       let:option
       {disabled}
     >
       {#if option}
-        <AbstractTypeName abstractType={option} />
+        <AbstractTypeName
+          abstractType={option.abstractType}
+          label={option.name}
+        />
       {/if}
     </Select>
   </div>
 {/if}
 
+<div class="modifiers">
+  <TypeModifiers
+    {selected}
+    {disabled}
+    on:change={(e) => {
+      value = withModifiers(value, e.detail) ?? value;
+    }}
+  />
+</div>
+
 <style lang="scss">
-  .kind {
+  .kind,
+  .modifiers:not(:empty) {
     margin-top: var(--sm3);
   }
 </style>

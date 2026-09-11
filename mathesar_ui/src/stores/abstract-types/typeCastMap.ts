@@ -1,6 +1,9 @@
-import { DB_TYPES } from './dbTypes';
+import type { DbType } from '@mathesar/AppTypes';
 
-export const typeCastMap = {
+import { DB_TYPES } from './dbTypes';
+import { addRangeCasts } from './ranges';
+
+export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
   [DB_TYPES.BIGINT]: [
     DB_TYPES.BIGINT,
     DB_TYPES.BOOLEAN,
@@ -427,4 +430,4 @@ export const typeCastMap = {
     DB_TYPES.CHARACTER,
     DB_TYPES.TEXT,
   ],
-};
+});

@@ -17,93 +17,57 @@ import type {
   AbstractTypeDbConfig,
 } from '../types';
 
-const dbForm: AbstractTypeConfigForm = {
-  variables: {
-    numberType: {
-      type: 'string',
-      enum: ['Integer', 'Decimal', 'Float'],
-      default: 'Decimal',
-    },
-    integerDataSize: {
-      type: 'string',
-      enum: ['default', 'bigInt', 'smallInt'],
-      default: 'default',
-    },
-    decimalPlaces: {
-      type: 'integer',
-      default: null,
-    },
-    maxDigits: {
-      type: 'integer',
-      default: null,
-    },
-    floatingPointType: {
-      type: 'string',
-      enum: ['real', 'doublePrecision'],
-      default: 'real',
-    },
-  },
-  layout: {
-    orientation: 'vertical',
-    elements: [
-      {
-        type: 'input',
-        variable: 'numberType',
-        label: 'Number Type',
+type NumberType = 'Integer' | 'Decimal' | 'Float';
+
+const numberTypeElements: Record<
+  NumberType,
+  AbstractTypeConfigForm['layout']['elements']
+> = {
+  Integer: [
+    {
+      type: 'input',
+      variable: 'integerDataSize',
+      label: 'Integer Data Size',
+      interfaceType: 'select',
+      options: {
+        default: { label: 'Default (4 bytes)' },
+        bigInt: { label: 'Big Integer (8 bytes)' },
+        smallInt: { label: 'Small Integer (2 bytes)' },
       },
-      {
-        type: 'switch',
-        variable: 'numberType',
-        cases: {
-          Integer: [
-            {
-              type: 'input',
-              variable: 'integerDataSize',
-              label: 'Integer Data Size',
-              interfaceType: 'select',
-              options: {
-                default: { label: 'Default (4 bytes)' },
-                bigInt: { label: 'Big Integer (8 bytes)' },
-                smallInt: { label: 'Small Integer (2 bytes)' },
-              },
-            },
-          ],
-          Decimal: [
-            {
-              type: 'layout',
-              orientation: 'horizontal',
-              elements: [
-                {
-                  type: 'input',
-                  variable: 'decimalPlaces',
-                  label: 'Decimal Places',
-                },
-                {
-                  type: 'input',
-                  variable: 'maxDigits',
-                  label: 'Max Digits',
-                },
-              ],
-            },
-          ],
-          Float: [
-            {
-              type: 'input',
-              variable: 'floatingPointType',
-              label: 'Floating Point Type',
-              interfaceType: 'select',
-              options: {
-                real: { label: 'Real (6 digits)' },
-                doublePrecision: {
-                  label: 'Double Precision (15 digits)',
-                },
-              },
-            },
-          ],
+    },
+  ],
+  Decimal: [
+    {
+      type: 'layout',
+      orientation: 'horizontal',
+      elements: [
+        {
+          type: 'input',
+          variable: 'decimalPlaces',
+          label: 'Decimal Places',
+        },
+        {
+          type: 'input',
+          variable: 'maxDigits',
+          label: 'Max Digits',
+        },
+      ],
+    },
+  ],
+  Float: [
+    {
+      type: 'input',
+      variable: 'floatingPointType',
+      label: 'Floating Point Type',
+      interfaceType: 'select',
+      options: {
+        real: { label: 'Real (6 digits)' },
+        doublePrecision: {
+          label: 'Double Precision (15 digits)',
         },
       },
-    ],
-  },
+    },
+  ],
 };
 
 function determineDbType(dbFormValues: FormValues, columnType: DbType): DbType {
@@ -194,6 +158,48 @@ function constructDbFormValuesFromTypeOptions(
         decimalPlaces: (typeOptions?.scale as number) ?? null,
       };
   }
+}
+
+/**
+ * The options of a number column of the selected DB type's number type
+ * (Integer, Decimal, or Float), which is chosen as the column's kind.
+ */
+function getNumberDbConfig(
+  selectedDbType: DbType = DB_TYPES.NUMERIC,
+): AbstractTypeDbConfig {
+  const defaults = constructDbFormValuesFromTypeOptions(selectedDbType, {});
+  const numberType = defaults.numberType as NumberType;
+  return {
+    form: {
+      variables: {
+        integerDataSize: {
+          type: 'string',
+          enum: ['default', 'bigInt', 'smallInt'],
+          default: defaults.integerDataSize ?? 'default',
+        },
+        decimalPlaces: {
+          type: 'integer',
+          default: null,
+        },
+        maxDigits: {
+          type: 'integer',
+          default: null,
+        },
+        floatingPointType: {
+          type: 'string',
+          enum: ['real', 'doublePrecision'],
+          default: defaults.floatingPointType ?? 'doublePrecision',
+        },
+      },
+      layout: {
+        orientation: 'vertical',
+        elements: numberTypeElements[numberType],
+      },
+    },
+    determineDbTypeAndOptions: (dbFormValues, columnType) =>
+      determineDbTypeAndOptions({ ...dbFormValues, numberType }, columnType),
+    constructDbFormValuesFromTypeOptions,
+  };
 }
 
 const displayForm: AbstractTypeConfigForm = {
@@ -312,11 +318,7 @@ const numberType: AbstractTypeConfiguration = {
     },
   },
   defaultDbType: DB_TYPES.NUMERIC,
-  getDbConfig: () => ({
-    form: dbForm,
-    determineDbTypeAndOptions,
-    constructDbFormValuesFromTypeOptions,
-  }),
+  getDbConfig: getNumberDbConfig,
   getDisplayConfig: () => ({
     form: displayForm,
     determineDisplayOptions,

@@ -6,20 +6,19 @@ PostgreSQL requires that every table column has a predefined data type. These ty
 
 ## Mathesar's Data Types {:#ui-types}
 
-Mathesar tames PostgreSQL's type system by grouping its types into a small number of **families**, such as Text, Number, and Time. When you add a column, or change a column's type in the column inspector, you choose a family, and then, in families with more than one, a **kind** of it: a Time column, for instance, can be a Date & Time, a Date, a Time of Day, a Duration, and so on.
+Mathesar tames PostgreSQL's type system by grouping its types into a small number of **families**, such as Text, Number, and Time. When you add a column, or change a column's type in the column inspector, you choose a family, and then, in families with more than one, a **kind** of it: a Number column, for instance, can be a Decimal, an Integer, a Float, or Money, and a Time column a Date & Time, a Date, a Time of Day, a Duration, and so on.
 
-Every PostgreSQL type belongs to exactly one family and kind, and a kind can cover several PostgreSQL types: the Number kind covers all of PostgreSQL's numeric types. Mathesar creates a new column with the kind's default PostgreSQL type, which you can change afterwards in the column inspector, along with the type's options.
+Every PostgreSQL type belongs to exactly one family and kind, and a kind can cover several PostgreSQL types: the Integer kind covers `smallint`, `integer`, and `bigint`. Mathesar creates a new column with the kind's default PostgreSQL type, which you can change afterwards in the column inspector, along with the type's options.
 
 | Family | Kinds | PostgreSQL types |
 |---|---|---|
 | [Text](#text) | Text, Email, URI | `text`, `varchar`, `char`, `name`, `mathesar_types.email`, `mathesar_types.uri` |
-| [Number](#number) | Number, Money, Number Range | the numeric types, `money`, `mathesar_types.mathesar_money`, `mathesar_types.multicurrency_money`, the numeric ranges and multiranges |
-| [Time](#time) | Date & Time, Date, Time of Day, Duration, Created At, Updated At, Time Range | `timestamp`, `date`, `time`, `interval`, the time ranges and multiranges |
+| [Number](#number) | Decimal, Integer, Float, Money | the numeric types, `money`, `mathesar_types.mathesar_money`, `mathesar_types.multicurrency_money` |
+| [Time](#time) | Date & Time, Date, Time of Day, Duration, Created At, Updated At | `timestamp`, `date`, `time`, `interval` |
 | [Boolean](#boolean) | | `boolean` |
 | [UUID](#uuid) | | `uuid` |
 | [File](#file) | | `mathesar_types.file` |
 | [Choice](#choice) | | enums |
-| [Array](#array) | | arrays |
 | [Composite](#composite) | | composite types |
 | [JSON](#json) | JSON, JSON List, Map | `json`, `jsonb`, `mathesar_types.mathesar_json_array`, `mathesar_types.mathesar_json_object` |
 | [XML](#xml) | | `xml` |
@@ -27,6 +26,16 @@ Every PostgreSQL type belongs to exactly one family and kind, and a kind can cov
 | [IP](#ip) | | `inet`, `cidr`, `macaddr`, `macaddr8` |
 | [2D](#2d) | | `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle` |
 | [Database Table](#database-table) | | `regclass` |
+
+### Ranges and arrays
+
+Having chosen a kind, you can also choose for the column to hold **ranges** of its values, **arrays** of them, or both:
+
+- **Range**: a range of values, such as from 1 to 10, as a PostgreSQL [range](https://www.postgresql.org/docs/17/rangetypes.html). Integer, Decimal, Date & Time, and Date columns can hold ranges, as `int4range` or `int8range`, `numrange`, `tsrange` or `tstzrange`, and `daterange`. Ranges are shown and edited as PostgreSQL writes them (e.g. `[1,10)`).
+- **Array**: a list of values, as a PostgreSQL [array](https://www.postgresql.org/docs/17/arrays.html) of the kind's type, such as `integer[]`. Mathesar shows the values of arrays, but can't yet edit them.
+- **Range** and **Array**: any number of ranges that don't overlap, as a PostgreSQL multirange, such as `int4multirange`.
+
+Mathesar can change a column of values to ranges of them (each value becoming the range of just it), and between ranges and multiranges: a multirange becomes a range only if it has no gaps. It can't change columns to or from arrays.
 
 A column of a [domain](#domains) is treated as a column of the type the domain is defined over. Types belonging to no family, such as `tsvector`, are shown as **Other**.
 
@@ -40,20 +49,22 @@ Many kinds have **formatting** options, stored as [metadata](./databases.md#meta
 
 ### Number
 
-- **Number**: [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html) **(default)**, `smallint`, `integer`, `bigint`, `real`, and `double precision`.
-    - Formatting: the number of decimal places displayed (e.g. 1.2 vs 1.20), the digit grouping (e.g. 1,000 vs 1000), and the locale (e.g. 1.000,00 vs 1,000.00).
+- **Decimal**: [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html), with optional maximum digits and decimal places.
+- **Integer**: [`integer`](https://www.postgresql.org/docs/17/datatype-numeric.html) **(default)**, `bigint`, and `smallint`, chosen by the integer data size.
+- **Float**: [`double precision`](https://www.postgresql.org/docs/17/datatype-numeric.html) **(default)** and `real`.
+
+Decimal, Integer, and Float columns have the same formatting: the number of decimal places displayed (e.g. 1.2 vs 1.20), the digit grouping (e.g. 1,000 vs 1000), and the locale (e.g. 1.000,00 vs 1,000.00).
+
 - **Money**: `mathesar_types.money` **(default)**, a custom PostgreSQL type implemented by Mathesar as a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html), and PostgreSQL's [`money`](https://www.postgresql.org/docs/current/datatype-money.html).
-    - Formatting: as for Number, plus the currency symbol and its position.
+    - Formatting: as for Decimal, plus the currency symbol and its position.
 
     ??? question "`mathesar_types.money` vs `numeric`"
         Compared with `numeric`, the `mathesar_types.money` type only exists to provide compatibility with our custom casting functions that can import CSV data with currency symbols, and to indicate to the upper layers of the Mathesar application that this column is eligible for an additional "Currency Symbol" metadata field.
 
-        You are welcome to store money values in Number columns, but you won't be able to display the values with a currency symbol.
+        You are welcome to store money values in Decimal columns, but you won't be able to display the values with a currency symbol.
 
     ??? question "`mathesar_types.money` vs `money`"
         Although PostgreSQL _does_ natively have a `money` type, we've chosen to recommend our custom PostgreSQL type for money in order to give you more control over the fractional precision for money columns. The fractional precision of the native `money` type is controlled by the [`LC_MONETARY`](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-LC-MONETARY) which is set at the database level and thus may not be granular enough or accessible enough for all Mathesar users to configure.
-
-- **Number Range**: [ranges and multiranges](https://www.postgresql.org/docs/17/rangetypes.html) of numbers: `numrange` **(default)**, `int4range`, `int8range`, and their multiranges, shown and edited as PostgreSQL writes them (e.g. `[1,10)`).
 
 ### Time
 
@@ -67,7 +78,6 @@ Many kinds have **formatting** options, stored as [metadata](./databases.md#meta
     - Formatting: the format of the displayed duration.
 - **Created At**: a Date & Time column whose default is the current time, so it records when each record was created. Its cells can't be edited.
 - **Updated At**: a Date & Time column kept at the time its record was last changed, by a trigger in the database. Its cells can't be edited.
-- **Time Range**: [ranges and multiranges](https://www.postgresql.org/docs/17/rangetypes.html) of times: `tstzrange` **(default)**, `tsrange`, `daterange`, and their multiranges, shown and edited as PostgreSQL writes them.
 
 Date and time columns can also have the current date and/or time as their default.
 
@@ -91,10 +101,6 @@ To enable this data type, you must [configure a file backend](../administration/
 ### Choice
 
 A value from a fixed list, as a PostgreSQL [enum](https://www.postgresql.org/docs/17/datatype-enum.html). A schema's choices are listed in its [Ontology](#ontology).
-
-### Array
-
-A list of values of another type, as a PostgreSQL [array](https://www.postgresql.org/docs/17/arrays.html).
 
 ### Composite
 

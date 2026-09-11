@@ -14,7 +14,6 @@ import {
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
   iconUiTypeNetwork,
-  iconUiTypeRange,
   iconUiTypeXml,
 } from '@mathesar/icons';
 import { getDefaultFileStorageBackend } from '@mathesar/utils/preloadData';
@@ -39,6 +38,7 @@ import Json from './type-configs/json';
 import Money from './type-configs/money';
 import Number from './type-configs/number';
 import { plainType } from './type-configs/plain';
+import { numberRangeType, timeRangeType } from './type-configs/range';
 import Text from './type-configs/text';
 import Time from './type-configs/time';
 import UpdatedAt from './type-configs/updatedAt';
@@ -105,16 +105,8 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
     'Database Table',
     DB_TYPES.REGCLASS,
   ),
-  [abstractTypeCategory.NumberRange]: plainType(
-    iconUiTypeRange,
-    'Number Range',
-    DB_TYPES.NUMRANGE,
-  ),
-  [abstractTypeCategory.TimeRange]: plainType(
-    iconUiTypeRange,
-    'Time Range',
-    DB_TYPES.TSTZRANGE,
-  ),
+  [abstractTypeCategory.NumberRange]: numberRangeType,
+  [abstractTypeCategory.TimeRange]: timeRangeType,
 };
 
 export const arrayFactory: AbstractTypeConfigurationFactory = () => ({
@@ -606,22 +598,30 @@ export function getAutoFillChangesForTypeChange(
   };
 }
 
-export function abstractTypeToColumnSaveSpec(abstractType: AbstractType): {
+/** The DB type a new column of the abstract type gets, if it has one */
+export function getDefaultDbType(
+  abstractType: AbstractType,
+): DbType | undefined {
+  return abstractType.defaultDbType ?? [...abstractType.dbTypes][0];
+}
+
+/**
+ * Whether Mathesar can change a column of the one DB type to the other.
+ */
+export function canCastDbType(from: DbType, to: DbType): boolean {
+  return from === to || (typeCastMap[from] ?? []).includes(to);
+}
+
+export function abstractTypeToColumnSaveSpec(
+  abstractType: AbstractType,
+  type: DbType = getDefaultDbType(abstractType) ?? DB_TYPES.TEXT,
+): {
   dbOptions: {
     type: DbType;
     typeOptions: ColumnTypeOptions;
   } & AutoFillSpec;
   metadata: ColumnMetadata | null;
 } {
-  const type = (() => {
-    if (abstractType.defaultDbType) {
-      return abstractType.defaultDbType;
-    }
-    if (abstractType.dbTypes.size > 0) {
-      return [...abstractType.dbTypes][0];
-    }
-    return DB_TYPES.TEXT;
-  })();
   const metadata: ColumnMetadata | null = (() => {
     if (abstractType.identifier === 'file') {
       return {
@@ -675,8 +675,10 @@ export function mergeMetadataOnTypeChange(
 }
 
 export function getAllowedAbstractTypesForNewColumn() {
+  // Arrays are made by choosing to hold arrays of another type's values
   const typesDisallowedForNewColumnCreation = new Set<string>([
-    ...Object.keys(comboAbstractTypeCategories),
+    abstractTypeCategory.JsonArray,
+    abstractTypeCategory.JsonObject,
     abstractTypeCategory.Enum,
   ]);
 

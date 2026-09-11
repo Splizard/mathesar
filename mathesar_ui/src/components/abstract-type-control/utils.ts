@@ -54,7 +54,8 @@ export function constructDbForm(
   dbForm?: FormBuildConfiguration;
   dbFormValues: FormBuildConfiguration['values'];
 } {
-  const dbOptionsConfig = selectedAbstractType.getDbConfig?.() ?? undefined;
+  const dbOptionsConfig =
+    selectedAbstractType.getDbConfig?.(selectedDbType) ?? undefined;
   let dbForm;
   if (dbOptionsConfig) {
     const dbFormValues =
