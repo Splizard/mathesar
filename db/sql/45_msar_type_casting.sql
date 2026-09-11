@@ -1997,3 +1997,300 @@ CREATE OR REPLACE FUNCTION msar.cast_to_uuid(uuid)
 RETURNS uuid AS $$
   SELECT $1::uuid;
 $$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+
+/*
+Casts to ranges and multiranges: of a value, the range holding only it; of another range, the
+range with the same bounds, cast to the values of this one; of a multirange, the one range it
+covers, if it has no gaps. And to a multirange, of values and ranges, those as ranges of it.
+
+Values of smaller types come by implicit casts, such as integer to bigint, where that isn't ambiguous.
+*/
+
+-- msar.cast_to_int4range
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4range(integer)
+RETURNS int4range AS $$
+  SELECT int4range($1::integer, $1::integer, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4range(bigint)
+RETURNS int4range AS $$
+  SELECT int4range($1::integer, $1::integer, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4range(smallint)
+RETURNS int4range AS $$
+  SELECT int4range($1::integer, $1::integer, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4range(anyrange)
+RETURNS int4range AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::int4range ELSE int4range(
+    lower($1)::integer,
+    upper($1)::integer,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4range(anymultirange)
+RETURNS int4range AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_int4range(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_int4multirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4multirange(integer)
+RETURNS int4multirange AS $$
+  SELECT int4multirange(msar.cast_to_int4range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4multirange(bigint)
+RETURNS int4multirange AS $$
+  SELECT int4multirange(msar.cast_to_int4range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4multirange(smallint)
+RETURNS int4multirange AS $$
+  SELECT int4multirange(msar.cast_to_int4range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4multirange(anyrange)
+RETURNS int4multirange AS $$
+  SELECT int4multirange(msar.cast_to_int4range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int4multirange(anymultirange)
+RETURNS int4multirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_int4range(r)), '{}'::int4multirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_int8range
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8range(bigint)
+RETURNS int8range AS $$
+  SELECT int8range($1::bigint, $1::bigint, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8range(anyrange)
+RETURNS int8range AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::int8range ELSE int8range(
+    lower($1)::bigint,
+    upper($1)::bigint,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8range(anymultirange)
+RETURNS int8range AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_int8range(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_int8multirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8multirange(bigint)
+RETURNS int8multirange AS $$
+  SELECT int8multirange(msar.cast_to_int8range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8multirange(anyrange)
+RETURNS int8multirange AS $$
+  SELECT int8multirange(msar.cast_to_int8range($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_int8multirange(anymultirange)
+RETURNS int8multirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_int8range(r)), '{}'::int8multirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_numrange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_numrange(numeric)
+RETURNS numrange AS $$
+  SELECT numrange($1::numeric, $1::numeric, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_numrange(anyrange)
+RETURNS numrange AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::numrange ELSE numrange(
+    lower($1)::numeric,
+    upper($1)::numeric,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_numrange(anymultirange)
+RETURNS numrange AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_numrange(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_nummultirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_nummultirange(numeric)
+RETURNS nummultirange AS $$
+  SELECT nummultirange(msar.cast_to_numrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_nummultirange(anyrange)
+RETURNS nummultirange AS $$
+  SELECT nummultirange(msar.cast_to_numrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_nummultirange(anymultirange)
+RETURNS nummultirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_numrange(r)), '{}'::nummultirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_tsrange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsrange(timestamp without time zone)
+RETURNS tsrange AS $$
+  SELECT tsrange($1::timestamp without time zone, $1::timestamp without time zone, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsrange(timestamp with time zone)
+RETURNS tsrange AS $$
+  SELECT tsrange($1::timestamp without time zone, $1::timestamp without time zone, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsrange(anyrange)
+RETURNS tsrange AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::tsrange ELSE tsrange(
+    lower($1)::timestamp without time zone,
+    upper($1)::timestamp without time zone,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsrange(anymultirange)
+RETURNS tsrange AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_tsrange(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_tsmultirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsmultirange(timestamp without time zone)
+RETURNS tsmultirange AS $$
+  SELECT tsmultirange(msar.cast_to_tsrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsmultirange(timestamp with time zone)
+RETURNS tsmultirange AS $$
+  SELECT tsmultirange(msar.cast_to_tsrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsmultirange(anyrange)
+RETURNS tsmultirange AS $$
+  SELECT tsmultirange(msar.cast_to_tsrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tsmultirange(anymultirange)
+RETURNS tsmultirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_tsrange(r)), '{}'::tsmultirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_tstzrange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzrange(timestamp with time zone)
+RETURNS tstzrange AS $$
+  SELECT tstzrange($1::timestamp with time zone, $1::timestamp with time zone, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzrange(anyrange)
+RETURNS tstzrange AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::tstzrange ELSE tstzrange(
+    lower($1)::timestamp with time zone,
+    upper($1)::timestamp with time zone,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzrange(anymultirange)
+RETURNS tstzrange AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_tstzrange(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_tstzmultirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzmultirange(timestamp with time zone)
+RETURNS tstzmultirange AS $$
+  SELECT tstzmultirange(msar.cast_to_tstzrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzmultirange(anyrange)
+RETURNS tstzmultirange AS $$
+  SELECT tstzmultirange(msar.cast_to_tstzrange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_tstzmultirange(anymultirange)
+RETURNS tstzmultirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_tstzrange(r)), '{}'::tstzmultirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_daterange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_daterange(date)
+RETURNS daterange AS $$
+  SELECT daterange($1::date, $1::date, '[]');
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_daterange(anyrange)
+RETURNS daterange AS $$
+  SELECT CASE WHEN isempty($1) THEN 'empty'::daterange ELSE daterange(
+    lower($1)::date,
+    upper($1)::date,
+    CASE WHEN lower_inc($1) THEN '[' ELSE '(' END || CASE WHEN upper_inc($1) THEN ']' ELSE ')' END
+  ) END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_daterange(anymultirange)
+RETURNS daterange AS $$
+BEGIN
+  IF (SELECT count(*) FROM unnest($1)) > 1 THEN
+    RAISE EXCEPTION '% has gaps, so is not a single range', $1 USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN msar.cast_to_daterange(range_merge($1));
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_datemultirange
+
+CREATE OR REPLACE FUNCTION msar.cast_to_datemultirange(date)
+RETURNS datemultirange AS $$
+  SELECT datemultirange(msar.cast_to_daterange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_datemultirange(anyrange)
+RETURNS datemultirange AS $$
+  SELECT datemultirange(msar.cast_to_daterange($1));
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_datemultirange(anymultirange)
+RETURNS datemultirange AS $$
+  SELECT COALESCE(range_agg(msar.cast_to_daterange(r)), '{}'::datemultirange) FROM unnest($1) AS r;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;

@@ -133,6 +133,15 @@ BEGIN
   RETURN NEXT is(msar.build_type_text('{}'), 'text');
   RETURN NEXT is(msar.build_type_text(null), 'text');
   RETURN NEXT is(msar.build_type_text('{"name": "varchar"}'), 'character varying');
+  RETURN NEXT is(
+    msar.build_type_text('{"name": "varchar", "options": {"array": true}}'),
+    'character varying[]',
+    'arrays of types with options, given none of them'
+  );
+  RETURN NEXT is(
+    msar.build_type_text('{"name": "numeric", "options": {"precision": 5, "array": true}}'),
+    'numeric(5,0)[]'
+  );
   CREATE DOMAIN msar.testtype AS text CHECK (value LIKE '%test');
   RETURN NEXT is(
     msar.build_type_text('{"schema": "msar", "name": "testtype"}'), 'msar.testtype'
@@ -8779,6 +8788,75 @@ BEGIN
   RETURN NEXT throws_ok(
     $q$SELECT msar.alter_columns('contacts'::regclass, '[{"attnum": 2, "type": {"name": "phone"}}]')$q$,
     '23514', 'value for domain phone violates check constraint "phone_check"'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_cast_to_ranges() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(msar.cast_to_int4range(5), '[5,6)'::int4range, 'a value is the range of it');
+  RETURN NEXT is(msar.cast_to_int4range(5::smallint), '[5,6)'::int4range);
+  RETURN NEXT is(msar.cast_to_numrange(1.5), '[1.5,1.5]'::numrange);
+  RETURN NEXT is(msar.cast_to_int4range(5::bigint), '[5,6)'::int4range);
+  RETURN NEXT is(msar.cast_to_int8range(5), '[5,6)'::int8range);
+  RETURN NEXT is(msar.cast_to_int4multirange(5::smallint), '{[5,6)}'::int4multirange);
+  RETURN NEXT is(msar.cast_to_int8multirange(5), '{[5,6)}'::int8multirange);
+  RETURN NEXT is(
+    msar.cast_to_tsrange('2024-01-01 10:00+00'::timestamptz),
+    tsrange('2024-01-01 10:00+00'::timestamptz::timestamp, '2024-01-01 10:00+00'::timestamptz::timestamp, '[]')
+  );
+  RETURN NEXT is(
+    msar.cast_to_tstzrange('2024-01-01 10:00+00'::timestamptz),
+    '[2024-01-01 10:00+00,2024-01-01 10:00+00]'::tstzrange
+  );
+  RETURN NEXT is(msar.cast_to_int8range('[1,10)'::int4range), '[1,10)'::int8range);
+  RETURN NEXT is(msar.cast_to_numrange('(1,10]'::int4range), '[2,11)'::numrange);
+  RETURN NEXT is(msar.cast_to_numrange('[1,)'::int4range), '[1,)'::numrange, 'unbounded');
+  RETURN NEXT is(msar.cast_to_int4range('[1.2,3.7)'::numrange), '[1,4)'::int4range);
+  RETURN NEXT is(msar.cast_to_int4range('empty'::numrange), 'empty'::int4range);
+  RETURN NEXT is(
+    msar.cast_to_daterange('[2024-01-01 10:00,2024-01-03 00:00)'::tsrange),
+    '[2024-01-01,2024-01-03)'::daterange
+  );
+  RETURN NEXT is(msar.cast_to_int4multirange('[1,3)'::int4range), '{[1,3)}'::int4multirange);
+  RETURN NEXT is(msar.cast_to_int4multirange('empty'::int4range), '{}'::int4multirange);
+  RETURN NEXT is(
+    msar.cast_to_int8multirange('{[1,3),[5,7)}'::int4multirange),
+    '{[1,3),[5,7)}'::int8multirange
+  );
+  RETURN NEXT is(msar.cast_to_nummultirange('{}'::int4multirange), '{}'::nummultirange);
+  RETURN NEXT is(msar.cast_to_int4range('{[1,3)}'::int4multirange), '[1,3)'::int4range);
+  RETURN NEXT is(msar.cast_to_int4range('{}'::int4multirange), 'empty'::int4range);
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.cast_to_int4range('{[1,3),[5,7)}'::int4multirange)$q$,
+    '22000', '{[1,3),[5,7)} has gaps, so is not a single range'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_alter_columns_to_and_between_ranges() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE bookings (id integer PRIMARY KEY, night integer, stay int4range, stays nummultirange);
+  INSERT INTO bookings VALUES (1, 5, '[1,3)', '{[1,2),[4,5)}'), (2, NULL, NULL, NULL);
+  PERFORM msar.alter_columns('bookings'::regclass, '[
+    {"attnum": 2, "type": {"name": "int8multirange"}},
+    {"attnum": 3, "type": {"name": "int8multirange"}},
+    {"attnum": 4, "type": {"name": "int4multirange"}}
+  ]');
+  RETURN NEXT col_type_is('bookings', 'night', 'int8multirange');
+  RETURN NEXT col_type_is('bookings', 'stay', 'int8multirange');
+  RETURN NEXT col_type_is('bookings', 'stays', 'int4multirange');
+  RETURN NEXT results_eq(
+    'SELECT night::text, stay::text, stays::text FROM bookings ORDER BY id',
+    $v$VALUES ('{[5,6)}', '{[1,3)}', '{[1,2),[4,5)}'), (NULL, NULL, NULL)$v$
+  );
+  PERFORM msar.alter_columns('bookings'::regclass, '[{"attnum": 3, "type": {"name": "numrange"}}]');
+  RETURN NEXT is((SELECT stay::text FROM bookings WHERE id = 1), '[1,3)');
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.alter_columns('bookings'::regclass, '[{"attnum": 4, "type": {"name": "int4range"}}]')$q$,
+    '22000', '{[1,2),[4,5)} has gaps, so is not a single range'
   );
 END;
 $f$ LANGUAGE plpgsql;

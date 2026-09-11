@@ -2578,6 +2578,8 @@ BEGIN
     OR typ_options IS NULL -- The caller didn't even pass the type options key
     OR typ_options='{}'::jsonb  -- The caller passed an empty type options object
     OR typmodin_func IS NULL  -- The type doesn't actually accept type options
+    -- The caller passed only options that aren't the type's, such as "array"
+    OR cardinality(__msar.build_typmodin_arg(typ_options, timespan_flag)) = 0
   ) THEN
     typmod := NULL;
   ELSE
