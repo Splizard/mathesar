@@ -1215,6 +1215,7 @@ INSERT INTO msar.all_mathesar_objects VALUES
   ('msar', 'msar.search_records_from_table(oid,jsonb,integer,boolean,jsonb)', 'FUNCTION', NULL),
   ('msar', 'msar.search_records_from_table(oid,jsonb,integer,integer,boolean,jsonb)', 'FUNCTION', NULL),
   ('msar', 'msar.set_col_default(regclass,smallint,text)', 'FUNCTION', NULL),
+  ('msar', 'msar.set_col_dynamic_default(regclass,smallint,text)', 'FUNCTION', NULL),
   ('msar', 'msar.set_members_to_role(regrole,oid[])', 'FUNCTION', NULL),
   ('msar', 'msar.set_not_null(regclass,smallint,boolean)', 'FUNCTION', NULL),
   ('msar', 'msar.set_old_col_default(regclass,smallint,text,text,boolean)', 'FUNCTION', NULL),
