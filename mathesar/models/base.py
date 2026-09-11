@@ -256,6 +256,7 @@ class ColumnMetaData(BaseModel):
         max_length=50,
         null=True
     )
+    array_delimiter = models.CharField(max_length=1, null=True)
 
     class Meta:
         constraints = [

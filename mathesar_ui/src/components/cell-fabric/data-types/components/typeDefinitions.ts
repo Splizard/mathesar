@@ -177,15 +177,15 @@ export interface SingleSelectCellProps<Option>
 
 // FormattedInput
 
-export interface FormattedInputCellExternalProps
-  extends Omit<FormattedInputProps<string>, 'disabled' | 'value'> {
-  formatForDisplay: CellValueFormatter<string>;
+export interface FormattedInputCellExternalProps<T = string>
+  extends Omit<FormattedInputProps<T>, 'disabled' | 'value'> {
+  formatForDisplay: CellValueFormatter<T>;
   useTabularNumbers?: boolean;
 }
 
-export interface FormattedInputCellProps
-  extends CellTypeProps<string>,
-    FormattedInputCellExternalProps {}
+export interface FormattedInputCellProps<T = string>
+  extends CellTypeProps<T>,
+    FormattedInputCellExternalProps<T> {}
 
 // DateInput
 
@@ -202,16 +202,6 @@ export interface DateTimeCellExternalProps {
 export interface DateTimeCellProps
   extends CellTypeProps<string>,
     DateTimeCellExternalProps {}
-
-// Array
-
-export interface ArrayCellExternalProps {
-  formatElementForDisplay: CellValueFormatter<unknown>;
-}
-
-export interface ArrayCellProps
-  extends CellTypeProps<unknown[]>,
-    ArrayCellExternalProps {}
 
 // Common
 

@@ -4,7 +4,7 @@
   import SteppedInputCell from '../SteppedInputCell.svelte';
   import type { FormattedInputCellProps } from '../typeDefinitions';
 
-  type $$Props = FormattedInputCellProps;
+  type $$Props = FormattedInputCellProps<unknown>;
 
   export let isActive: $$Props['isActive'];
   export let value: $$Props['value'];

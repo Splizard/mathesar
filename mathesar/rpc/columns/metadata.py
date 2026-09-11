@@ -35,6 +35,8 @@ class ColumnMetaDataRecord(TypedDict):
         user_display_field: Which user field to display for user columns (full_name, email, or username).
             If non-null, the column is treated as a user column and values are displayed as user
             references. If null, the column displays as a plain integer.
+        array_delimiter: The character separating the values of an array column, a comma by
+            default. A backslash escapes it, and a backslash, within a value.
     """
     database_id: int
     table_oid: int
@@ -55,6 +57,7 @@ class ColumnMetaDataRecord(TypedDict):
     display_width: Optional[int]
     file_backend: Optional[str]
     user_display_field: Optional[Literal["full_name", "email", "username"]]
+    array_delimiter: Optional[str]
 
     @classmethod
     def from_model(cls, model):
@@ -78,6 +81,7 @@ class ColumnMetaDataRecord(TypedDict):
             display_width=model.display_width,
             file_backend=model.file_backend,
             user_display_field=model.user_display_field,
+            array_delimiter=model.array_delimiter,
         )
 
 
@@ -105,6 +109,8 @@ class ColumnMetaDataBlob(TypedDict):
         user_display_field: Which user field to display for user columns (full_name, email, or username).
             If non-null, the column is treated as a user column and values are displayed as user
             references. If null, the column displays as a plain integer.
+        array_delimiter: The character separating the values of an array column, a comma by
+            default. A backslash escapes it, and a backslash, within a value.
     """
     attnum: int
     bool_input: Optional[Literal["dropdown", "checkbox"]]
@@ -123,6 +129,7 @@ class ColumnMetaDataBlob(TypedDict):
     display_width: Optional[int]
     file_backend: Optional[str]
     user_display_field: Optional[Literal["full_name", "email", "username"]]
+    array_delimiter: Optional[str]
 
     @classmethod
     def from_model(cls, model):
@@ -144,6 +151,7 @@ class ColumnMetaDataBlob(TypedDict):
             display_width=model.display_width,
             file_backend=model.file_backend,
             user_display_field=model.user_display_field,
+            array_delimiter=model.array_delimiter,
         )
 
 

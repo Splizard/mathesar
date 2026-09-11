@@ -91,6 +91,12 @@ export interface RequiredColumnMetadata {
    * If non-null, the column is treated as a user column.
    */
   user_display_field: 'full_name' | 'email' | 'username' | null;
+
+  /**
+   * The character separating the values of an array column. A backslash escapes
+   * it, and a backslash, within a value.
+   */
+  array_delimiter: string;
 }
 
 /** The column metadata values, types as we get them from the API. */
@@ -115,6 +121,7 @@ export const defaultColumnMetadata: RequiredColumnMetadata = {
   display_width: DEFAULT_COLUMN_WIDTH_PX,
   file_backend: null,
   user_display_field: null,
+  array_delimiter: ',',
 };
 
 /**

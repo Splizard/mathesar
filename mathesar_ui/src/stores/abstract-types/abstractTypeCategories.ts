@@ -1,4 +1,11 @@
-import type { ColumnMetadata } from '@mathesar/api/rpc/_common/columnDisplayOptions';
+import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
+
+import {
+  type ColumnMetadata,
+  defaultColumnMetadata,
+  getMetadataValue,
+} from '@mathesar/api/rpc/_common/columnDisplayOptions';
 import type {
   ColumnCreationSpec,
   ColumnTypeOptions,
@@ -48,6 +55,7 @@ import { typeCastMap } from './typeCastMap';
 import type {
   AbstractType,
   AbstractTypeCategoryIdentifier,
+  AbstractTypeConfigForm,
   AbstractTypeConfigurationFactory,
   AbstractTypeConfigurationPartialMap,
   AbstractTypeResponse,
@@ -109,7 +117,40 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
   [abstractTypeCategory.TimeRange]: timeRangeType,
 };
 
+/** Arrays are shown and edited as their values separated by a delimiter */
+const getArrayDisplayForm = (): AbstractTypeConfigForm => ({
+  variables: {
+    delimiter: {
+      type: 'string',
+      default: defaultColumnMetadata.array_delimiter,
+      validation: { checks: ['isEmpty'] },
+    },
+  },
+  layout: {
+    orientation: 'vertical',
+    elements: [
+      {
+        type: 'input',
+        variable: 'delimiter',
+        label: get(_)('delimiter'),
+        text: { help: get(_)('array_delimiter_help') },
+      },
+    ],
+  },
+});
+
 export const arrayFactory: AbstractTypeConfigurationFactory = () => ({
+  getDisplayConfig: () => ({
+    form: getArrayDisplayForm(),
+    determineDisplayOptions: (formValues) => ({
+      array_delimiter:
+        String(formValues.delimiter ?? '').slice(0, 1) ||
+        defaultColumnMetadata.array_delimiter,
+    }),
+    constructDisplayFormValuesFromDisplayOptions: (metadata) => ({
+      delimiter: getMetadataValue(metadata ?? {}, 'array_delimiter'),
+    }),
+  }),
   getIcon: (args) => {
     const arrayIcon = { ...iconUiTypeArray, label: 'Array' };
     const itemType = args?.typeOptions?.item_type ?? undefined;
@@ -657,6 +698,17 @@ export function mergeMetadataOnTypeChange(
     result = {
       ...result,
       file_backend: null,
+    };
+  }
+
+  // Only array columns have a delimiter between their values
+  if (
+    newAbstractType.identifier !== abstractTypeCategory.Array &&
+    metadata?.array_delimiter != null
+  ) {
+    result = {
+      ...result,
+      array_delimiter: null,
     };
   }
 

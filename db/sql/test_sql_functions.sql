@@ -8860,3 +8860,35 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_add_and_update_array_records() RETURNS SETOF TEXT AS $f$
+DECLARE
+  rel_id oid;
+BEGIN
+  CREATE TABLE array_records (
+    id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, tags text[], counts integer[]
+  );
+  rel_id := 'array_records'::regclass::oid;
+  RETURN NEXT is(msar.build_array_literal('[]'), '{}');
+  RETURN NEXT is(
+    msar.build_array_literal('["a", null, "b,\"c\"", "d\\e"]'),
+    '{"a",NULL,"b,\"c\"","d\\e"}',
+    'values are quoted, with their quotes and backslashes escaped'
+  );
+  PERFORM msar.add_record_to_table(
+    rel_id, '{"2": ["one", "two, and a half", null], "3": [1, 2, 3]}'
+  );
+  PERFORM msar.add_record_to_table(rel_id, '{"2": [], "3": null}');
+  RETURN NEXT results_eq(
+    'SELECT tags, counts FROM array_records ORDER BY id',
+    $v$VALUES
+      (ARRAY['one', 'two, and a half', NULL], ARRAY[1, 2, 3]),
+      (ARRAY[]::text[], NULL::integer[])$v$
+  );
+  PERFORM msar.patch_record_in_table(rel_id, 1, '{"2": ["just one"]}');
+  RETURN NEXT is(
+    (SELECT tags FROM array_records WHERE id = 1), ARRAY['just one'], 'records can be updated'
+  );
+END;
+$f$ LANGUAGE plpgsql;
