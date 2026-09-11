@@ -149,15 +149,13 @@
             data-cell-selection-id={cellId}
             style={$columnStyleMap.get(columnFabric.id)?.styleString}
           >
-            <span class="value">
-              {#if plain.display === null}
-                <span class="postgres-keyword">NULL</span>
-              {:else if plain.display === undefined}
-                <span class="postgres-keyword">DEFAULT</span>
-              {:else}
-                {plain.display}
-              {/if}
-            </span>
+            {#if plain.display === null}
+              <span class="postgres-keyword">NULL</span>
+            {:else if plain.display === undefined}
+              <span class="postgres-keyword">DEFAULT</span>
+            {:else}
+              {plain.display}
+            {/if}
           </div>
         {:else}
           <RowCell
@@ -223,8 +221,14 @@
     border-right: var(--cell-border-vertical);
     background: var(--cell-bg-color-base);
     line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
     user-select: none;
     -webkit-user-select: none;
+    // A stacking context, so the background layers below (z-index: -1) paint
+    // above the cell's background but under its text.
+    z-index: 0;
 
     &.align-right {
       text-align: right;
@@ -240,6 +244,7 @@
       content: '';
       position: absolute;
       inset: 0;
+      z-index: -1;
       display: none;
       pointer-events: none;
       mix-blend-mode: var(--cell-bg-mix-blend-mode);
@@ -253,15 +258,6 @@
         --cell-bg-color-row-hover,
         var(--cell-bg-color-base)
       );
-    }
-
-    .value {
-      display: block;
-      position: relative;
-      z-index: 1;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
     }
 
     // Same as `.cell-wrapper .postgres-keyword` in App.svelte
