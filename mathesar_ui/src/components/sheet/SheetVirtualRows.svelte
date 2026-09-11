@@ -13,6 +13,13 @@
   export let itemSize: VirtualListProps['itemSize'];
   export let paddingBottom = 0;
   export let itemKey: VirtualListProps['itemKey'] | undefined = undefined;
+  /**
+   * Extra rows to render above and below the viewport, in viewport heights.
+   * The browser scrolls ahead of rendering, so this is how far a fast scroll
+   * can go before reaching rows that haven't been rendered yet. Cheap only
+   * when rows are reused while scrolling (as the table view does).
+   */
+  export let overscanScreens = 0;
 </script>
 
 <div data-sheet-element="body" tabindex="-1">
@@ -26,6 +33,10 @@
       {paddingBottom}
       {itemSize}
       estimatedItemSize={ROW_HEIGHT_PX}
+      overscanCount={Math.max(
+        5,
+        Math.ceil((overscanScreens * height) / ROW_HEIGHT_PX),
+      )}
       {itemKey}
       let:items
       let:api={virtualListApi}

@@ -76,6 +76,7 @@
     <SheetVirtualRows
       itemCount={$displayRowDescriptors.length}
       paddingBottom={30}
+      overscanScreens={1}
       itemSize={getItemSizeFromIndex}
       itemKey={(index) => getIterationKey(index, $displayRowDescriptors[index])}
       let:items
