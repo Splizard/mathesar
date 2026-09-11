@@ -36,6 +36,7 @@ export class FieldColumn {
     this.abstractType = getAbstractTypeForDbType(
       this.column.type,
       this.column.metadata,
+      this.column.default,
     );
   }
 

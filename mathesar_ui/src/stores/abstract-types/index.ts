@@ -4,6 +4,7 @@ export {
   defaultAbstractType,
   abstractTypeToColumnSaveSpec,
   getAbstractTypeForDbType,
+  getDefaultForAbstractType,
   mergeMetadataOnTypeChange,
   isFileTypeSupported,
   isAbstractTypeDisabled,

@@ -1,3 +1,7 @@
+import {
+  currentTimeDefaultExpressions,
+  isCurrentTimeDefault,
+} from '@mathesar/stores/abstract-types/currentTimeDefaults';
 import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
 import type { ProcessedColumn } from '@mathesar/stores/table-data';
 
@@ -20,59 +24,14 @@ export interface DefaultValueOptions {
   currentTimeExpression?: string;
 }
 
-/**
- * The SQL expression giving the current date and/or time for each date/time
- * type, along with the label of the option that sets it as the default.
- */
-const currentTimeDefaults: Record<
-  string,
-  { expression: string; label: string }
-> = {
-  [DB_TYPES.DATE]: {
-    expression: 'CURRENT_DATE',
-    label: 'default_value_current_date',
-  },
-  [DB_TYPES.TIME_WITH_TZ]: {
-    expression: 'CURRENT_TIME',
-    label: 'default_value_current_time',
-  },
-  [DB_TYPES.TIME_WITHOUT_TZ]: {
-    expression: 'LOCALTIME',
-    label: 'default_value_current_time',
-  },
-  [DB_TYPES.TIMESTAMP_WITH_TZ]: {
-    expression: 'now()',
-    label: 'default_value_current_date_time',
-  },
-  [DB_TYPES.TIMESTAMP_WITHOUT_TZ]: {
-    expression: 'LOCALTIMESTAMP',
-    label: 'default_value_current_date_time',
-  },
+/** The label of the current_time option for each date/time type */
+const currentTimeLabels: Record<string, string> = {
+  [DB_TYPES.DATE]: 'default_value_current_date',
+  [DB_TYPES.TIME_WITH_TZ]: 'default_value_current_time',
+  [DB_TYPES.TIME_WITHOUT_TZ]: 'default_value_current_time',
+  [DB_TYPES.TIMESTAMP_WITH_TZ]: 'default_value_current_date_time',
+  [DB_TYPES.TIMESTAMP_WITHOUT_TZ]: 'default_value_current_date_time',
 };
-
-const currentTimeExpressions = new Set([
-  'now()',
-  'current_timestamp',
-  'localtimestamp',
-  'current_date',
-  'current_time',
-  'localtime',
-]);
-
-/**
- * Whether the column's default is one of the expressions giving the current
- * date and/or time, possibly cast to the column's type, e.g. `(now())::date`.
- */
-function hasCurrentTimeDefault(column: ProcessedColumn): boolean {
-  const columnDefault = column.column.default;
-  if (!columnDefault?.is_dynamic) return false;
-  const expression = columnDefault.value
-    .trim()
-    .toLowerCase()
-    .replace(/::[a-z ]+$/, '')
-    .replace(/^\((.*)\)$/, '$1');
-  return currentTimeExpressions.has(expression);
-}
 
 /**
  * Whether the column's default can be viewed and changed from the inspector.
@@ -82,7 +41,8 @@ function hasCurrentTimeDefault(column: ProcessedColumn): boolean {
 export function canSetDefaultValue(column: ProcessedColumn): boolean {
   if (!column.column.default?.is_dynamic) return true;
   return (
-    column.column.type in currentTimeDefaults && hasCurrentTimeDefault(column)
+    column.column.type in currentTimeLabels &&
+    isCurrentTimeDefault(column.column.default)
   );
 }
 
@@ -107,19 +67,19 @@ export function getDefaultValueOptions(
     };
   }
 
-  const currentTimeDefault = currentTimeDefaults[column.column.type];
-  if (currentTimeDefault) {
+  const currentTimeLabel = currentTimeLabels[column.column.type];
+  if (currentTimeLabel) {
     const initialMode = (() => {
       if (initialIsDefaultNull) return 'none';
-      if (hasCurrentTimeDefault(column)) return 'current_time';
+      if (isCurrentTimeDefault(column.column.default)) return 'current_time';
       return 'custom';
     })();
     return {
       availableModes: ['none', 'current_time', 'custom'],
       initialMode,
       customValueLabel: 'custom_default',
-      currentTimeLabel: currentTimeDefault.label,
-      currentTimeExpression: currentTimeDefault.expression,
+      currentTimeLabel,
+      currentTimeExpression: currentTimeDefaultExpressions[column.column.type],
     };
   }
 

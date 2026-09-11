@@ -166,7 +166,23 @@ def add_columns_to_table(table_oid, column_data_list, conn):
         False,
 
     ).fetchone()[0]
+    # Dynamic defaults (e.g., the current time) are SQL expressions, which
+    # msar.add_columns only takes unchecked, so set them once the columns
+    # exist. Existing rows are left empty rather than getting the default.
+    dynamic_defaults = [
+        {"attnum": attnum, "default": col[DEFAULT]["value"], "default_is_dynamic": True}
+        for attnum, col in zip(result, column_data_list)
+        if _has_dynamic_default(col)
+    ]
+    if dynamic_defaults:
+        db_conn.exec_msar_func(
+            conn, 'alter_columns', table_oid, json.dumps(dynamic_defaults)
+        )
     return result
+
+
+def _has_dynamic_default(data):
+    return bool((data.get(DEFAULT) or {}).get("is_dynamic"))
 
 
 # TODO This function wouldn't be needed if we had the same form in the DB
@@ -181,7 +197,7 @@ def _transform_column_create_dict(data):
         "type": <str>,
         "type_options": <dict>,
         "nullable": <bool>,
-        "default": {"value": <any>}
+        "default": {"value": <any>, "is_dynamic": <bool>}
         "description": <str>
     }
 
@@ -193,6 +209,8 @@ def _transform_column_create_dict(data):
         "default": <any>,
         "description": <str>
     }
+
+    A dynamic default is left out, to be set after the column is added.
     """
     return {
         "name": (data.get(NAME) or '').strip() or None,
@@ -201,7 +219,7 @@ def _transform_column_create_dict(data):
             "options": data.get("type_options", {})
         },
         "not_null": not data.get(NULLABLE, True),
-        "default": data.get(DEFAULT, {}).get('value'),
+        "default": None if _has_dynamic_default(data) else (data.get(DEFAULT) or {}).get('value'),
         "description": data.get(DESCRIPTION),
     }
 

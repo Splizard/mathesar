@@ -25,6 +25,7 @@ import {
   getFiltersForAbstractType,
   getPreprocFunctionsForAbstractType,
 } from '@mathesar/stores/abstract-types';
+import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
 import type {
   AbstractType,
   AbstractTypePreprocFunctionDefinition,
@@ -123,6 +124,7 @@ export class ProcessedColumn implements CellColumnFabric {
     this.abstractType = getAbstractTypeForDbType(
       this.column.type,
       this.column.metadata,
+      this.column.default,
     );
 
     this.initialInputValue = getInitialInputValue(
@@ -192,6 +194,10 @@ export class ProcessedColumn implements CellColumnFabric {
         props.userTrackingAttnum != null &&
         this.column.id === props.userTrackingAttnum
       ) {
+        return false;
+      }
+      // Its value records when the record was created
+      if (this.abstractType.identifier === abstractTypeCategory.CreatedAt) {
         return false;
       }
       return true;

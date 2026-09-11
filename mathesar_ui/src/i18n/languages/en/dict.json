@@ -175,6 +175,7 @@
   "create_schema": "Create Schema",
   "create_share_explorations_of_your_data": "Create and Share Explorations of Your Data",
   "create_table_move_columns": "Create Table and Move Columns",
+  "created_at_type_help": "Records the date and time each record was created. It is filled in automatically and can't be edited.",
   "csv_column": "CSV Column",
   "csv_structure": "CSV Structure",
   "currently_installed": "Currently Installed",

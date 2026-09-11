@@ -17,17 +17,13 @@
 
   export let column: ProcessedColumn;
 
-  async function save(
-    columnInfo: Pick<
-      ColumnTypeOptionsSaveArgs,
-      'type' | 'type_options' | 'metadata'
-    >,
-  ) {
+  async function save(columnInfo: ColumnTypeOptionsSaveArgs) {
     await columnsDataStore.changeType({
       id: column.column.id,
       type: columnInfo.type,
       type_options: columnInfo.type_options,
       metadata: columnInfo.metadata,
+      default: columnInfo.default,
     });
   }
   $: disallowDataTypeChange =
@@ -51,6 +47,7 @@
   <AbstractTypeControl
     column={columnWithAbstractType}
     {save}
+    allowCreatedAt
     disabled={disallowDataTypeChange}
   />
 {/key}

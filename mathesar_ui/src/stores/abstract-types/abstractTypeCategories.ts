@@ -1,5 +1,9 @@
 import type { ColumnMetadata } from '@mathesar/api/rpc/_common/columnDisplayOptions';
-import type { ColumnTypeOptions } from '@mathesar/api/rpc/columns';
+import type {
+  ColumnCreationSpec,
+  ColumnTypeOptions,
+  RawColumnWithMetadata,
+} from '@mathesar/api/rpc/columns';
 import type { DbType } from '@mathesar/AppTypes';
 import {
   iconUiTypeArray,
@@ -12,8 +16,13 @@ import {
 } from '@mathesar/utils/preloadData';
 
 import { abstractTypeCategory } from './constants';
+import {
+  currentTimeDefaultExpressions,
+  isCurrentTimeDefault,
+} from './currentTimeDefaults';
 import { DB_TYPES } from './dbTypes';
 import Boolean from './type-configs/boolean';
+import CreatedAt from './type-configs/createdAt';
 import Date from './type-configs/date';
 import DateTime from './type-configs/datetime';
 import Duration from './type-configs/duration';
@@ -287,6 +296,13 @@ const userAbstractType: AbstractType = {
   ...User,
 };
 
+const createdAtAbstractType: AbstractType = {
+  identifier: abstractTypeCategory.CreatedAt,
+  name: 'Created At',
+  dbTypes: new Set([DB_TYPES.TIMESTAMP_WITH_TZ, DB_TYPES.TIMESTAMP_WITHOUT_TZ]),
+  ...CreatedAt,
+};
+
 const abstractTypesMap = constructAbstractTypeMapFromResponse(typesResponse);
 
 export const defaultAbstractType = (() => {
@@ -313,15 +329,29 @@ function isUserAbstractType(dbType: DbType, metadata: ColumnMetadata | null) {
   return metadata?.user_display_field != null && dbType === DB_TYPES.INTEGER;
 }
 
+function isCreatedAtAbstractType(
+  dbType: DbType,
+  columnDefault: RawColumnWithMetadata['default'] | undefined,
+) {
+  return (
+    createdAtAbstractType.dbTypes.has(dbType) &&
+    isCurrentTimeDefault(columnDefault)
+  );
+}
+
 function identifyAbstractTypeForDbType(
   dbType: DbType,
   metadata: ColumnMetadata | null,
+  columnDefault?: RawColumnWithMetadata['default'],
 ): AbstractType | undefined {
   if (isFileAbstractType(dbType, metadata)) {
     return fileAbstractType;
   }
   if (isUserAbstractType(dbType, metadata)) {
     return userAbstractType;
+  }
+  if (isCreatedAtAbstractType(dbType, columnDefault)) {
+    return createdAtAbstractType;
   }
   let abstractTypeOfDbType;
   for (const [, abstractType] of abstractTypesMap) {
@@ -343,6 +373,9 @@ function identifyAllPossibleAbstractTypesForDbType(
   if (dbType === DB_TYPES.INTEGER) {
     allPossibleAbstractTypes.add(userAbstractType);
   }
+  if (createdAtAbstractType.dbTypes.has(dbType)) {
+    allPossibleAbstractTypes.add(createdAtAbstractType);
+  }
   for (const [, abstractType] of abstractTypesMap) {
     if (abstractType.dbTypes.has(dbType)) {
       allPossibleAbstractTypes.add(abstractType);
@@ -351,11 +384,20 @@ function identifyAllPossibleAbstractTypesForDbType(
   return allPossibleAbstractTypes;
 }
 
+/**
+ * Pass the column's default where known: the "Created At" type is recognised
+ * by it, and without it such a column is taken to be a Date & Time.
+ */
 export function getAbstractTypeForDbType(
   dbType: DbType,
   metadata: ColumnMetadata | null,
+  columnDefault?: RawColumnWithMetadata['default'],
 ): AbstractType {
-  let abstractTypeOfDbType = identifyAbstractTypeForDbType(dbType, metadata);
+  let abstractTypeOfDbType = identifyAbstractTypeForDbType(
+    dbType,
+    metadata,
+    columnDefault,
+  );
   if (!abstractTypeOfDbType) {
     abstractTypeOfDbType = unknownAbstractType;
   }
@@ -365,10 +407,15 @@ export function getAbstractTypeForDbType(
 export function getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
   dbType: DbType,
   metadata: ColumnMetadata | null,
+  columnDefault?: RawColumnWithMetadata['default'],
 ): AbstractType[] {
   const abstractTypeSet: Set<AbstractType> = new Set();
 
-  const abstractTypeOfDbType = identifyAbstractTypeForDbType(dbType, metadata);
+  const abstractTypeOfDbType = identifyAbstractTypeForDbType(
+    dbType,
+    metadata,
+    columnDefault,
+  );
   if (abstractTypeOfDbType) {
     abstractTypeSet.add(abstractTypeOfDbType);
   }
@@ -389,10 +436,26 @@ export function getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
   return abstractTypeList;
 }
 
+/**
+ * The default a column needs in order to be of the given abstract type, if any.
+ * Only "Created At" needs one: the current time.
+ */
+export function getDefaultForAbstractType(
+  abstractType: AbstractType,
+  dbType: DbType,
+): ColumnCreationSpec['default'] {
+  if (abstractType.identifier !== abstractTypeCategory.CreatedAt) {
+    return undefined;
+  }
+  const expression = currentTimeDefaultExpressions[dbType];
+  return expression ? { is_dynamic: true, value: expression } : undefined;
+}
+
 export function abstractTypeToColumnSaveSpec(abstractType: AbstractType): {
   dbOptions: {
     type: DbType;
     typeOptions: ColumnTypeOptions;
+    default?: ColumnCreationSpec['default'];
   };
   metadata: ColumnMetadata | null;
 } {
@@ -423,6 +486,7 @@ export function abstractTypeToColumnSaveSpec(abstractType: AbstractType): {
     dbOptions: {
       type,
       typeOptions: {},
+      default: getDefaultForAbstractType(abstractType, type),
     },
     metadata,
   };
@@ -473,7 +537,12 @@ export function getAllowedAbstractTypesForNewColumn() {
     abstractTypeCategory.Enum,
   ]);
 
-  return [...abstractTypesMap.values(), fileAbstractType, userAbstractType]
+  return [
+    ...abstractTypesMap.values(),
+    fileAbstractType,
+    userAbstractType,
+    createdAtAbstractType,
+  ]
     .filter((type) => !typesDisallowedForNewColumnCreation.has(type.identifier))
     .sort((a, b) => a.name.localeCompare(b.name));
 }
@@ -486,6 +555,9 @@ export function getDbTypesForAbstractType(
   }
   if (abstractTypeIdentifier === 'user') {
     return userAbstractType.dbTypes;
+  }
+  if (abstractTypeIdentifier === abstractTypeCategory.CreatedAt) {
+    return createdAtAbstractType.dbTypes;
   }
   return abstractTypesMap.get(abstractTypeIdentifier)?.dbTypes ?? new Set();
 }

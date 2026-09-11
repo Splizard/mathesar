@@ -18,12 +18,20 @@ export interface ColumnWithAbstractType
     'id' | 'type' | 'type_options' | 'metadata'
   > {
   abstractType: AbstractType;
+  /** Needed to recognise, and change to or from, the "Created At" type */
+  default?: RawColumnWithMetadata['default'];
 }
 
 export type ColumnTypeOptionsSaveArgs = Pick<
   ColumnWithAbstractType,
   'type' | 'type_options' | 'metadata'
->;
+> & {
+  /**
+   * A new default for the column, when the type change needs one: `null`
+   * drops the default, `undefined` leaves it alone.
+   */
+  default?: RawColumnWithMetadata['default'];
+};
 
 export function getFormValueStore(
   form: FormBuildConfiguration | undefined,

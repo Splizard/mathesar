@@ -21,11 +21,13 @@ import type {
 
 import { getDateFormatOptions, getTimeFormatOptions } from './utils';
 
-const getDbForm: () => AbstractTypeConfigForm = () => ({
+const getDbForm = (
+  supportTimeZonesByDefault = false,
+): AbstractTypeConfigForm => ({
   variables: {
     supportTimeZones: {
       type: 'boolean',
-      default: false,
+      default: supportTimeZonesByDefault,
     },
   },
   layout: {
@@ -116,6 +118,16 @@ function constructDisplayFormValuesFromDisplayOptions(
   return formValues;
 }
 
+export function getDateTimeDbConfig(
+  supportTimeZonesByDefault = false,
+): AbstractTypeDbConfig {
+  return {
+    form: getDbForm(supportTimeZonesByDefault),
+    determineDbTypeAndOptions,
+    constructDbFormValuesFromTypeOptions,
+  };
+}
+
 const dateTimeType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconUiTypeDateTime, label: 'Date & Time' }),
   defaultDbType: DB_TYPES.TIMESTAMP_WITHOUT_TZ,
@@ -130,11 +142,7 @@ const dateTimeType: AbstractTypeConfiguration = {
       },
     },
   },
-  getDbConfig: () => ({
-    form: getDbForm(),
-    determineDbTypeAndOptions,
-    constructDbFormValuesFromTypeOptions,
-  }),
+  getDbConfig: () => getDateTimeDbConfig(),
   getDisplayConfig: () => ({
     form: displayForm,
     determineDisplayOptions,

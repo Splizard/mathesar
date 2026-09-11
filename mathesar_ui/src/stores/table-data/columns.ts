@@ -195,12 +195,19 @@ export class ColumnsDataStore extends EventHandler<{
     type: ColumnCreationSpec['type'];
     type_options: ColumnTypeOptions | null;
     metadata: ColumnMetadata | null;
+    /** `null` drops the default, `undefined` leaves it alone */
+    default?: RawColumnWithMetadata['default'];
   }): Promise<void> {
     await api.columns
       .patch({
         ...this.apiContext,
         column_data_list: [
-          { id: spec.id, type: spec.type, type_options: spec.type_options },
+          {
+            id: spec.id,
+            type: spec.type,
+            type_options: spec.type_options,
+            ...(spec.default !== undefined ? { default: spec.default } : {}),
+          },
         ],
       })
       .run();

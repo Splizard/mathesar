@@ -6,6 +6,7 @@ import {
   faBackspace,
   faBook,
   faCalendarDay,
+  faCalendarPlus,
   faCalendarWeek,
   faCaretRight,
   faCheck,
@@ -288,6 +289,7 @@ export const iconPubliclyShared: IconProps = { data: faGlobe };
 
 export const iconUiTypeBoolean: IconProps = { data: faCheckSquare };
 export const iconUiTypeDate: IconProps = { data: faCalendarDay };
+export const iconUiTypeCreatedAt: IconProps = { data: faCalendarPlus };
 export const iconUiTypeDateTime: IconProps = { data: faCalendarWeek };
 export const iconUiTypeDuration: IconProps = { data: faStopwatch };
 export const iconUiTypeEmail: IconProps = { data: faEnvelope };

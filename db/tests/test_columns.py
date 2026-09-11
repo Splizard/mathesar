@@ -119,6 +119,31 @@ def test_add_columns_type_options(in_options, out_options):
     assert json.loads(call_args[3])[0]["type"]["options"] == out_options
 
 
+def test_add_columns_dynamic_default():
+    """
+    A dynamic default is set with msar.alter_columns once the column exists,
+    rather than passed to msar.add_columns (which would quote it).
+    """
+    with patch.object(connection, "exec_msar_func") as mock_exec:
+        mock_exec.return_value.fetchone = lambda: ([7, 8],)
+        columns.add_columns_to_table(
+            123,
+            [
+                {"name": "created", "type": "timestamp with time zone",
+                 "default": {"value": "now()", "is_dynamic": True}},
+                {"name": "plain", "default": {"value": "x", "is_dynamic": False}},
+            ],
+            "conn"
+        )
+    add_call, alter_call = mock_exec.call_args_list
+    added = json.loads(add_call.args[3])
+    assert [col["default"] for col in added] == [None, "x"]
+    assert alter_call.args[:3] == ("conn", "alter_columns", 123)
+    assert json.loads(alter_call.args[3]) == [
+        {"attnum": 7, "default": "now()", "default_is_dynamic": True}
+    ]
+
+
 def test_drop_columns():
     with patch.object(connection, 'exec_msar_func') as mock_exec:
         mock_exec.return_value.fetchone = lambda: (3,)
