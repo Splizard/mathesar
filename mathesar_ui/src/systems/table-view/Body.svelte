@@ -1,5 +1,6 @@
 <script lang="ts">
   import { SheetVirtualRows } from '@mathesar/components/sheet';
+  import { parseCellId } from '@mathesar/components/sheet/cellIds';
   import {
     GROUP_HEADER_ROW_HEIGHT_PX,
     HELP_TEXT_ROW_HEIGHT_PX,
@@ -15,15 +16,33 @@
   } from '@mathesar/stores/table-data';
 
   import Row from './row/Row.svelte';
+  import RowSlotAllocator from './RowSlotAllocator';
   import ScrollAndRowHeightHandler from './ScrollAndRowHeightHandler.svelte';
 
   const tabularData = getTabularDataStoreFromContext();
 
   export let usesVirtualList = false;
 
-  $: ({ table, display, canInsertRecords } = $tabularData);
+  $: ({ table, display, canInsertRecords, selection } = $tabularData);
   $: ({ oid } = table);
   $: ({ displayRowDescriptors } = display);
+
+  // Reuse row components while scrolling instead of recreating them. The row
+  // with the active cell may hold edit state, so its component is never reused
+  // for another row.
+  const rowSlots = new RowSlotAllocator();
+
+  function getActiveRowId(activeCellId: string | undefined) {
+    if (!activeCellId) return undefined;
+    try {
+      return parseCellId(activeCellId).rowId;
+    } catch {
+      return undefined;
+    }
+  }
+
+  $: activeRowId = getActiveRowId($selection.activeCellId);
+  $: isStatefulRow = (key: string | number) => key === activeRowId;
 
   function getItemSizeFromRow(row: RowType) {
     if (isHelpTextRow(row)) {
@@ -63,7 +82,7 @@
       let:api
     >
       <ScrollAndRowHeightHandler {api} />
-      {#each items as item (item.key)}
+      {#each rowSlots.assign(items, isStatefulRow) as item (item.slotKey)}
         {@const shouldRender = !(
           isPlaceholderRecordRow($displayRowDescriptors[item.index].row) &&
           !$canInsertRecords
