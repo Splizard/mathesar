@@ -1099,6 +1099,7 @@ INSERT INTO msar.all_mathesar_objects VALUES
   ('msar', 'msar.format_data(timestamp without time zone)', 'FUNCTION', NULL),
   ('msar', 'msar.get_attnum(oid,text)', 'FUNCTION', NULL),
   ('msar', 'msar.get_cast_function_name(regtype)', 'FUNCTION', NULL),
+  ('msar', 'msar.get_column_base_type(regtype,integer)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_info(regclass)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_name(oid,integer)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_name(oid,text)', 'FUNCTION', NULL),

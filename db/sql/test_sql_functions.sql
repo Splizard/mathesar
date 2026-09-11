@@ -8676,3 +8676,58 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_column_info_domains_and_composites() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE DOMAIN phone AS text CHECK (VALUE ~ '^[0-9 ]+$');
+  CREATE DOMAIN short_phone AS phone CHECK (length(VALUE) < 20);
+  CREATE DOMAIN price AS numeric(10, 2);
+  CREATE TYPE mood AS ENUM ('happy', 'sad');
+  CREATE DOMAIN good_mood AS mood CHECK (VALUE = 'happy');
+  CREATE TYPE address AS (street text, city text);
+  CREATE TABLE contacts (
+    id integer PRIMARY KEY,
+    phone phone,
+    mobile short_phone,
+    cost price,
+    feeling good_mood,
+    home address,
+    email mathesar_types.email,
+    attachment mathesar_types.file
+  );
+  RETURN NEXT is(
+    (msar.get_column_info('contacts') -> 1) - 'default' - 'current_role_priv' - 'description'
+      - 'has_dependents' - 'nullable' - 'primary_key' - 'updated_at_trigger',
+    '{"id": 2, "name": "phone", "type": "text", "type_options": {"domain": "phone"}}',
+    'a domain column is of the type the domain is over'
+  );
+  RETURN NEXT is(
+    msar.get_column_info('contacts') -> 2 -> 'type_options', '{"domain": "short_phone"}',
+    'following domains over domains'
+  );
+  RETURN NEXT is(
+    msar.get_column_info('contacts') -> 3 -> 'type_options',
+    '{"domain": "price", "precision": 10, "scale": 2}',
+    'with the type modifier the domain gives'
+  );
+  RETURN NEXT is(msar.get_column_info('contacts') -> 4 ->> 'type', '_enum', 'domains over enums are enums');
+  RETURN NEXT is(
+    msar.get_column_info('contacts') -> 5,
+    msar.get_column_info('contacts') -> 5 || $j${
+      "type": "_composite",
+      "type_options": {
+        "original_type": "address",
+        "composite_fields": [{"name": "street", "type": "text"}, {"name": "city", "type": "text"}]
+      }
+    }$j$,
+    'composite columns name their type and fields'
+  );
+  RETURN NEXT is(
+    msar.get_column_info('contacts') -> 6 ->> 'type', 'mathesar_types.email', 'Mathesar''s own domains are kept'
+  );
+  RETURN NEXT is(
+    msar.get_column_info('contacts') -> 7 ->> 'type', 'mathesar_types.file', 'as are its own composites'
+  );
+END;
+$f$ LANGUAGE plpgsql;

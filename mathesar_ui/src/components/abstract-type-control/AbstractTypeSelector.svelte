@@ -4,6 +4,9 @@
 
   import {
     getAllowedAbstractTypesForDbTypeAndItsTargetTypes,
+    getKindName,
+    getTypeFamily,
+    groupByFamily,
     isAbstractTypeDisabled,
     isAutoFilledAbstractType,
   } from '@mathesar/stores/abstract-types';
@@ -78,19 +81,62 @@
   function isOptionDisabled(type?: AbstractType) {
     return type ? isAbstractTypeDisabled(type) : false;
   }
+
+  // Families are offered, then the kinds of the chosen one
+  type Group = ReturnType<typeof groupByFamily>[number];
+  $: groups = groupByFamily(allowedTypeConversions);
+  $: selectedGroup = groups.find(
+    (group) => group.family === getTypeFamily(selectedAbstractType),
+  );
+
+  function selectGroup(group: Group | undefined) {
+    if (!group || group === selectedGroup) return;
+    // Back to the column's own type if it's of the family
+    const member = group.members.includes(column.abstractType)
+      ? column.abstractType
+      : group.members.find((m) => !isOptionDisabled(m));
+    selectAbstractType(member);
+  }
 </script>
 
 <LabeledInput label={$_('data_type')} layout={'stacked'}>
   <Select
-    options={allowedTypeConversions}
-    value={selectedAbstractType}
-    getLabel={(entry) => entry?.name ?? ''}
+    options={groups}
+    value={selectedGroup}
+    getLabel={(group) => group?.family.name ?? ''}
     autoSelect="none"
-    isOptionDisabled={(t) => isOptionDisabled(t)}
-    on:change={(e) => selectAbstractType(e.detail)}
+    isOptionDisabled={(group) =>
+      !!group && group.members.every((m) => isOptionDisabled(m))}
+    on:change={(e) => selectGroup(e.detail)}
     let:option
     {disabled}
   >
-    <AbstractTypeName abstractType={option} />
+    {#if option}
+      <AbstractTypeName
+        abstractType={option.members[0]}
+        label={option.family.name}
+        icon={option.family.icon}
+        showHelp={option.members.length === 1}
+      />
+    {/if}
   </Select>
 </LabeledInput>
+
+{#if selectedGroup && selectedGroup.members.length > 1}
+  <LabeledInput label={$_('kind')} layout={'stacked'}>
+    <Select
+      options={selectedGroup.members}
+      value={selectedAbstractType}
+      getLabel={(entry) => (entry ? getKindName(entry) : '')}
+      autoSelect="none"
+      isOptionDisabled={(t) => isOptionDisabled(t)}
+      on:change={(e) => selectAbstractType(e.detail)}
+      let:option
+      {disabled}
+    >
+      {#if option}
+        <AbstractTypeName abstractType={option} label={getKindName(option)} />
+      {/if}
+    </Select>
+  </LabeledInput>
+{/if}

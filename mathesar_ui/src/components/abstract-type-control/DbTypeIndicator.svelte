@@ -10,14 +10,18 @@
 
   $: itemType = typeOptions?.item_type;
   $: originalType = typeOptions?.original_type;
+  $: domain = typeOptions?.domain;
 </script>
 
 <div>
   {$_('database_type')}:
   {#if type === DB_TYPES.ARRAY && itemType}
     <span>{itemType}[]</span>
-  {:else if type === DB_TYPES.ENUM && originalType}
+  {:else if (type === DB_TYPES.ENUM || type === DB_TYPES.COMPOSITE) && originalType}
     <span>{originalType}</span>
+  {:else if domain}
+    <span>{domain}</span>
+    ({$_('domain_of')} <span>{type}</span>)
   {:else}
     <span>{type ?? 'UNKNOWN'}</span>
   {/if}

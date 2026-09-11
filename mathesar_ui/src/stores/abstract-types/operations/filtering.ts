@@ -59,12 +59,25 @@ function constructParamMapForAllTypes(
   >;
 }
 
+/** Types most of whose PostgreSQL types have no equality operator */
+const typesWithoutEquality = new Set<AbstractTypeCategoryIdentifier>([
+  abstractTypeCategory.Geometry,
+  abstractTypeCategory.Xml,
+]);
+
 const equalityFiltersResponse: AbstractTypeFilterDefinitionResponse[] = [
   {
     id: 'equal',
     name: 'equals',
     aliases: constructAliasMapForTypes(allDateTimeTypes, 'is same as'),
-    uiTypeParameterMap: constructParamMapForAllTypes((category) => [category]),
+    uiTypeParameterMap: Object.fromEntries(
+      Object.entries(
+        constructParamMapForAllTypes((category) => [category]),
+      ).filter(
+        ([category]) =>
+          !typesWithoutEquality.has(category as AbstractTypeCategoryIdentifier),
+      ),
+    ),
     hasParams: true,
   },
   {

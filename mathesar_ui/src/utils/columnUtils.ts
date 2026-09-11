@@ -84,17 +84,22 @@ export function columnTypeOptionsAreEqual(
   type TypeOption = keyof ColumnTypeOptions;
   // This weird object exists for type safety purposes. This way, if a new field
   // is added to ColumnTypeOptions, we'll get a type error here if we don't
-  // update this object.
-  const fieldsObj: Record<TypeOption, unknown> = {
-    precision: null,
-    scale: null,
-    length: null,
-    fields: null,
-    item_type: null,
-    original_type: null,
-    enum_values: null,
+  // update this object. Each field says whether it's compared: some only
+  // describe the type, rather than being options to set.
+  const fieldsObj: Record<TypeOption, boolean> = {
+    precision: true,
+    scale: true,
+    length: true,
+    fields: true,
+    item_type: true,
+    original_type: true,
+    enum_values: true,
+    composite_fields: false,
+    domain: false,
   };
-  const fields = Object.keys(fieldsObj) as TypeOption[];
+  const fields = (Object.keys(fieldsObj) as TypeOption[]).filter(
+    (field) => fieldsObj[field],
+  );
 
   for (const field of fields) {
     // The nullish coalescing here is important and kind of the main reason this

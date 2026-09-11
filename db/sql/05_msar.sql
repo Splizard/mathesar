@@ -1042,6 +1042,31 @@ END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
+CREATE OR REPLACE FUNCTION
+msar.get_column_base_type(typ_id regtype, typ_mod integer) RETURNS TABLE (typ regtype, typmod integer)
+AS $$/*
+Return the type Mathesar treats a column of the given type as: the type itself, or for a domain
+(other than Mathesar's own), the type it's defined over, following domains over domains. Also return
+the type modifier applying to it: the column's own, or else the one the nearest domain gives.
+
+Args:
+  typ_id: The type of the column.
+  typ_mod: The type modifier of the column (-1 for none).
+*/
+WITH RECURSIVE bases(typ, typmod, depth) AS (
+  SELECT typ_id::oid, typ_mod, 0
+  UNION ALL
+  SELECT
+    pgt.typbasetype,
+    CASE WHEN bases.typmod = -1 THEN pgt.typtypmod ELSE bases.typmod END,
+    bases.depth + 1
+  FROM bases JOIN pg_catalog.pg_type pgt ON pgt.oid = bases.typ
+  WHERE pgt.typtype = 'd' AND pgt.typnamespace <> 'mathesar_types'::regnamespace
+)
+SELECT typ::regtype, typmod FROM bases ORDER BY depth DESC LIMIT 1;
+$$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
+
+
 CREATE OR REPLACE FUNCTION msar.column_info_table(tab_id regclass) RETURNS TABLE
 (
   id smallint, -- The OID of the column.
@@ -1061,8 +1086,28 @@ SELECT
   attname AS name,
   CASE WHEN attndims>0 THEN '_array'
     WHEN pgt.typtype = 'e' THEN '_enum'
-    ELSE atttypid::regtype::text END AS type,
-  msar.get_type_options(atttypid, atttypmod, attndims) AS type_options,
+    WHEN pgt.typtype = 'c' AND pgt.typnamespace <> 'mathesar_types'::regnamespace THEN '_composite'
+    ELSE base.typ::text END AS type,
+  nullif(
+    coalesce(msar.get_type_options(base.typ, base.typmod, attndims), '{}')
+    || CASE WHEN base.typ <> atttypid AND attndims = 0 THEN
+      jsonb_build_object('domain', atttypid::regtype::text)
+    ELSE '{}' END
+    || CASE WHEN pgt.typtype = 'c' AND pgt.typnamespace <> 'mathesar_types'::regnamespace THEN
+      jsonb_build_object(
+        'original_type', base.typ::text,
+        'composite_fields', (
+          SELECT jsonb_agg(
+            jsonb_build_object('name', f.attname, 'type', format_type(f.atttypid, f.atttypmod))
+            ORDER BY f.attnum
+          )
+          FROM pg_catalog.pg_attribute f
+          WHERE f.attrelid = pgt.typrelid AND f.attnum > 0 AND NOT f.attisdropped
+        )
+      )
+    ELSE '{}' END,
+    '{}'
+  ) AS type_options,
   NOT attnotnull AS nullable,
   COALESCE(pgi.indisprimary, false) AS primary_key,
   msar.describe_column_default(tab_id, attnum) AS default,
@@ -1073,7 +1118,8 @@ SELECT
 FROM pg_catalog.pg_attribute pga
   LEFT JOIN pg_catalog.pg_index pgi ON pga.attrelid=pgi.indrelid
     AND pga.attnum=ANY(pgi.indkey) AND pgi.indisprimary
-  LEFT JOIN pg_catalog.pg_type pgt ON pga.atttypid=pgt.oid
+  CROSS JOIN LATERAL msar.get_column_base_type(pga.atttypid, pga.atttypmod) AS base
+  LEFT JOIN pg_catalog.pg_type pgt ON base.typ=pgt.oid
 WHERE pga.attrelid=tab_id AND pga.attnum > 0 and NOT attisdropped;
 $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 

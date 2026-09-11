@@ -27,6 +27,7 @@ import {
   isAutoFilledAbstractType,
 } from '@mathesar/stores/abstract-types';
 import { isCurrentUserDefault } from '@mathesar/stores/abstract-types/currentUserDefault';
+import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
 import { isUserColumn } from '@mathesar/stores/abstract-types/type-configs/uuid';
 import type {
   AbstractType,
@@ -196,6 +197,10 @@ export class ProcessedColumn implements CellColumnFabric {
         props.userTrackingAttnum != null &&
         this.column.id === props.userTrackingAttnum
       ) {
+        return false;
+      }
+      // Composite values can't be edited yet
+      if (this.column.type === DB_TYPES.COMPOSITE) {
         return false;
       }
       // Their values record when the record was created or last changed

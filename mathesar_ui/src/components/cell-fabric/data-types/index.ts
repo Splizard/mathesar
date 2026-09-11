@@ -1,5 +1,6 @@
 import arrayFactory from './arrayFactory';
 import boolean from './boolean';
+import composite from './composite';
 import date from './date';
 import datetime from './datetime';
 import duration from './duration';
@@ -33,6 +34,7 @@ const simpleDataTypeComponentFactories: Record<
   datetime,
   file,
   uuid,
+  composite,
   enum: enumFactory,
 };
 

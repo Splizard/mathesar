@@ -7,8 +7,15 @@ import type {
 import type { DbType } from '@mathesar/AppTypes';
 import {
   iconUiTypeArray,
+  iconUiTypeBinary,
+  iconUiTypeComposite,
+  iconUiTypeDatabaseTable,
+  iconUiTypeGeometry,
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
+  iconUiTypeNetwork,
+  iconUiTypeRange,
+  iconUiTypeXml,
 } from '@mathesar/icons';
 import { getDefaultFileStorageBackend } from '@mathesar/utils/preloadData';
 
@@ -31,6 +38,7 @@ import File from './type-configs/file/file';
 import Json from './type-configs/json';
 import Money from './type-configs/money';
 import Number from './type-configs/number';
+import { plainType } from './type-configs/plain';
 import Text from './type-configs/text';
 import Time from './type-configs/time';
 import UpdatedAt from './type-configs/updatedAt';
@@ -72,6 +80,41 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
   [abstractTypeCategory.Json]: Json,
   [abstractTypeCategory.File]: File,
   [abstractTypeCategory.Enum]: Enum,
+  [abstractTypeCategory.Binary]: plainType(
+    iconUiTypeBinary,
+    'Binary',
+    DB_TYPES.BYTEA,
+  ),
+  [abstractTypeCategory.Network]: plainType(
+    iconUiTypeNetwork,
+    'IP',
+    DB_TYPES.INET,
+  ),
+  [abstractTypeCategory.Geometry]: plainType(
+    iconUiTypeGeometry,
+    '2D',
+    DB_TYPES.POINT,
+  ),
+  [abstractTypeCategory.Xml]: plainType(iconUiTypeXml, 'XML', DB_TYPES.XML),
+  [abstractTypeCategory.Composite]: {
+    getIcon: () => ({ ...iconUiTypeComposite, label: 'Composite' }),
+    cellInfo: { type: 'composite' },
+  },
+  [abstractTypeCategory.DatabaseTable]: plainType(
+    iconUiTypeDatabaseTable,
+    'Database Table',
+    DB_TYPES.REGCLASS,
+  ),
+  [abstractTypeCategory.NumberRange]: plainType(
+    iconUiTypeRange,
+    'Number Range',
+    DB_TYPES.NUMRANGE,
+  ),
+  [abstractTypeCategory.TimeRange]: plainType(
+    iconUiTypeRange,
+    'Time Range',
+    DB_TYPES.TSTZRANGE,
+  ),
 };
 
 export const arrayFactory: AbstractTypeConfigurationFactory = () => ({
@@ -211,7 +254,7 @@ const typesResponse: AbstractTypeResponse[] = [
   },
   {
     identifier: 'enum',
-    name: 'Enum',
+    name: 'Choice',
     db_types: [DB_TYPES.ENUM],
   },
   {
@@ -275,6 +318,73 @@ const typesResponse: AbstractTypeResponse[] = [
     identifier: 'array',
     name: 'Array',
     db_types: [DB_TYPES.ARRAY],
+  },
+  {
+    identifier: abstractTypeCategory.Binary,
+    name: 'Binary',
+    db_types: [DB_TYPES.BYTEA, DB_TYPES.BIT, DB_TYPES.BIT_VARYING],
+  },
+  {
+    identifier: abstractTypeCategory.Network,
+    name: 'IP',
+    db_types: [
+      DB_TYPES.INET,
+      DB_TYPES.CIDR,
+      DB_TYPES.MACADDR,
+      DB_TYPES.MACADDR8,
+    ],
+  },
+  {
+    identifier: abstractTypeCategory.Geometry,
+    name: '2D',
+    db_types: [
+      DB_TYPES.POINT,
+      DB_TYPES.LINE,
+      DB_TYPES.LSEG,
+      DB_TYPES.BOX,
+      DB_TYPES.PATH,
+      DB_TYPES.POLYGON,
+      DB_TYPES.CIRCLE,
+    ],
+  },
+  {
+    identifier: abstractTypeCategory.Xml,
+    name: 'XML',
+    db_types: [DB_TYPES.XML],
+  },
+  {
+    identifier: abstractTypeCategory.Composite,
+    name: 'Composite',
+    db_types: [DB_TYPES.COMPOSITE],
+  },
+  {
+    identifier: abstractTypeCategory.DatabaseTable,
+    name: 'Database Table',
+    db_types: [DB_TYPES.REGCLASS],
+  },
+  {
+    identifier: abstractTypeCategory.NumberRange,
+    name: 'Number Range',
+    db_types: [
+      DB_TYPES.NUMRANGE,
+      DB_TYPES.INT4RANGE,
+      DB_TYPES.INT8RANGE,
+      DB_TYPES.NUMMULTIRANGE,
+      DB_TYPES.INT4MULTIRANGE,
+      DB_TYPES.INT8MULTIRANGE,
+    ],
+  },
+  {
+    identifier: abstractTypeCategory.TimeRange,
+    name: 'Time Range',
+    db_types: [
+      DB_TYPES.TSTZRANGE,
+      DB_TYPES.TSRANGE,
+      DB_TYPES.DATERANGE,
+      DB_TYPES.TSTZMULTIRANGE,
+      DB_TYPES.TSMULTIRANGE,
+      DB_TYPES.DATEMULTIRANGE,
+    ],
   },
 ];
 

@@ -18,5 +18,13 @@ export const abstractTypeCategory = {
   JsonObject: 'map',
   Array: 'array',
   File: 'file',
+  Binary: 'binary',
+  Composite: 'composite',
+  Network: 'network',
+  Geometry: 'geometry',
+  Xml: 'xml',
+  DatabaseTable: 'databaseTable',
+  NumberRange: 'numberRange',
+  TimeRange: 'timeRange',
   Other: 'other',
 } as const;

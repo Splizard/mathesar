@@ -51,11 +51,17 @@
   }
 
   $: onDbFormValuesChange($dbFormValues, dbOptionsConfig);
+
+  // The column's domain, while its type stays the one the domain is over
+  $: indicatorTypeOptions =
+    selectedDbType === column.type && column.type_options?.domain
+      ? { ...typeOptions, domain: column.type_options.domain }
+      : typeOptions;
 </script>
 
 {#if dbForm}
   <div class="type-options">
-    <DbTypeIndicator type={selectedDbType} {typeOptions} />
+    <DbTypeIndicator type={selectedDbType} typeOptions={indicatorTypeOptions} />
     {#if dbForm}
       <div class="option-form db-opts">
         <div class="content">
@@ -65,7 +71,7 @@
     {/if}
   </div>
 {:else}
-  <DbTypeIndicator type={selectedDbType} {typeOptions} />
+  <DbTypeIndicator type={selectedDbType} typeOptions={indicatorTypeOptions} />
 {/if}
 
 <style lang="scss">

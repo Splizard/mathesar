@@ -30,11 +30,20 @@ export interface ColumnTypeOptions {
   /** The member type for arrays.  */
   item_type?: string | null;
 
-  /** The actual PostgreSQL type name for enum types. */
+  /** The actual PostgreSQL type name for enum and composite types. */
   original_type?: string | null;
 
   /** An ordered list of valid enum labels. */
   enum_values?: string[] | null;
+
+  /** The fields of a composite type, in order. */
+  composite_fields?: { name: string; type: string }[] | null;
+
+  /**
+   * The domain a column is of, when it's of one (other than Mathesar's own),
+   * in which case the column's type is the one the domain is defined over.
+   */
+  domain?: string | null;
 }
 
 interface ColumnDefault {

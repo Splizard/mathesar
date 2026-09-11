@@ -3,6 +3,7 @@ import {
   faArrowLeft,
   faArrowRight,
   faArrowRightFromBracket,
+  faArrowsLeftRight,
   faBackspace,
   faBook,
   faCalendarDay,
@@ -19,14 +20,17 @@ import {
   faClockRotateLeft,
   faClone,
   faCloudDownloadAlt,
+  faCode,
   faCogs,
   faCommentAlt,
   faComments,
   faCopy,
+  faCubes,
   faDatabase,
   faDiagramNext,
   faDollarSign,
   faDownload,
+  faDrawPolygon,
   faEllipsisV,
   faEnvelope,
   faExpand,
@@ -61,7 +65,9 @@ import {
   faLink,
   faListUl,
   faLock,
+  faMicrochip,
   faMicroscope,
+  faNetworkWired,
   faNewspaper,
   faPalette,
   faPaperPlane,
@@ -307,3 +313,10 @@ export const iconUiTypeUri: IconProps = { data: faGlobe };
 export const iconUiTypeArray: IconProps = { data: arrayIcon };
 export const iconUiTypeUuid: IconProps = { data: faFingerprint };
 export const iconUiTypeEnum: IconProps = { data: faTags };
+export const iconUiTypeBinary: IconProps = { data: faMicrochip };
+export const iconUiTypeNetwork: IconProps = { data: faNetworkWired };
+export const iconUiTypeGeometry: IconProps = { data: faDrawPolygon };
+export const iconUiTypeXml: IconProps = { data: faCode };
+export const iconUiTypeDatabaseTable: IconProps = { data: tableIcon };
+export const iconUiTypeRange: IconProps = { data: faArrowsLeftRight };
+export const iconUiTypeComposite: IconProps = { data: faCubes };
