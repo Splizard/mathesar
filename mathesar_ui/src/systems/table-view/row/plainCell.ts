@@ -1,6 +1,7 @@
 import DateTimeCell from '@mathesar/components/cell-fabric/data-types/components/date-time/DateTimeCell.svelte';
 import MoneyCell from '@mathesar/components/cell-fabric/data-types/components/money/MoneyCell.svelte';
 import NumberCell from '@mathesar/components/cell-fabric/data-types/components/number/NumberCell.svelte';
+import PrimaryKeyCell from '@mathesar/components/cell-fabric/data-types/components/primary-key/PrimaryKeyCell.svelte';
 import TextAreaCell from '@mathesar/components/cell-fabric/data-types/components/textarea/TextAreaCell.svelte';
 import TextBoxCell from '@mathesar/components/cell-fabric/data-types/components/textbox/TextBoxCell.svelte';
 import {
@@ -9,20 +10,25 @@ import {
   isJoinedColumn,
 } from '@mathesar/stores/table-data';
 
+interface PlainCellKind {
+  alignRight: boolean;
+  tabular: boolean;
+  /** Followed by a link to the record, like `PrimaryKeyCell` */
+  recordLink?: boolean;
+}
+
 /**
  * Cell types whose idle display is just their (formatted) value, and how that
- * value is aligned. Other types (checkboxes, links, linked records, files,
- * primary keys, …) always render their full cell component.
+ * value is aligned. Other types (checkboxes, links, linked records, files, …)
+ * always render their full cell component.
  */
-const plainCellKinds = new Map<
-  unknown,
-  { alignRight: boolean; tabular: boolean }
->([
+const plainCellKinds = new Map<unknown, PlainCellKind>([
   [TextBoxCell, { alignRight: false, tabular: false }],
   [TextAreaCell, { alignRight: false, tabular: false }],
   [NumberCell, { alignRight: true, tabular: true }],
   [MoneyCell, { alignRight: true, tabular: true }],
   [DateTimeCell, { alignRight: false, tabular: true }],
+  [PrimaryKeyCell, { alignRight: false, tabular: false, recordLink: true }],
 ]);
 
 export interface PlainCell {
@@ -30,6 +36,7 @@ export interface PlainCell {
   display: unknown;
   alignRight: boolean;
   tabular: boolean;
+  recordLink: boolean;
   disabled: boolean;
 }
 
@@ -45,18 +52,23 @@ export function getPlainCell(
   columnFabric: ProcessedColumn | JoinedColumn,
   value: unknown,
   canUpdateRecords: boolean,
+  tableOid: number,
 ): PlainCell | undefined {
   if (isJoinedColumn(columnFabric)) return undefined;
   const { component, props } = columnFabric.cellComponentAndProps;
   const kind = plainCellKinds.get(component);
   if (!kind) return undefined;
-  const { formatForDisplay } = props as {
+  const { formatForDisplay, tableId } = props as {
     formatForDisplay?: (v: unknown) => unknown;
+    tableId?: number;
   };
+  // Record links are only rendered for records of the table being shown
+  if (kind.recordLink && tableId !== tableOid) return undefined;
   // Same as `SteppedInputCell`: `formatValue?.(value) ?? value`
   const display = formatForDisplay?.(value) ?? value;
   return {
     display,
+    recordLink: false,
     ...kind,
     disabled: !(canUpdateRecords && columnFabric.isEditable),
   };

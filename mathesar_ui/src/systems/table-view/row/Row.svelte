@@ -4,6 +4,8 @@
   import { makeCellId } from '@mathesar/components/sheet/cellIds';
   import { getSheetContext } from '@mathesar/components/sheet/utils';
   import { ROW_HEIGHT_PX } from '@mathesar/geometry';
+  import { iconModalRecordView } from '@mathesar/icons';
+  import { getRecordPageUrlByTable } from '@mathesar/routes/urls';
   import {
     type DisplayRowDescriptor,
     ID_ROW_CONTROL_COLUMN,
@@ -18,6 +20,9 @@
     isRecordRow,
   } from '@mathesar/stores/table-data';
   import { getFirstEditableColumn } from '@mathesar/stores/table-data/processedColumns';
+  import RecordStore from '@mathesar/systems/record-view/RecordStore';
+  import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
+  import { Icon } from '@mathesar-component-library';
 
   import GroupHeader from './GroupHeader.svelte';
   import NewRecordMessage from './NewRecordMessage.svelte';
@@ -26,6 +31,7 @@
   import RowControl from './RowControl.svelte';
 
   const { columnStyleMap } = getSheetContext().stores;
+  const modalRecordView = modalRecordViewContext.get();
 
   export let row: Row;
   export let rowDescriptor: DisplayRowDescriptor;
@@ -36,6 +42,7 @@
   const tabularData = getTabularDataStoreFromContext();
 
   $: ({
+    table,
     recordsData,
     meta,
     processedColumns,
@@ -79,6 +86,16 @@
     !hasWholeRowErrors &&
     wholeRowState !== 'processing' &&
     $recordsDataState !== States.Loading;
+
+  /** Same as `RecordHyperlink` */
+  function handleRecordLinkClick(e: MouseEvent, recordId: unknown) {
+    if (!modalRecordView) return;
+    if (recordId === undefined) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const recordStore = new RecordStore({ table, recordPk: String(recordId) });
+    modalRecordView.open(recordStore);
+  }
 
   async function handleRowHeaderMouseDown(e: MouseEvent) {
     if (!isPlaceholderRecordRow(row)) return;
@@ -142,20 +159,42 @@
           !$selection.cellIds.has(cellId) &&
           !$cellModificationStatus.get(key) &&
           !$cellClientSideErrors.get(key)?.length
-            ? getPlainCell(columnFabric, record?.[columnId], $canUpdateRecords)
+            ? getPlainCell(
+                columnFabric,
+                record?.[columnId],
+                $canUpdateRecords,
+                table.oid,
+              )
             : undefined}
         {#if plain}
           <div
             class="plain-cell"
             class:align-right={plain.alignRight}
             class:tabular={plain.tabular}
+            class:record-key={plain.recordLink}
             class:disabled={plain.disabled}
             data-sheet-element="data-cell"
             data-sheet-row-type="data"
             data-cell-selection-id={cellId}
             style={$columnStyleMap.get(columnFabric.id)?.styleString}
           >
-            {#if plain.display === null}
+            {#if plain.recordLink}
+              <span class="value">
+                {#if plain.display === undefined}
+                  <span class="postgres-keyword">DEFAULT</span>
+                {:else}
+                  {plain.display}
+                {/if}
+              </span>
+              <a
+                class="record-link"
+                href={getRecordPageUrlByTable(table, record?.[columnId])}
+                on:click={(e) => handleRecordLinkClick(e, record?.[columnId])}
+                on:contextmenu|stopPropagation
+              >
+                <Icon {...iconModalRecordView} />
+              </a>
+            {:else if plain.display === null}
               <span class="postgres-keyword">NULL</span>
             {:else if plain.display === undefined}
               <span class="postgres-keyword">DEFAULT</span>
@@ -264,6 +303,32 @@
         --cell-bg-color-row-hover,
         var(--cell-bg-color-base)
       );
+    }
+
+    // Mirrors `PrimaryKeyCell` (in a `CellWrapper` without padding)
+    &.record-key {
+      display: grid;
+      grid-template: auto / 1fr auto;
+      padding: 0;
+
+      .value {
+        display: flex;
+        align-items: center;
+        padding-left: var(--sm4);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .record-link {
+        display: inline-grid;
+        align-items: center;
+        justify-content: center;
+        padding: 0 var(--sm4);
+        color: var(--color-fg-link);
+      }
+      .record-link:hover {
+        color: var(--color-fg-link-hover);
+      }
     }
 
     // Same as `.cell-wrapper .postgres-keyword` in App.svelte
