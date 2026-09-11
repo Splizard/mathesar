@@ -18,6 +18,8 @@ Mathesar lets you add/remove/rename the schemas in your database from within the
 
 However, your ability to alter schemas may be limited by [access control](./access-control.md) &mdash; and you won't be able to change the public schema.
 
+Besides tables, a schema can define types: choices (enums), composite types, and domains. The schema's page lists them in its [Ontology](./data-types.md#ontology) section.
+
 ## Organizing your data &mdash; schemas or databases?
 
 If you have separate, self-contained data projects you can choose between organizing them into separate schemas within the same database or into entirely separate databases.

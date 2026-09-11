@@ -6,147 +6,136 @@ PostgreSQL requires that every table column has a predefined data type. These ty
 
 ## Mathesar's Data Types {:#ui-types}
 
-Mathesar seeks to tame some of PostgreSQL's type system complexity by grouping similar PostgreSQL data types into user-friendly categories. We call these categories "_Mathesar_ data types" &mdash; or simply "data types" within Mathesar itself.
+Mathesar tames PostgreSQL's type system by grouping its types into a small number of **families**, such as Text, Number, and Time. When you add a column, or change a column's type in the column inspector, you choose a family, and then, in families with more than one, a **kind** of it: a Time column, for instance, can be a Date & Time, a Date, a Time of Day, a Duration, and so on.
 
-Every PostgreSQL data type maps to exactly one Mathesar data type; and one Mathesar data type can potentially map to multiple PostgreSQL data types. For example, Mathesar has one [Number](#number) data type which serves to simplify the _seven_ different PostgreSQL data types for numbers.
+Every PostgreSQL type belongs to exactly one family and kind, and a kind can cover several PostgreSQL types: the Number kind covers all of PostgreSQL's numeric types. Mathesar creates a new column with the kind's default PostgreSQL type, which you can change afterwards in the column inspector, along with the type's options.
 
-When creating a new column within Mathesar, you'll need to specify a Mathesar data type. Then Mathesar will create the column in PostgreSQL using the default PostgreSQL data type for your selected Mathesar data type. You can also modify the PostgreSQL data type later if needed and customize its type options in some cases.
+| Family | Kinds | PostgreSQL types |
+|---|---|---|
+| [Text](#text) | Text, Email, URI | `text`, `varchar`, `char`, `name`, `mathesar_types.email`, `mathesar_types.uri` |
+| [Number](#number) | Number, Money, Number Range | the numeric types, `money`, `mathesar_types.mathesar_money`, `mathesar_types.multicurrency_money`, the numeric ranges and multiranges |
+| [Time](#time) | Date & Time, Date, Time of Day, Duration, Created At, Updated At, Time Range | `timestamp`, `date`, `time`, `interval`, the time ranges and multiranges |
+| [Boolean](#boolean) | | `boolean` |
+| [UUID](#uuid) | | `uuid` |
+| [File](#file) | | `mathesar_types.file` |
+| [Choice](#choice) | | enums |
+| [Array](#array) | | arrays |
+| [Composite](#composite) | | composite types |
+| [JSON](#json) | JSON, JSON List, Map | `json`, `jsonb`, `mathesar_types.mathesar_json_array`, `mathesar_types.mathesar_json_object` |
+| [XML](#xml) | | `xml` |
+| [Binary](#binary) | | `bytea`, `bit`, `bit varying` |
+| [IP](#ip) | | `inet`, `cidr`, `macaddr`, `macaddr8` |
+| [2D](#2d) | | `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle` |
+| [Database Table](#database-table) | | `regclass` |
 
-The relatively concise set of Mathesar data types &mdash; along with their associated default PostgreSQL data types &mdash; provide a curated assortment of recommended types well-suited for most use cases. And your ability to customize the PostgreSQL data type for a Mathesar data type gives you the flexibility to handle more specialized cases as needed.
+A column of a [domain](#domains) is treated as a column of the type the domain is defined over. Types belonging to no family, such as `tsvector`, are shown as **Other**.
 
-Each Mathesar data type is described in more detail below.
-
-### Boolean
-
-- **PostgreSQL types**
-    - [`boolean`](https://www.postgresql.org/docs/current/datatype-boolean.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Display a dropdown instead of a checkbox
-    - Customize the text shown within the two dropdown options
-
-### Date
-
-- **PostgreSQL types**
-    - [`date`](https://www.postgresql.org/docs/current/datatype-datetime.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the format of the displayed date
-
-### Date & Time
-
-- **PostgreSQL types**
-    - [`timestamp with time zone`](https://www.postgresql.org/docs/current/datatype-datetime.html) **(default)**
-    - [`timestamp without time zone`](https://www.postgresql.org/docs/current/datatype-datetime.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the format of the displayed date and time
-
-### Duration
-
-Used to store a length of time, for example "1 hour" or "3 days"
-
-- **PostgreSQL types**
-    - [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the format of the displayed duration
-
-### Email
-
-Used to store valid email addresses
-
-- **PostgreSQL types**
-    - `mathesar_types.email`
-
-        This is a custom PostgreSQL type implemented by Mathesar. It is a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over `text` with additional logic to validate that the input is a valid email address.
-
-### Money
-
-- **PostgreSQL types**
-
-    - `mathesar_types.money` **(default)**
-
-        This is a custom PostgreSQL type implemented by Mathesar as a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html).
-
-        ??? question "`mathesar_types.money` vs `numeric`"
-            Compared with `numeric`, the `mathesar_types.money` type only exists to provide compatibility with our custom casting functions that can import CSV data with currency symbols, and to indicate to the upper layers of the Mathesar application that this column is eligible for an additional "Currency Symbol" metadata field.
-
-            You are welcome to store money values in Number columns, but you won't be able to display the values with a currency symbol.
-
-    - [`money`](https://www.postgresql.org/docs/current/datatype-money.html)
-
-        ??? question "`mathesar_types.money` vs `money`"
-            Although PostgreSQL _does_ natively have a `money` type, we've chosen to recommend our custom PostgreSQL type for money in order to give you more control over the fractional precision for money columns. The fractional precision of the native `money` type is controlled by the [`LC_MONETARY`](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-LC-MONETARY) which is set at the database level and thus may not be granular enough or accessible enough for all Mathesar users to configure.
-
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the number of decimal places displayed (e.g. 1.2 vs 1.20)
-    - Customize the digit grouping (e.g. 1,000 vs 1000)
-    - Customize the locale for number formatting (e.g. 1.000,00 vs 1,000.00)
-    - Customize the currency symbol character
-    - Customize the position of the currency symbol
-
-### Number
-
-- **PostgreSQL types**
-    - [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html) **(default)**
-    - [`smallint`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-    - [`integer`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-    - [`bigint`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-    - [`decimal`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-    - [`real`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-    - [`double precision`](https://www.postgresql.org/docs/17/datatype-numeric.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the number of decimal places displayed (e.g. 1.2 vs 1.20)
-    - Customize the digit grouping (e.g. 1,000 vs 1000)
-    - Customize the locale for number formatting (e.g. 1.000,00 vs 1,000.00)
+Many kinds have **formatting** options, stored as [metadata](./databases.md#metadata).
 
 ### Text
 
-- **PostgreSQL types**
-    - [`text`](https://www.postgresql.org/docs/17/datatype-character.html) **(default)**
-    - [`char`](https://www.postgresql.org/docs/17/datatype-character.html)
-    - [`varchar`](https://www.postgresql.org/docs/17/datatype-character.html)
+- **Text**: [`text`](https://www.postgresql.org/docs/17/datatype-character.html) **(default)**, [`varchar`](https://www.postgresql.org/docs/17/datatype-character.html), and [`char`](https://www.postgresql.org/docs/17/datatype-character.html).
+- **Email**: valid email addresses, as `mathesar_types.email`, a custom PostgreSQL type implemented by Mathesar: a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over `text` with additional logic to validate that the input is a valid email address.
+- **URI**: valid URIs, as `mathesar_types.uri`, a domain over `text` with additional logic to validate that the input is a valid URI.
+
+### Number
+
+- **Number**: [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html) **(default)**, `smallint`, `integer`, `bigint`, `real`, and `double precision`.
+    - Formatting: the number of decimal places displayed (e.g. 1.2 vs 1.20), the digit grouping (e.g. 1,000 vs 1000), and the locale (e.g. 1.000,00 vs 1,000.00).
+- **Money**: `mathesar_types.money` **(default)**, a custom PostgreSQL type implemented by Mathesar as a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over [`numeric`](https://www.postgresql.org/docs/17/datatype-numeric.html), and PostgreSQL's [`money`](https://www.postgresql.org/docs/current/datatype-money.html).
+    - Formatting: as for Number, plus the currency symbol and its position.
+
+    ??? question "`mathesar_types.money` vs `numeric`"
+        Compared with `numeric`, the `mathesar_types.money` type only exists to provide compatibility with our custom casting functions that can import CSV data with currency symbols, and to indicate to the upper layers of the Mathesar application that this column is eligible for an additional "Currency Symbol" metadata field.
+
+        You are welcome to store money values in Number columns, but you won't be able to display the values with a currency symbol.
+
+    ??? question "`mathesar_types.money` vs `money`"
+        Although PostgreSQL _does_ natively have a `money` type, we've chosen to recommend our custom PostgreSQL type for money in order to give you more control over the fractional precision for money columns. The fractional precision of the native `money` type is controlled by the [`LC_MONETARY`](https://www.postgresql.org/docs/current/runtime-config-client.html#GUC-LC-MONETARY) which is set at the database level and thus may not be granular enough or accessible enough for all Mathesar users to configure.
+
+- **Number Range**: [ranges and multiranges](https://www.postgresql.org/docs/17/rangetypes.html) of numbers: `numrange` **(default)**, `int4range`, `int8range`, and their multiranges, shown and edited as PostgreSQL writes them (e.g. `[1,10)`).
 
 ### Time
 
-- **PostgreSQL types**
-    - [`time with time zone`](https://www.postgresql.org/docs/17/datatype-datetime.html) **(default)**
-    - [`time without time zone`](https://www.postgresql.org/docs/17/datatype-datetime.html)
-- **Formatting** options _(stored as [metadata](./databases.md#metadata))_
-    - Customize the format of the displayed time
+- **Date & Time**: [`timestamp with time zone`](https://www.postgresql.org/docs/current/datatype-datetime.html) **(default)** and `timestamp without time zone`.
+    - Formatting: the format of the displayed date and time.
+- **Date**: [`date`](https://www.postgresql.org/docs/current/datatype-datetime.html).
+    - Formatting: the format of the displayed date.
+- **Time of Day**: [`time with time zone`](https://www.postgresql.org/docs/17/datatype-datetime.html) **(default)** and `time without time zone`.
+    - Formatting: the format of the displayed time.
+- **Duration**: a length of time, for example "1 hour" or "3 days", as [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html).
+    - Formatting: the format of the displayed duration.
+- **Created At**: a Date & Time column whose default is the current time, so it records when each record was created. Its cells can't be edited.
+- **Updated At**: a Date & Time column kept at the time its record was last changed, by a trigger in the database. Its cells can't be edited.
+- **Time Range**: [ranges and multiranges](https://www.postgresql.org/docs/17/rangetypes.html) of times: `tstzrange` **(default)**, `tsrange`, `daterange`, and their multiranges, shown and edited as PostgreSQL writes them.
 
-### URL
+Date and time columns can also have the current date and/or time as their default.
 
-- **PostgreSQL types**
-    - `mathesar_types.uri`
+### Boolean
 
-        This is a custom PostgreSQL type implemented by Mathesar. It is a [domain](https://www.postgresql.org/docs/17/sql-createdomain.html) over `text` with additional logic to validate that the input is a valid URI.
+- [`boolean`](https://www.postgresql.org/docs/current/datatype-boolean.html)
+- Formatting: a dropdown instead of a checkbox, and the text shown in its two options.
 
-### Files
+### UUID
 
-- **PostgreSQL types**
-    - `mathesar_types.file`
+- [`uuid`](https://www.postgresql.org/docs/17/datatype-uuid.html)
 
-        This is a custom PostgreSQL type implemented by Mathesar. It is a composite of the file's link, its media type, and a signature Mathesar makes over them (see [how files are stored](../administration/file-backend-config.md#how-files-are-stored)).
+A UUID column can be shown as **users**: set **Show as** to **User** in its display options. It then holds Mathesar user IDs (which are UUIDs), shows each user by their username, display name, or email, and can record the user who creates each record (Created By) or who last changes it (Updated By). Learn more about [working with user columns](./user-type.md).
 
-To enable this data type, you must [configure a file backend](../administration/file-backend-config.md).
+### File
 
-Learn more about [Mathesar's file feature](./files.md).
+- `mathesar_types.file`, a custom PostgreSQL type implemented by Mathesar: a composite of the file's link, its media type, and a signature Mathesar makes over them (see [how files are stored](../administration/file-backend-config.md#how-files-are-stored)).
 
-### User
+To enable this data type, you must [configure a file backend](../administration/file-backend-config.md). Learn more about [Mathesar's file feature](./files.md).
 
-- **PostgreSQL types**
-    - `uuid`
+### Choice
 
-User columns are UUID columns shown as users (set **Show as** to **User** in a UUID column's display options). They store Mathesar user IDs, which are UUIDs, allowing you to reference Mathesar users directly in your database tables. Only users who are collaborators on the database can be stored in a user column.
+A value from a fixed list, as a PostgreSQL [enum](https://www.postgresql.org/docs/17/datatype-enum.html). A schema's choices are listed in its [Ontology](#ontology).
 
-Learn more about [working with user columns](./user-type.md).
+### Array
 
-## Other PostgreSQL types
+A list of values of another type, as a PostgreSQL [array](https://www.postgresql.org/docs/17/arrays.html).
 
-Mathesar has rudimentary support for other PostgreSQL types such as: `array`, `bytea`, `point`, `line`, `lseg`, `box`, `path`, `path`, `polygon`, `circle`, `cidr`, `inet`, `macaddr`, `macaddr8`, `bit`, `bit varying`, `tsquery`, `tsvector`, `json`, `jsonb`, `xml`, `pg_lsn`, `pg_snapshot`, `txid_snapshot`, `int4range`, `int8range`, `numrange`, `tsrange`, `tstzrange`, `daterange`.
+### Composite
 
-In most cases Mathesar is able to _display_ data from such types, but the following limitations apply:
+A value made of named fields, as a PostgreSQL [composite type](https://www.postgresql.org/docs/17/rowtypes.html). Mathesar shows composite values as `field: value, field: value`, but can't yet edit them. A schema's composite types are listed in its [Ontology](#ontology).
 
-- Columns of these types cannot be created from within Mathesar
-- Data entry is not yet supported
-- Formatting cannot be applied
+### JSON
+
+- **JSON**: [`jsonb`](https://www.postgresql.org/docs/17/datatype-json.html) **(default)** and `json`.
+- **JSON List**: `mathesar_types.mathesar_json_array`, a domain over `jsonb` holding JSON arrays.
+- **Map**: `mathesar_types.mathesar_json_object`, a domain over `jsonb` holding JSON objects.
+
+### XML
+
+- [`xml`](https://www.postgresql.org/docs/17/datatype-xml.html)
+
+### Binary
+
+- [`bytea`](https://www.postgresql.org/docs/17/datatype-binary.html) **(default)**, [`bit`, and `bit varying`](https://www.postgresql.org/docs/17/datatype-bit.html), shown and edited as PostgreSQL writes them (e.g. `\xdeadbeef`).
+
+### IP
+
+- [`inet`](https://www.postgresql.org/docs/17/datatype-net-types.html) **(default)**, `cidr`, `macaddr`, and `macaddr8`.
+
+### 2D
+
+- [`point`](https://www.postgresql.org/docs/17/datatype-geometric.html) **(default)**, `line`, `lseg`, `box`, `path`, `polygon`, and `circle`, shown and edited as PostgreSQL writes them (e.g. `(1,2)`). Most have no notion of equality, so 2D columns can only be filtered by whether they're empty.
+
+### Database Table
+
+- [`regclass`](https://www.postgresql.org/docs/17/datatype-oid.html): a reference to a table (or view) in the database, shown by its name.
+
+## Ontology
+
+A schema's page has an **Ontology** section listing the types the schema defines:
+
+- its **choices** (enums), with their values;
+- its **composite types**, with their fields;
+- its **domains**: types with rules of their own (such as a CHECK constraint, NOT NULL, or a default) on top of another type.
+
+### Domains
+
+A column of a domain is treated as a column of the type the domain is defined over: a column of a domain over `text` is a Text column, whose data type section in the column inspector names the domain. To make a column one of its schema's domains, or none, choose it under **Domain** in the column's data type section, which lists the schema's domains over the column's type. Making a column a domain checks its values against the domain's rules.
 
 If you would like to request additional support for a type, please [open an issue](https://github.com/mathesar-foundation/mathesar/issues) requesting the feature. And if you find that an unsupported type is causing _other_ features to break, please note it as a bug.
