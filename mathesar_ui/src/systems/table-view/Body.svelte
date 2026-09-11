@@ -10,6 +10,8 @@
   import {
     type DisplayRowDescriptor,
     ID_ROW_CONTROL_COLUMN,
+    type JoinedColumn,
+    type ProcessedColumn,
     type Row as RowType,
     getTabularDataStoreFromContext,
     isGroupHeaderRow,
@@ -26,7 +28,14 @@
 
   export let usesVirtualList = false;
 
-  $: ({ table, display, canInsertRecords, selection } = $tabularData);
+  $: ({
+    table,
+    display,
+    canInsertRecords,
+    canUpdateRecords,
+    displayedColumns,
+    selection,
+  } = $tabularData);
   $: ({ oid } = table);
   $: ({ displayRowDescriptors } = display);
 
@@ -85,22 +94,34 @@
   function getEmptyRowsGrid(
     rowDescriptors: DisplayRowDescriptor[],
     canInsert: boolean,
+    columns: Map<string, ProcessedColumn | JoinedColumn>,
+    canUpdate: boolean,
   ) {
     let rowCount = 0;
     for (const { row } of rowDescriptors) {
       if (getItemSizeFromRow(row) !== ROW_HEIGHT_PX) return undefined;
       if (!isPlaceholderRecordRow(row) || canInsert) rowCount += 1;
     }
+    // Read-only columns have a background, as in `RowCell`
+    const columnBackgrounds = new Map<string, string>();
+    for (const columnFabric of columns.values()) {
+      if (!(canUpdate && columnFabric.isEditable)) {
+        columnBackgrounds.set(columnFabric.id, 'var(--cell-bg-color-disabled)');
+      }
+    }
     return {
       rowHeight: ROW_HEIGHT_PX,
       rowCount,
       rowHeaderColumnId: ID_ROW_CONTROL_COLUMN,
+      columnBackgrounds,
     };
   }
 
   $: emptyRowsGrid = getEmptyRowsGrid(
     $displayRowDescriptors,
     $canInsertRecords,
+    $displayedColumns,
+    $canUpdateRecords,
   );
 </script>
 

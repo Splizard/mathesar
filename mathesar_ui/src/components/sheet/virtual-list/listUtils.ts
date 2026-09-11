@@ -33,6 +33,8 @@ export interface Props {
   };
   isScrolling: boolean;
   scrollDirection: 'forward' | 'backward';
+  /** How far the latest scroll moved, in px; 0 once scrolling has stopped */
+  scrollDelta: number;
   itemCount: number;
   overscanCount: number;
   scrollOffset: number;
@@ -169,7 +171,13 @@ function getStopIndexForStartIndex(props: Props, startIndex: number): number {
 }
 
 function getRangeToRender(props: Props): number[] {
-  const { itemCount, overscanCount } = props;
+  const {
+    itemCount,
+    overscanCount,
+    scrollDirection,
+    scrollDelta,
+    estimatedItemSize,
+  } = props;
 
   if (itemCount === 0) {
     return [0, 0, 0, 0];
@@ -178,19 +186,31 @@ function getRangeToRender(props: Props): number[] {
   const startIndex = findNearestItem(props);
   const stopIndex = getStopIndexForStartIndex(props, startIndex);
 
-  // Overscan in both directions, even while scrolling. With native (async)
-  // scrolling the browser moves the viewport before we get to render, so it
-  // can only show rows that already exist in the DOM. Overscan by at least one
-  // item so that tab/focus works; without it, tab loops back around.
+  // Overscan even while scrolling. With native (async) scrolling the browser
+  // moves the viewport before we get to render, so it can only show rows that
+  // already exist in the DOM. Overscan by at least one item so that tab/focus
+  // works; without it, tab loops back around.
   const overscan = Math.max(1, overscanCount);
+
+  // While scrolling, rows already scrolled past aren't needed anymore, and
+  // the faster the scroll, the further the browser gets ahead of rendering.
+  // So overscan shifts towards the scroll direction, by twice the latest
+  // scroll step, keeping at least one item on the other side.
+  const lead = Math.min(
+    overscan - 1,
+    Math.ceil((2 * scrollDelta) / estimatedItemSize),
+  );
+  const before =
+    scrollDirection === 'forward' ? overscan - lead : overscan + lead;
+  const after = 2 * overscan - before;
 
   // Overscan that doesn't fit before the first item goes after the viewport
   // instead, and vice versa, so the same number of items is rendered anywhere
   // in the list. Scrolling away from either end then reuses rendered rows
   // rather than creating new ones in the middle of a fast scroll.
   const lastIndex = itemCount - 1;
-  let start = startIndex - overscan;
-  let stop = stopIndex + overscan;
+  let start = startIndex - before;
+  let stop = stopIndex + after;
   if (start < 0) {
     stop -= start;
     start = 0;

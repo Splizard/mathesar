@@ -24,10 +24,16 @@
    * When set, an empty grid (cell backgrounds and borders) is drawn behind the
    * rows, so that when a fast scroll outpaces rendering, the not-yet-rendered
    * area looks like the sheet instead of blank space. Only valid when all rows
-   * have the same height.
+   * have the same height. `columnBackgrounds` gives the background of columns
+   * whose cells have one (e.g. read-only columns), blended like the cells'.
    */
   export let emptyRowsGrid:
-    | { rowHeight: number; rowCount: number; rowHeaderColumnId?: string }
+    | {
+        rowHeight: number;
+        rowCount: number;
+        rowHeaderColumnId?: string;
+        columnBackgrounds?: Map<string, string>;
+      }
     | undefined = undefined;
 
   const { columnStyleMap } = stores;
@@ -43,6 +49,28 @@
       previous = edge;
       return stop;
     });
+    return `linear-gradient(to right, ${stops.join(
+      ', ',
+    )}, transparent ${previous}px)`;
+  }
+
+  /** Column background colours, transparent between them */
+  function columnFills(
+    columns: typeof $columnStyleMap,
+    backgrounds: Map<string, string>,
+  ): string | undefined {
+    let previous = 0;
+    const stops: string[] = [];
+    for (const [id, { left, width }] of columns) {
+      const color = backgrounds.get(id);
+      if (!color) continue;
+      stops.push(
+        `transparent ${previous}px ${left}px`,
+        `${color} ${left}px ${left + width}px`,
+      );
+      previous = left + width;
+    }
+    if (!stops.length) return undefined;
     return `linear-gradient(to right, ${stops.join(
       ', ',
     )}, transparent ${previous}px)`;
@@ -64,11 +92,23 @@
       .filter(([id]) => id !== grid.rowHeaderColumnId)
       .map(([, { left, width }]) => left + width);
     const width = Math.max(0, ...columnEdges);
+    const fills = grid.columnBackgrounds
+      ? columnFills(columns, grid.columnBackgrounds)
+      : undefined;
+    const images = [
+      columnLines(columnEdges),
+      rowLines('var(--color-border-grid)'),
+    ];
+    const blendModes = ['normal', 'normal'];
+    if (fills) {
+      images.push(fills);
+      blendModes.push('var(--cell-bg-mix-blend-mode)');
+    }
     return {
       cells:
         `width:${width}px;height:${height}px;` +
-        `background-image:${columnLines(columnEdges)},` +
-        `${rowLines('var(--color-border-grid)')};`,
+        `background-image:${images.join(',')};` +
+        `background-blend-mode:${blendModes.join(',')};`,
       rowHeader: header
         ? `width:${header.width}px;height:${height}px;` +
           'background-image:linear-gradient(to left, ' +

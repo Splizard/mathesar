@@ -57,6 +57,7 @@
   };
   let isScrolling: Props['isScrolling'] = false;
   let scrollDirection: Props['scrollDirection'] = 'forward';
+  let scrollDelta: Props['scrollDelta'] = 0;
   let lastHeight: Props['height'] = height;
 
   let items: ItemInfo['items'] = [];
@@ -88,6 +89,7 @@
     instanceProps,
     isScrolling,
     scrollDirection,
+    scrollDelta,
     itemCount,
     overscanCount,
     scrollOffset,
@@ -136,6 +138,7 @@
       );
       isScrolling = true;
       scrollDirection = scrollOffset < newScrollOffset ? 'forward' : 'backward';
+      scrollDelta = Math.abs(newScrollOffset - scrollOffset);
       scrollOffset = newScrollOffset;
       dispatch('scroll', scrollOffset);
     }
@@ -159,6 +162,7 @@
   const scrollStopped = () => {
     resetIsScrollingTimeoutId = undefined;
     isScrolling = false;
+    scrollDelta = 0;
     requestGetItemStyleCache = true;
     dispatch('refetch', itemInfo);
   };
