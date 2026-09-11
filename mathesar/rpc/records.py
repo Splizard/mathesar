@@ -353,7 +353,6 @@ def list_(
     record_info["download_links"] = get_download_links(
         kwargs.get(REQUEST_KEY),
         record_info["results"],
-        columns_meta_data,
     ) or None
 
     user_summaries = get_user_linked_record_summaries(
@@ -416,7 +415,6 @@ def get(
     record_info["download_links"] = get_download_links(
         kwargs.get(REQUEST_KEY),
         record_info["results"],
-        columns_meta_data,
     ) or None
 
     user_summaries = get_user_linked_record_summaries(
@@ -618,7 +616,6 @@ def search(
     record_info["download_links"] = get_download_links(
         kwargs.get(REQUEST_KEY),
         record_info["results"],
-        columns_meta_data,
     ) or None
 
     user_summaries = get_user_linked_record_summaries(

@@ -24,6 +24,7 @@ export const DB_TYPES = {
   MACADDR: 'macaddr',
   MONEY: 'money',
   MSAR__EMAIL: 'mathesar_types.email',
+  MSAR__FILE: 'mathesar_types.file',
   MSAR__MATHESAR_JSON_ARRAY: 'mathesar_types.mathesar_json_array',
   MSAR__MATHESAR_JSON_OBJECT: 'mathesar_types.mathesar_json_object',
   MSAR__MATHESAR_MONEY: 'mathesar_types.mathesar_money',

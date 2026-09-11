@@ -413,8 +413,9 @@ class DataFile(BaseModel):
 
 
 class DownloadLink(BaseModel):
-    mash = models.CharField(primary_key=True, editable=False)
+    hmac = models.CharField(primary_key=True, editable=False)
     sessions = models.ManyToManyField(Session)
     uri = models.CharField()  # should not contain sensitive info
+    mimetype = models.CharField(null=True)
     thumbnail = models.JSONField(blank=True, default=dict)
     fsspec_kwargs = EncryptedJSONField(blank=True, default=dict)

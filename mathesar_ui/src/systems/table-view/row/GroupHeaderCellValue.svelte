@@ -22,10 +22,9 @@
   $: linkedTableId =
     processedColumnsMap?.get(columnId)?.linkFk?.referent_table_oid;
   $: fileManifest = (() => {
-    if (!processedColumn?.column.metadata?.file_backend) return undefined;
     const fileReference = parseFileReference(cellValue);
     if (!fileReference) return undefined;
-    return fileManifestsForSheet.get(columnId)?.get(fileReference.mash);
+    return fileManifestsForSheet.get(columnId)?.get(fileReference.hmac);
   })();
 </script>
 

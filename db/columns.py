@@ -252,11 +252,35 @@ def drop_columns_from_table(table_oid, column_attnums, conn):
     ).fetchone()[0]
 
 
-def reset_mash(conn, table_oid, column_attnum, uri_mash_map):
-    db_conn.exec_msar_func(
-        conn,
-        'reset_mash',
-        table_oid,
-        column_attnum,
-        json.dumps(uri_mash_map)
+def get_legacy_file_refs(table_oid, column_attnum, conn):
+    """
+    Return the files in a column holding them as json(b), the way Mathesar
+    stored them before they had a type of their own.
+
+    Args:
+        table_oid: The OID of the table containing the column.
+        column_attnum: The attnum of the column.
+        conn: A psycopg connection to the relevant database.
+
+    Returns:
+        A list of {"uri": <link>, "mash": <signature>} dicts.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'get_legacy_file_refs', table_oid, column_attnum
     ).fetchone()[0]
+
+
+def convert_to_file_column(table_oid, column_attnum, files, conn):
+    """
+    Change a column holding files as json(b) to the file type, signing the
+    given files and no others.
+
+    Args:
+        table_oid: The OID of the table containing the column.
+        column_attnum: The attnum of the column.
+        files: The files to sign, as {<link>: {"mime": <mime>, "hmac": <hmac>}}.
+        conn: A psycopg connection to the relevant database.
+    """
+    db_conn.exec_msar_func(
+        conn, 'convert_to_file_column', table_oid, column_attnum, json.dumps(files)
+    )

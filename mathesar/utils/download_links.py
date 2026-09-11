@@ -11,34 +11,33 @@ from django.conf import settings
 from django.contrib.sessions.models import Session
 from django.shortcuts import get_object_or_404
 from django.urls import reverse
+from django.utils.crypto import constant_time_compare, salted_hmac
 import fsspec
 from PIL import Image, UnidentifiedImageError
 import yaml
-
-from db.records import list_records_from_table
-from db.columns import reset_mash
 
 from mathesar.models import DownloadLink
 
 BACKEND_CONF_ENV = "FILE_STORAGE_DICT"
 BACKEND_CONF_YAML = settings.BASE_DIR.joinpath('file_storage.yml')
-URI = "uri"
-MASH = "mash"
 DEFAULT_BACKEND_KEY = "default"
 PUBLIC_FORM_ACCESS_KEY = "public_form_access"
+# Prefixes every file HMAC, naming the way it was made, so that a later way can tell its own
+# HMACs from these.
+FILE_HMAC_VERSION = "v1"
 
 
 def maintain_download_links():
     DownloadLink.objects.filter(sessions__isnull=True).delete()
 
 
-def get_link_contents(session_key, download_link_mash):
+def get_link_contents(session_key, download_link_hmac):
     link = get_object_or_404(
         DownloadLink,
-        mash=download_link_mash,
+        hmac=download_link_hmac,
         sessions=session_key,
     )
-    content_type = _mimetype(link.uri)
+    content_type = link.mimetype
     of = fsspec.open(link.uri, "rb", **link.fsspec_kwargs)
     filename = _get_filename_for_uri(link.uri)
 
@@ -50,10 +49,10 @@ def get_link_contents(session_key, download_link_mash):
     return stream_file, filename, content_type
 
 
-def get_link_thumbnail(session_key, download_link_mash, width=500, height=500):
+def get_link_thumbnail(session_key, download_link_hmac, width=500, height=500):
     link = get_object_or_404(
         DownloadLink,
-        mash=download_link_mash,
+        hmac=download_link_hmac,
         sessions=session_key,
     )
     content_type = "image/avif"
@@ -86,79 +85,116 @@ def _build_thumbnail_bytes(of, size, format="AVIF", quality=50):
     return img_byte_arr.getvalue()
 
 
-def create_mash_for_uri(uri, backend_key=DEFAULT_BACKEND_KEY):
-    return hashlib.sha256(
-        settings.SECRET_KEY.encode('utf-8')
-        + backend_key.encode('utf-8')
-        + uri.encode('utf-8')
+def sign_file(link, mime, backend_key=DEFAULT_BACKEND_KEY):
+    """
+    Return the HMAC by which Mathesar later knows it stored a file itself.
+
+    It covers the file's link, its media type (which Mathesar serves it as), and
+    the backend holding it (whose credentials Mathesar opens it with).
+    """
+    return _sign_file(link, mime, backend_key, settings.SECRET_KEY)
+
+
+def _sign_file(link, mime, backend_key, secret):
+    digest = salted_hmac(
+        "mathesar.utils.download_links.sign_file",
+        json.dumps([backend_key, link, mime]),
+        secret=secret,
+        algorithm="sha256",
     ).hexdigest()
+    return f"{FILE_HMAC_VERSION}-{digest}"
 
 
-def create_json_for_uri(uri, backend_key):
-    return json.dumps(
-        {URI: uri, MASH: create_mash_for_uri(uri, backend_key)},
-        sort_keys=True
+def _secrets():
+    """Secrets a file may have been signed with, so rotating the key needn't break files."""
+    return [settings.SECRET_KEY, *settings.SECRET_KEY_FALLBACKS]
+
+
+def is_file_value(value):
+    """Whether the value is a file as records hold them (a mathesar_types.file)."""
+    return (
+        isinstance(value, dict)
+        and isinstance(value.get("link"), str)
+        and isinstance(value.get("hmac"), str)
+        and (value.get("mime") is None or isinstance(value.get("mime"), str))
     )
+
+
+def _verified_backend_key(file, backends):
+    """Return the key of the backend the file was signed for, or None if it wasn't signed."""
+    if not is_file_value(file):
+        return None
+    for backend_key in backends:
+        for secret in _secrets():
+            expected = _sign_file(file["link"], file["mime"], backend_key, secret)
+            if constant_time_compare(expected, file["hmac"]):
+                return backend_key
+    return None
 
 
 def _get_filename_for_uri(uri):
     return posixpath.split(uri)[-1]
 
 
-def get_download_links(request, results, columns_meta_data):
-    keys = [c.attnum for c in columns_meta_data if c.file_backend]
+def get_download_links(request, results):
+    """
+    Return links to the files in the results, keyed by column and then by HMAC.
+
+    Files are recognised by their values alone, which only mathesar_types.file
+    columns produce.
+    """
+    files_by_column = {}
+    for result in results:
+        for column, value in result.items():
+            if is_file_value(value):
+                files_by_column.setdefault(column, []).append(value)
     return {
-        key: get_links_details(
-            request,
-            sync_links_from_json_strings(
-                request.session.session_key, [r[key] for r in results if r.get(key) is not None]
-            )
+        column: get_links_details(
+            request, sync_links(request.session.session_key, files)
         )
-        for key in (str(k) for k in keys)
+        for column, files in files_by_column.items()
     }
 
 
 def get_links_details(request, links):
     return {
-        link.mash: _get_single_link_details(request, link)
+        link.hmac: _get_single_link_details(request, link)
         for link in links
     }
 
 
-def sync_links_from_json_strings(session_key, json_strs):
+def sync_links(session_key, files):
     """
-    Given an iterable of json strings:
-      - determine which key Mathesar can use for access
+    Given an iterable of files:
+      - keep those Mathesar signed, working out which backend holds each
       - build missing DownloadLinks
       - gather preexisting DownloadLinks
       - Add user's session to all
     """
     links = DownloadLink.objects.bulk_create(
-        build_links_from_json(json_strs), ignore_conflicts=True
+        build_links(files), ignore_conflicts=True
     )
     session = Session.objects.get(session_key=session_key)
     session.downloadlink_set.add(*links)
     return links
 
 
-def build_links_from_json(json_strs):
+def build_links(files):
     """
-    Takes an iterable of JSON strings having "uri" and "mash" keys, and creates
-    DownloadLinks from them.
-    - matches each JSON URI and mash pair to the correct backend key for the
-      mash.
-    - Creates download links for each.
+    Create DownloadLinks for those of the given files Mathesar signed, each able
+    to open its file with the credentials of the backend it was signed for.
     """
     backends = get_backends()
     return [
         DownloadLink(
-            mash=v.get(MASH),
-            uri=v.get(URI),
-            fsspec_kwargs=backends[b]["kwargs"]
+            hmac=file["hmac"],
+            uri=file["link"],
+            mimetype=file["mime"],
+            fsspec_kwargs=backends[backend_key]["kwargs"]
         )
-        for (v, b)
-        in (_build_valid_link_dict(p, backends) for p in json_strs)
-        if v is not None and b is not None
+        for (file, backend_key)
+        in ((f, _verified_backend_key(f, backends)) for f in files)
+        if backend_key is not None
     ]
 
 
@@ -171,36 +207,25 @@ def save_file(f, request, backend_key=DEFAULT_BACKEND_KEY):
         for chunk in f.chunks():
             destination.write(chunk)
 
-    result = create_json_for_uri(uri, backend_key)
-    link = sync_links_from_json_strings(request.session.session_key, [result])[0]
+    mime = _mimetype(uri)
+    result = {"link": uri, "mime": mime, "hmac": sign_file(uri, mime, backend_key)}
+    link = sync_links(request.session.session_key, [result])[0]
     return {
         "result": result,
         "download_link": _get_single_link_details(request, link)
     }
 
 
-def _build_valid_link_dict(result, backends):
-    output = None, None
-    try:
-        result_dict = json.loads(result)
-        for b in backends:
-            if result_dict[MASH] == create_mash_for_uri(result_dict[URI], b):
-                output = result_dict, b
-    except Exception:  # We really don't want to stop execution here for anything
-        pass
-    return output
-
-
 def _get_single_link_details(request, link):
 
     def _link(url_name):
-        return _build_file_link(request, url_name, link.mash)
+        return _build_file_link(request, url_name, link.hmac)
 
     return {
         "uri": link.uri,
         "name": _get_filename_for_uri(link.uri),
-        "mimetype": _mimetype(link.uri),
-        "thumbnail": _link("files_thumbnail") if _is_image(link.uri) else None,
+        "mimetype": link.mimetype,
+        "thumbnail": _link("files_thumbnail") if _is_image(link.mimetype) else None,
         "attachment": _link("files_download"),
         "direct": _link("files_direct"),
     }
@@ -210,14 +235,13 @@ def _mimetype(path):
     return mimetypes.guess_type(path or "", strict=False)[0]
 
 
-def _build_file_link(request, url_name, mash):
-    link_kwargs = {"download_link_mash": mash}
+def _build_file_link(request, url_name, hmac):
+    link_kwargs = {"download_link_hmac": hmac}
     return request.build_absolute_uri(reverse(url_name, kwargs=link_kwargs))
 
 
-def _is_image(path):
-    mimetype_str = _mimetype(path) or ""
-    return mimetype_str.split("/")[0] == "image"
+def _is_image(mimetype):
+    return (mimetype or "").split("/")[0] == "image"
 
 
 def get_backends(public_info=False):
@@ -238,24 +262,38 @@ def get_backends(public_info=False):
         return backend_dict
 
 
-def reset_file_column_mash(table_oid, column_attnum, conn):
+def _legacy_mash(uri, backend_key, secret):
+    """How Mathesar signed files before they had a type of their own."""
+    return hashlib.sha256(
+        secret.encode('utf-8') + backend_key.encode('utf-8') + uri.encode('utf-8')
+    ).hexdigest()
+
+
+def sign_legacy_file_refs(refs):
     """
-    Resets the outdated "mash" for a given json/jsonb file column.
+    Sign the files Mathesar stored before they had a type of their own.
+
+    Only files whose old signature ("mash") verifies are signed: re-signing
+    others would vouch for links anyone able to write to the column made up.
 
     Args:
-      table_oid: The OID of the target table.
-      column_attnum: The attnum of a file json(b) column.
-      conn: A psycopg connection to the relevant database.
+      refs: The files, as {"uri": <link>, "mash": <signature>} dicts.
+
+    Returns:
+      The files to sign, as {<link>: {"mime": <media type>, "hmac": <hmac>}}.
     """
-    records = list_records_from_table(conn, table_oid)['results']
-    updated_uri_mash_map = {}
-    for r in records:
-        try:
-            uri = json.loads(r[str(column_attnum)])['uri']
-            updated_uri_mash_map[uri] = create_mash_for_uri(uri)
-        except Exception:
+    backends = get_backends()
+    signed = {}
+    for ref in refs:
+        uri, mash = ref.get("uri"), ref.get("mash")
+        if not isinstance(uri, str) or not isinstance(mash, str) or uri in signed:
             continue
-    reset_mash(conn, table_oid, column_attnum, updated_uri_mash_map)
+        for backend_key in backends:
+            if any(constant_time_compare(_legacy_mash(uri, backend_key, secret), mash) for secret in _secrets()):
+                mime = _mimetype(uri)
+                signed[uri] = {"mime": mime, "hmac": sign_file(uri, mime, backend_key)}
+                break
+    return signed
 
 
 def get_public_form_conf_for_file_backend(backend_key=DEFAULT_BACKEND_KEY):

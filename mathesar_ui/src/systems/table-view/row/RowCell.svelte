@@ -82,10 +82,9 @@
     ? $joinedRecordSummaries.get(columnId)
     : undefined;
   $: fileManifest = (() => {
-    if (!column.metadata?.file_backend) return undefined;
     const fileReference = parseFileReference(value);
     if (!fileReference) return undefined;
-    return $fileManifests.get(columnId)?.get(fileReference.mash);
+    return $fileManifests.get(columnId)?.get(fileReference.hmac);
   })();
   $: isPrimaryKey = 'primary_key' in column && column.primary_key;
 

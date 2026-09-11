@@ -17,9 +17,9 @@ CACHE_HEADER = {"Cache-Control": "public, max-age=31536000, immutable"}
 
 @require(FILE_ACCESS_VIA_LOGIN_OR_SHARED_FORM_FIELD, unauthorized_response="http_status")
 @require_http_methods(["GET"])
-def download_file(request, download_link_mash):
+def download_file(request, download_link_hmac):
     stream_file, filename, content_type = get_link_contents(
-        request.session.session_key, download_link_mash
+        request.session.session_key, download_link_hmac
     )
     disposition_header = {
         "Content-Disposition": f"attachment; filename={filename}"
@@ -34,9 +34,9 @@ def download_file(request, download_link_mash):
 
 @require(FILE_ACCESS_VIA_LOGIN_OR_SHARED_FORM_FIELD, unauthorized_response="http_status")
 @require_http_methods(["GET"])
-def load_file(request, download_link_mash):
+def load_file(request, download_link_hmac):
     stream_file, _, content_type = get_link_contents(
-        request.session.session_key, download_link_mash
+        request.session.session_key, download_link_hmac
     )
     security_header = {"Content-Security-Policy": "default-src 'none'"}
     return StreamingHttpResponse(
@@ -48,10 +48,10 @@ def load_file(request, download_link_mash):
 
 @require(FILE_ACCESS_VIA_LOGIN_OR_SHARED_FORM_FIELD, unauthorized_response="http_status")
 @require_http_methods(["GET"])
-def load_file_thumbnail(request, download_link_mash):
+def load_file_thumbnail(request, download_link_hmac):
     thumbnail, content_type = get_link_thumbnail(
         request.session.session_key,
-        download_link_mash,
+        download_link_hmac,
         width=int(request.GET.get("width", 500)),
         height=int(request.GET.get("height", 500))
     )

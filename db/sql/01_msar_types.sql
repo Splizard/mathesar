@@ -74,3 +74,13 @@ BEGIN
 EXCEPTION
   WHEN duplicate_object THEN null;
 END $$;
+
+-- mathesar_types.file
+-- A file stored by one of Mathesar's file backends: where it is, its media type, and an HMAC
+-- over both (and the backend) by which Mathesar knows it wrote the value itself.
+DO $$
+BEGIN
+  CREATE TYPE mathesar_types.file AS (link text, mime text, hmac text);
+EXCEPTION
+  WHEN duplicate_object THEN null;
+END $$;

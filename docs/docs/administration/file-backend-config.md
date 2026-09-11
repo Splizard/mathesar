@@ -174,17 +174,16 @@ After restarting, file columns will be enabled in your Mathesar installation. To
 
 ### How files are stored
 
-Files are stored in your PostgreSQL database in `JSONB` columns. A typical file value looks like this:
+Files are stored in your PostgreSQL database in columns of type `mathesar_types.file`, which has three fields:
 
-```json
-{
-  "uri": "s3://my-mathesar-bucket/my-username/20250919-192215167015/example.csv",
-  "mash": "58f47a1eafd567cd9d0bdfa1f42a01978cc6f36eb7937b310b208d9957b7ee8b"
-}
-```
+- `link`: the path to the file on the storage backend, e.g. `s3://my-mathesar-bucket/my-username/20250919-192215167015/example.csv`
+- `mime`: the file's media type, e.g. `text/csv`, which Mathesar serves it as
+- `hmac`: a signature Mathesar makes over the other two fields and the backend storing the file, e.g. `v1-58f47a1e…`
 
-With the `uri` being the path to the file on the storage backend and the mash being a generated, unique value used by Mathesar.
+Mathesar only opens files whose signature it can verify, so a value written some other way (with SQL, say) can't get Mathesar to serve a file it didn't store. Signatures are made with Mathesar's [`SECRET_KEY`](./environment-variables.md#secret_key), so changing it leaves existing files unopenable.
+
+Before this type existed, Mathesar stored files as JSON objects with `uri` and `mash` keys in `JSONB` columns. The `convert_file_columns` management command (`python manage.py convert_file_columns`) converts such columns, keeping the files whose old signatures verify.
 
 ### Removing file backends
 
-If you remove a file backend, you'll no longer see the "File" option in the "add column" dropdown. Existing file data will be preserved in your database, but in Mathesar's UI you'll see the underlying JSONB instead of image thumbnails or file icons.
+If you remove a file backend, you'll no longer see the "File" option in the "add column" dropdown. Existing file data will be preserved in your database, but Mathesar won't be able to open the files stored in the removed backend.

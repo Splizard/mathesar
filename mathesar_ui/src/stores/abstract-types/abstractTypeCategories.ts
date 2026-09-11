@@ -10,10 +10,7 @@ import {
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
 } from '@mathesar/icons';
-import {
-  getDefaultFileStorageBackend,
-  getFileStorageBackend,
-} from '@mathesar/utils/preloadData';
+import { getDefaultFileStorageBackend } from '@mathesar/utils/preloadData';
 
 import { abstractTypeCategory } from './constants';
 import {
@@ -286,7 +283,7 @@ const typesResponse: AbstractTypeResponse[] = [
 const fileAbstractType: AbstractType = {
   identifier: 'file',
   name: 'File',
-  dbTypes: new Set([DB_TYPES.JSONB]),
+  dbTypes: new Set([DB_TYPES.MSAR__FILE]),
   ...File,
 };
 
@@ -333,14 +330,6 @@ export function isFileTypeSupported() {
   return !!getDefaultFileStorageBackend();
 }
 
-function isFileAbstractType(dbType: DbType, metadata: ColumnMetadata | null) {
-  return (
-    metadata?.file_backend &&
-    dbType === DB_TYPES.JSONB &&
-    !!getFileStorageBackend(metadata.file_backend)
-  );
-}
-
 function isUserAbstractType(dbType: DbType, metadata: ColumnMetadata | null) {
   return metadata?.user_display_field != null && dbType === DB_TYPES.INTEGER;
 }
@@ -366,7 +355,7 @@ function identifyAbstractTypeForDbType(
   metadata: ColumnMetadata | null,
   autoFill?: ColumnAutoFillInfo,
 ): AbstractType | undefined {
-  if (isFileAbstractType(dbType, metadata)) {
+  if (fileAbstractType.dbTypes.has(dbType)) {
     return fileAbstractType;
   }
   if (isUserAbstractType(dbType, metadata)) {
@@ -393,7 +382,7 @@ function identifyAllPossibleAbstractTypesForDbType(
   dbType: DbType,
 ): Set<AbstractType> {
   const allPossibleAbstractTypes: Set<AbstractType> = new Set();
-  if (dbType === DB_TYPES.JSONB) {
+  if (fileAbstractType.dbTypes.has(dbType)) {
     allPossibleAbstractTypes.add(fileAbstractType);
   }
   if (dbType === DB_TYPES.INTEGER) {

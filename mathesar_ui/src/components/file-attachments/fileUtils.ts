@@ -3,16 +3,11 @@ import { _ } from 'svelte-i18n';
 
 import type { FileAttachmentRequestParams } from '@mathesar/api/rest/fileAttachments';
 import { addQueryParamsToUrl } from '@mathesar/api/rest/utils/requestUtils';
-import type { FileManifest } from '@mathesar/api/rpc/records';
+import type { FileManifest, FileReference } from '@mathesar/api/rpc/records';
 import { iconDeleteMajor } from '@mathesar/icons';
 import { confirm } from '@mathesar/stores/confirmation';
 import { preloadCommonData } from '@mathesar/utils/preloadData';
 import { hasStringProperty } from '@mathesar-component-library';
-
-export interface FileReference {
-  uri: string;
-  mash: string;
-}
 
 export function fetchImage(src: string): Promise<HTMLImageElement | undefined> {
   return new Promise((resolve) => {
@@ -33,19 +28,12 @@ export function getFileViewerType(manifest: FileManifest): 'image' | 'default' {
 }
 
 export function parseFileReference(value: unknown): FileReference | undefined {
-  const obj = (() => {
-    if (typeof value === 'object') return value;
-    try {
-      return JSON.parse(String(value)) as unknown;
-    } catch {
-      return undefined;
-    }
-  })();
-  if (typeof obj !== 'object') return undefined;
-  if (obj === null) return undefined;
-  if (!hasStringProperty(obj, 'mash')) return undefined;
-  if (!hasStringProperty(obj, 'uri')) return undefined;
-  return obj;
+  if (typeof value !== 'object' || value === null) return undefined;
+  if (!hasStringProperty(value, 'link')) return undefined;
+  if (!hasStringProperty(value, 'hmac')) return undefined;
+  const { mime } = value as { mime?: unknown };
+  if (mime !== null && typeof mime !== 'string') return undefined;
+  return value as FileReference;
 }
 
 export async function confirmRemoveFile() {

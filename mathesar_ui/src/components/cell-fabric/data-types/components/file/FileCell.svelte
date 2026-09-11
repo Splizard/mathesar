@@ -62,7 +62,7 @@
     const fileReference = parseFileReference(attachment.result);
     if (!fileReference) return;
     updateCell(attachment.result);
-    setFileManifest?.(fileReference.mash, attachment.download_link);
+    setFileManifest?.(fileReference.hmac, attachment.download_link);
   }
 
   async function viewOrUpload() {

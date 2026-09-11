@@ -76,10 +76,9 @@ function getSelectedCellData(
     (v) => linkedRecordSummaries.get(columnId)?.get(String(v)),
   );
   const fileManifest = (() => {
-    if (!normalColumn?.column.metadata?.file_backend) return undefined;
     const fileReference = parseFileReference(value);
     if (!fileReference) return undefined;
-    return fileManifests.get(normalColumn.id)?.get(fileReference.mash);
+    return fileManifests.get(columnId)?.get(fileReference.hmac);
   })();
   const joinedColumn = joinedColumns.get(columnId);
   const joinedRecordSummariesMap = joinedRecordSummaries.get(columnId);

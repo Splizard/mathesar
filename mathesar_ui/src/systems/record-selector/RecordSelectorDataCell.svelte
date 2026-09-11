@@ -21,16 +21,14 @@
   export let searchFuzzy: Writable<SearchFuzzy>;
   export let isLoading = false;
 
-  $: ({ column } = processedColumn);
   $: columnId = processedColumn.id;
   $: searchValue = $searchFuzzy.get(columnId);
   $: value = row?.record?.[columnId];
   $: recordSummary = $linkedRecordSummaries.get(columnId)?.get(String(value));
   $: fileManifest = (() => {
-    if (!column.metadata?.file_backend) return undefined;
     const fileReference = parseFileReference(value);
     if (!fileReference) return undefined;
-    return $fileManifests.get(columnId)?.get(fileReference.mash);
+    return $fileManifests.get(columnId)?.get(fileReference.hmac);
   })();
 </script>
 

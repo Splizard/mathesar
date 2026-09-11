@@ -74,12 +74,9 @@ def user_has_file_backend_access(request):
     return False
 
 
-# This logic is in place because of the way the "File" type is architected.
-# From the user's perspective, a file column is no different from any other column,
-# however, internally, a "file" column is determined by whether its metadata contains
-# a "file_backend".
-#
-# Eventually, we'd have to decouple "file_backend" metadata from UI type determination logic.
+# A file column is one of type mathesar_types.file, but rather than connect to the
+# user's database to check the column's type, this checks for the "file_backend"
+# (where its uploads go) that Mathesar sets in the metadata of every file column.
 def shared_form_field_column_has_file_backend(request):
     """
     Checks if a field with a file backend is present in a valid shared form detected

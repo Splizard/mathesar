@@ -14,7 +14,7 @@ function getDisabledCause(): ComponentWithProps<FileDisabledHelp> {
 
 const fileType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconFile, label: 'File' }),
-  defaultDbType: DB_TYPES.JSONB,
+  defaultDbType: DB_TYPES.MSAR__FILE,
   cellInfo: {
     type: 'file',
   },

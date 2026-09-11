@@ -8422,79 +8422,155 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION __setup_files_table_with_bad_mash() RETURNS SETOF TEXT AS $$
+CREATE OR REPLACE FUNCTION __setup_file_table() RETURNS SETOF TEXT AS $$
 BEGIN
   CREATE TABLE a (
     id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
     name text,
-    files jsonb
+    files mathesar_types.file
   );
-
-  INSERT INTO a(name, files) VALUES
-  ('cat', '{"uri": "s3://msar/cat.png", "mash": "bad_mash"}'::jsonb),
-  ('dog', '{"uri": "s3://msar/dog.png", "mash": "outdated_mash_34b801f337ee016d21"}'::jsonb),
-  ('elephant', '{"uri": "s3://msar/elephant.png", "mash": ""}'::jsonb), -- empty mash
-  ('deer', '{"uri": "s3://msar/deer.png"}'::jsonb); -- no mash key
 END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION test_single_col_multi_fk_insert() RETURNS SETOF TEXT AS $$
-DECLARE
-  tab_a_oid oid;
-  uri_mash_map jsonb := '{
-    "s3://msar/cat.png": "1addf81f83dcbd34b801f337ee016d211bc16f5ba857f7ea02b2ccc53a6cf7c5",
-    "s3://msar/dog.png": "8afd86435513c54853512e912a7e8802e17fabb45efb5a3041f93f7f0819a2aa",
-    "s3://msar/elephant.png": "b0a15ad5117a008daf8671e0d3bc552161889f4beac01fb1ff10807f36fade69",
-    "s3://msar/deer.png": "52161889f4beac01fb1ff10807f36fade698afd86435513c54853512e912a7e8"
-  }'::jsonb;
-  results jsonb;
+CREATE OR REPLACE FUNCTION test_add_record_to_table_composite() RETURNS SETOF TEXT AS $$
 BEGIN
-  PERFORM __setup_files_table_with_bad_mash();
-  tab_a_oid := 'a'::regclass::oid;
-
-  PERFORM msar.reset_mash(tab_a_oid, 3::smallint, uri_mash_map);
-
-  SELECT jsonb_agg(to_jsonb(a)) FROM a INTO results;
-
+  PERFORM __setup_file_table();
   RETURN NEXT is(
-    $j$
-    [
-      {
-        "id": 1,
-        "name": "cat",
-        "files": {
-          "uri": "s3://msar/cat.png",
-          "mash": "1addf81f83dcbd34b801f337ee016d211bc16f5ba857f7ea02b2ccc53a6cf7c5"
-        }
-      },
-      {
-        "id": 2,
-        "name": "dog",
-        "files": {
-          "uri": "s3://msar/dog.png",
-          "mash": "8afd86435513c54853512e912a7e8802e17fabb45efb5a3041f93f7f0819a2aa"
-        }
-      },
-      {
-        "id": 3,
-        "name": "elephant",
-        "files": {
-          "uri": "s3://msar/elephant.png",
-          "mash": "b0a15ad5117a008daf8671e0d3bc552161889f4beac01fb1ff10807f36fade69"
-        }
-      },
-      {
-        "id": 4,
-        "name": "deer",
-        "files": {
-          "uri": "s3://msar/deer.png",
-          "mash": "52161889f4beac01fb1ff10807f36fade698afd86435513c54853512e912a7e8"
-        }
-      }
-    ]
-    $j$,
-    results
+    msar.add_record_to_table(
+      'a'::regclass::oid,
+      '{"2": "cat", "3": {"link": "s3://msar/cat.png", "mime": "image/png", "hmac": "v1-abc"}}'
+    ) -> 'results',
+    '[{"1": 1, "2": "cat", "3": {"link": "s3://msar/cat.png", "mime": "image/png", "hmac": "v1-abc"}}]'
+  );
+  RETURN NEXT is(
+    msar.add_record_to_table('a'::regclass::oid, '{"2": "dog", "3": {"link": "s3://msar/dog"}}') -> 'results',
+    '[{"1": 2, "2": "dog", "3": {"link": "s3://msar/dog", "mime": null, "hmac": null}}]',
+    'Fields missing from the object are NULL'
+  );
+  RETURN NEXT is(
+    msar.add_record_to_table('a'::regclass::oid, '{"2": "cow", "3": null}') -> 'results',
+    '[{"1": 3, "2": "cow", "3": null}]'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_patch_record_in_table_composite() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_file_table();
+  INSERT INTO a (name) VALUES ('cat');
+  RETURN NEXT is(
+    msar.patch_record_in_table(
+      'a'::regclass::oid, 1, '{"3": {"link": "s3://msar/cat.png", "mime": "image/png", "hmac": "v1-abc"}}'
+    ) -> 'results',
+    '[{"1": 1, "2": "cat", "3": {"link": "s3://msar/cat.png", "mime": "image/png", "hmac": "v1-abc"}}]'
+  );
+  RETURN NEXT is(
+    msar.patch_record_in_table('a'::regclass::oid, 1, '{"2": "Cat", "3": null}') -> 'results',
+    '[{"1": 1, "2": "Cat", "3": null}]'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_form_insert_composite() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_file_table();
+  PERFORM msar.form_insert(
+    jsonb_build_array(
+      jsonb_build_object(
+        'key', 'k1', 'parent_key', null, 'column_attnum', 2, 'table_oid', 'a'::regclass::oid, 'depth', 0
+      ),
+      jsonb_build_object(
+        'key', 'k2', 'parent_key', null, 'column_attnum', 3, 'table_oid', 'a'::regclass::oid, 'depth', 0
+      )
+    ),
+    '{"k1": "cat", "k2": {"link": "s3://msar/cat.png", "mime": "image/png", "hmac": "v1-abc"}}'
+  );
+  RETURN NEXT results_eq(
+    'SELECT name, files FROM a',
+    $v$VALUES ('cat', ROW('s3://msar/cat.png', 'image/png', 'v1-abc')::mathesar_types.file)$v$
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_legacy_file_table() RETURNS SETOF TEXT AS $$
+BEGIN
+  CREATE TABLE a (
+    id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY,
+    name text,
+    files jsonb DEFAULT '{"uri": "s3://msar/default.png", "mash": "m0"}'
+  );
+  INSERT INTO a(name, files) VALUES
+  ('cat', '{"uri": "s3://msar/cat.png", "mash": "m1"}'),
+  ('kitten', '{"uri": "s3://msar/cat.png", "mash": "m1"}'),
+  ('dog', '{"uri": "s3://msar/dog.png", "mash": "forged"}'),
+  ('deer', '{"uri": "s3://msar/deer.png"}'), -- no mash
+  ('cow', '{"link": "s3://msar/cow.png"}'), -- no uri
+  ('pig', '"s3://msar/pig.png"'), -- not an object
+  ('hen', NULL);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_get_legacy_file_refs() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_legacy_file_table();
+  RETURN NEXT is(
+    msar.get_legacy_file_refs('a'::regclass, 3::smallint),
+    $j$[
+      {"uri": "s3://msar/cat.png", "mash": "m1"},
+      {"uri": "s3://msar/deer.png", "mash": null},
+      {"uri": "s3://msar/dog.png", "mash": "forged"}
+    ]$j$
+  );
+  ALTER TABLE a ALTER COLUMN files TYPE json;
+  RETURN NEXT is(
+    jsonb_array_length(msar.get_legacy_file_refs('a'::regclass, 3::smallint)),
+    3,
+    'json columns work too'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_convert_to_file_column() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_legacy_file_table();
+  PERFORM msar.convert_to_file_column(
+    'a'::regclass,
+    3::smallint,
+    $j${
+      "s3://msar/cat.png": {"mime": "image/png", "hmac": "v1-cat"},
+      "s3://msar/deer.png": {"mime": null, "hmac": "v1-deer"}
+    }$j$
+  );
+  RETURN NEXT col_type_is('a', 'files', 'mathesar_types.file');
+  RETURN NEXT col_hasnt_default('a', 'files');
+  RETURN NEXT results_eq(
+    'SELECT name, files FROM a ORDER BY id',
+    $v$VALUES
+      ('cat', ROW('s3://msar/cat.png', 'image/png', 'v1-cat')::mathesar_types.file),
+      ('kitten', ROW('s3://msar/cat.png', 'image/png', 'v1-cat')::mathesar_types.file),
+      ('dog', ROW('s3://msar/dog.png', NULL, NULL)::mathesar_types.file),
+      ('deer', ROW('s3://msar/deer.png', NULL, 'v1-deer')::mathesar_types.file),
+      ('cow', NULL::mathesar_types.file),
+      ('pig', NULL::mathesar_types.file),
+      ('hen', NULL::mathesar_types.file)
+    $v$
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_convert_to_file_column_wrong_type() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_legacy_file_table();
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.convert_to_file_column('a'::regclass, 2::smallint, '{}')$q$,
+    'Column name of a is of type text, not json or jsonb'
   );
 END;
 $$ LANGUAGE plpgsql;

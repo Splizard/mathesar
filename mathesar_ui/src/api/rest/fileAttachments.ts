@@ -1,6 +1,6 @@
 import type { CancellablePromise } from '@mathesar-component-library';
 
-import type { FileManifest } from '../rpc/records';
+import type { FileManifest, FileReference } from '../rpc/records';
 
 import {
   type UploadCompletionOpts,
@@ -12,7 +12,7 @@ const ENDPOINT = '/files/';
 
 export interface FileAttachmentUploadResult {
   /** The value to set in the cell into which the file was uploaded */
-  result: string;
+  result: FileReference;
   download_link: FileManifest;
 }
 

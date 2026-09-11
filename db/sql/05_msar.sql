@@ -5838,6 +5838,26 @@ $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
+msar.build_value_expr(typ_id regtype, val jsonb) RETURNS text AS $$/*
+Return an SQL expression giving a JSON value to write to a column of the given type.
+
+A JSON object written to a column of a composite type fills the fields named by its keys. Any
+other value is given as its text (a JSON string without its quotes), which Postgres then casts to
+the column's type.
+
+Args:
+  typ_id: The type of the column the value is for.
+  val: The value.
+*/
+SELECT CASE
+  WHEN jsonb_typeof(val) = 'object' AND (SELECT typtype FROM pg_catalog.pg_type WHERE oid = typ_id) = 'c'
+    THEN format('jsonb_populate_record(NULL::%s, %L)', typ_id, val)
+  ELSE quote_nullable(val #>> '{}')
+END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
 msar.build_single_insert_expr(tab_id oid, rec_def jsonb) RETURNS TEXT AS $$
 SELECT CASE WHEN NULLIF(rec_def, '{}'::jsonb) IS NOT NULL THEN
   (
@@ -5847,9 +5867,10 @@ SELECT CASE WHEN NULLIF(rec_def, '{}'::jsonb) IS NOT NULL THEN
         msar.get_relation_schema_name(tab_id),
         msar.get_relation_name(tab_id),
         string_agg(format('%I', msar.get_column_name(tab_id, key::smallint)), ', '),
-        string_agg(format('%L', value), ', ')
+        string_agg(msar.build_value_expr(atttypid, value), ', ')
       )
-    FROM jsonb_each_text(rec_def)
+    FROM jsonb_each(rec_def)
+      LEFT JOIN pg_catalog.pg_attribute ON attrelid = tab_id AND attnum = key::smallint
   )
 ELSE
   format(
@@ -5916,9 +5937,10 @@ SELECT
     msar.get_relation_schema_name(tab_id),
     msar.get_relation_name(tab_id),
     string_agg(format('%I', msar.get_column_name(tab_id, key::smallint)), ', '),
-    string_agg(format('%L', value), ', ')
+    string_agg(msar.build_value_expr(atttypid, value), ', ')
   )
-FROM jsonb_each_text(rec_def);
+FROM jsonb_each(rec_def)
+  LEFT JOIN pg_catalog.pg_attribute ON attrelid = tab_id AND attnum = key::smallint;
 $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 
@@ -6166,48 +6188,76 @@ END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
-CREATE OR REPLACE FUNCTION msar.reset_mash(tab_id regclass, col_id smallint, uri_mash_map jsonb)
-RETURNS VOID AS $$/*
-Resets the outdated "mash" for a given json/jsonb file column.
+CREATE OR REPLACE FUNCTION msar.get_legacy_file_refs(tab_id regclass, col_id smallint)
+RETURNS jsonb AS $$/*
+Return the distinct files referenced by a column holding files the way Mathesar stored them
+before they had a type of their own (mathesar_types.file): as JSON objects of the form
+{"uri": <link>, "mash": <signature>}.
 
-A typical file column has records in the following form:
-{
-  "uri": "s3://mathesar-storages/admin/20250915-181554471621/mathesar_logo.jpeg",
-  "mash": "b0a15ad5117a008daf8671e0d3bc552161889f4beac01fb1ff10807f36fade69"
-}
-
-uri_mash_map should have the following form:
-{
-  <uri_1> : <mash_1>,
-  <uri_2> : <mash_2>
-  ...
-}
+Returns a JSON array of {"uri": <link>, "mash": <signature or null>} objects. Values without a
+"uri" string are left out, as they reference no file.
 
 Args:
-  tab_id: The OID of the target table.
-  col_id: The attnum of a file json(b) column.
-  uri_mash_map: A map of uri and the new mash.
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the json or jsonb column.
 */
 DECLARE
-  sch_name text := msar.get_relation_schema_name(tab_id);
-  tab_name text := msar.get_relation_name(tab_id);
-  col_name text := msar.get_column_name(tab_id, col_id);
+  refs jsonb;
 BEGIN
-  -- Refreshing a file's mash doesn't change the record; see mathesar_types.stamp_updated_at.
-  PERFORM set_config('mathesar.keep_updated_at', 'on', true);
   EXECUTE format(
-    $j$
-      UPDATE %1$I.%2$I
-      SET %3$I = jsonb_set(%2$I.%3$I::jsonb, '{mash}', mapping.mash)
-      FROM jsonb_each(%4$L) AS mapping(uri, mash)
-      WHERE %2$I.%3$I ->> 'uri' = mapping.uri
-    $j$,
-    sch_name,
-    tab_name,
+    $q$
+      SELECT coalesce(jsonb_agg(DISTINCT jsonb_build_object('uri', v ->> 'uri', 'mash', v ->> 'mash')), '[]')
+      FROM (SELECT %3$I::jsonb AS v FROM %1$I.%2$I) AS vals
+      WHERE jsonb_typeof(v -> 'uri') = 'string'
+    $q$,
+    msar.get_relation_schema_name(tab_id),
+    msar.get_relation_name(tab_id),
+    msar.get_column_name(tab_id, col_id)
+  ) INTO refs;
+  RETURN refs;
+END;
+$$ LANGUAGE plpgsql STABLE RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION msar.convert_to_file_column(tab_id regclass, col_id smallint, files jsonb)
+RETURNS void AS $$/*
+Change a column holding files the way Mathesar stored them before they had a type of their own
+(see msar.get_legacy_file_refs) to that type, mathesar_types.file.
+
+Only Mathesar can sign files, so the caller works out which links it vouches for and passes the
+media type and HMAC for each of them. Links it doesn't vouch for keep their link but get no HMAC,
+so Mathesar won't serve them. Values that reference no file become NULL, as does any default.
+
+Args:
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the json or jsonb column.
+  files: The files to sign, of the form {<link>: {"mime": <media type>, "hmac": <hmac>}, ...}.
+*/
+DECLARE
+  col_name text := msar.get_column_name(tab_id, col_id);
+  col_type regtype;
+BEGIN
+  SELECT atttypid INTO col_type FROM pg_catalog.pg_attribute WHERE attrelid = tab_id AND attnum = col_id;
+  IF col_type NOT IN ('json'::regtype, 'jsonb'::regtype) THEN
+    RAISE EXCEPTION 'Column % of % is of type %, not json or jsonb', col_name, tab_id, col_type;
+  END IF;
+  EXECUTE format(
+    $a$
+      ALTER TABLE %1$I.%2$I
+        ALTER COLUMN %3$I DROP DEFAULT,
+        ALTER COLUMN %3$I TYPE mathesar_types.file USING CASE
+          WHEN jsonb_typeof(%3$I::jsonb -> 'uri') = 'string' THEN ROW(
+            %3$I::jsonb ->> 'uri',
+            %4$L::jsonb -> (%3$I::jsonb ->> 'uri') ->> 'mime',
+            %4$L::jsonb -> (%3$I::jsonb ->> 'uri') ->> 'hmac'
+          )::mathesar_types.file
+        END
+    $a$,
+    msar.get_relation_schema_name(tab_id),
+    msar.get_relation_name(tab_id),
     col_name,
-    uri_mash_map
+    files
   );
-  PERFORM set_config('mathesar.keep_updated_at', 'off', true);
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
@@ -6246,7 +6296,7 @@ WITH cte AS (
     CASE
       WHEN vals.value::jsonb->>'type' = 'create' THEN concat(quote_ident(concat(fields.key::text, '_cte')), '.', quote_ident(ref_attr.attname))
       WHEN vals.value::jsonb->>'type' = 'pick' THEN quote_nullable(vals.value::jsonb->>'value')
-      ELSE quote_nullable(vals.value::jsonb #>> '{}')
+      ELSE msar.build_value_expr(pga.atttypid, vals.value::jsonb)
     END AS value,
     CASE
       WHEN fields.parent_key IS NOT NULL THEN quote_ident(concat(fields.parent_key::text, '_cte'))
