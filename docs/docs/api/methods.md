@@ -216,8 +216,12 @@
       - add
       - delete
       - patch
+      - list_types
       - SchemaInfo
       - SchemaPatch
+      - TypeInfo
+      - TypeField
+      - TypeConstraint
 
 ## Schema Privileges
 

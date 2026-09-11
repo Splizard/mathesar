@@ -125,6 +125,13 @@ export class Schema {
     });
   }
 
+  /** The enums, composite types, and domains defined in the schema */
+  constructTypesStore() {
+    return new AsyncRpcApiStore(api.schemas.list_types, {
+      staticProps: { database_id: this.database.id, schema_oid: this.oid },
+    });
+  }
+
   constructDataFormsStore() {
     return new AsyncRpcApiStore(api.forms.list, {
       staticProps: { database_id: this.database.id, schema_oid: this.oid },

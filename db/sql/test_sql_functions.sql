@@ -8731,3 +8731,54 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_list_schema_types() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE SCHEMA onto;
+  CREATE TYPE onto.mood AS ENUM ('happy', 'sad');
+  CREATE TYPE onto.address AS (street text, city text);
+  CREATE DOMAIN onto.phone AS text NOT NULL DEFAULT '0' CHECK (VALUE ~ '^[0-9]+$');
+  CREATE DOMAIN onto.short_phone AS onto.phone CHECK (length(VALUE) < 5);
+  COMMENT ON DOMAIN onto.phone IS 'A phone number';
+  CREATE TABLE onto.not_a_type (id integer);
+  RETURN NEXT is(
+    (SELECT jsonb_agg(t - 'oid') FROM jsonb_array_elements(msar.list_schema_types('onto')) AS t),
+    $j$[
+      {"name": "address", "kind": "composite", "description": null,
+       "fields": [{"name": "street", "type": "text"}, {"name": "city", "type": "text"}]},
+      {"name": "mood", "kind": "enum", "description": null, "values": ["happy", "sad"]},
+      {"name": "phone", "kind": "domain", "description": "A phone number", "base_type": "text",
+       "over": "text", "not_null": true, "default": "'0'::text",
+       "constraints": [{"name": "phone_check", "definition": "CHECK ((VALUE ~ '^[0-9]+$'::text))"}]},
+      {"name": "short_phone", "kind": "domain", "description": null, "base_type": "text",
+       "over": "onto.phone", "not_null": false, "default": "'0'::text",
+       "constraints": [{"name": "short_phone_check", "definition": "CHECK ((length((VALUE)::text) < 5))"}]}
+    ]$j$,
+    'tables'' row types aren''t types of the schema'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_alter_columns_to_and_from_domains() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE DOMAIN phone AS text CHECK (VALUE ~ '^[0-9]+$');
+  CREATE DOMAIN short_phone AS phone CHECK (length(VALUE) < 5);
+  CREATE TABLE contacts (id integer PRIMARY KEY, tel text DEFAULT '1', n integer);
+  INSERT INTO contacts VALUES (1, '123', 42);
+  PERFORM msar.alter_columns('contacts'::regclass, '[{"attnum": 2, "type": {"name": "phone"}}]');
+  RETURN NEXT col_type_is('contacts', 'tel', 'phone');
+  RETURN NEXT col_default_is('contacts', 'tel', '1', 'the default is kept');
+  PERFORM msar.alter_columns('contacts'::regclass, '[{"attnum": 3, "type": {"name": "short_phone"}}]');
+  RETURN NEXT col_type_is('contacts', 'n', 'short_phone');
+  RETURN NEXT is((SELECT n::text FROM contacts), '42', 'from another type castable to the domain''s');
+  PERFORM msar.alter_columns('contacts'::regclass, '[{"attnum": 2, "type": {"name": "text"}}]');
+  RETURN NEXT col_type_is('contacts', 'tel', 'text');
+  UPDATE contacts SET tel = 'x';
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.alter_columns('contacts'::regclass, '[{"attnum": 2, "type": {"name": "phone"}}]')$q$,
+    '23514', 'value for domain phone violates check constraint "phone_check"'
+  );
+END;
+$f$ LANGUAGE plpgsql;

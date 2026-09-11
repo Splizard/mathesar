@@ -1318,6 +1318,69 @@ ORDER BY s.nspname;
 $$ LANGUAGE SQL STABLE;
 
 
+CREATE OR REPLACE FUNCTION msar.list_schema_types(sch_id regnamespace) RETURNS jsonb AS $$/*
+Return the enums, composite types, and domains defined in a schema, ordered by name.
+
+Each is described by a JSON object of the form:
+  {
+    "oid": <int>,
+    "name": <str>,
+    "kind": "enum" | "composite" | "domain",
+    "description": <str or null>,
+    "values": [<str>, ...],  -- enums: their labels, in order
+    "fields": [{"name": <str>, "type": <str>}, ...],  -- composite types: their fields, in order
+    "base_type": <str>,  -- domains: the type they're ultimately defined over, with its modifiers
+    "over": <str>,  -- domains: the type they're directly defined over (maybe another domain)
+    "not_null": <bool>,  -- domains: whether they disallow NULL
+    "default": <str or null>,  -- domains: their default, as an SQL expression
+    "constraints": [{"name": <str>, "definition": <str>}, ...]  -- domains: their CHECK constraints
+  }
+leaving out the keys that don't apply to the kind. The row types of tables, views, etc. aren't
+included, nor are arrays of types.
+
+Args:
+  sch_id: The OID of the schema.
+*/
+SELECT coalesce(jsonb_agg(type_info ORDER BY type_info ->> 'name'), '[]'::jsonb)
+FROM (
+  SELECT jsonb_strip_nulls(jsonb_build_object(
+    'oid', t.oid::bigint,
+    'name', t.typname,
+    'kind', CASE t.typtype WHEN 'e' THEN 'enum' WHEN 'c' THEN 'composite' ELSE 'domain' END,
+    'values', CASE WHEN t.typtype = 'e' THEN (
+      SELECT jsonb_agg(enumlabel ORDER BY enumsortorder) FROM pg_catalog.pg_enum WHERE enumtypid = t.oid
+    ) END,
+    'fields', CASE WHEN t.typtype = 'c' THEN (
+      SELECT coalesce(jsonb_agg(
+        jsonb_build_object('name', attname, 'type', format_type(atttypid, atttypmod)) ORDER BY attnum
+      ), '[]'::jsonb)
+      FROM pg_catalog.pg_attribute WHERE attrelid = t.typrelid AND attnum > 0 AND NOT attisdropped
+    ) END,
+    'base_type', CASE WHEN t.typtype = 'd' THEN (
+      SELECT format_type(base.typ, base.typmod) FROM msar.get_column_base_type(t.oid::regtype, -1) AS base
+    ) END,
+    'over', CASE WHEN t.typtype = 'd' THEN format_type(t.typbasetype, t.typtypmod) END,
+    'not_null', CASE WHEN t.typtype = 'd' THEN t.typnotnull END,
+    'constraints', CASE WHEN t.typtype = 'd' THEN (
+      SELECT coalesce(jsonb_agg(
+        jsonb_build_object('name', conname, 'definition', pg_get_constraintdef(oid)) ORDER BY conname
+      ), '[]'::jsonb)
+      FROM pg_catalog.pg_constraint WHERE contypid = t.oid AND contype = 'c'
+    ) END
+  ))
+  -- jsonb_strip_nulls would drop a NULL description or default, which do apply
+  || jsonb_build_object('description', obj_description(t.oid, 'pg_type'))
+  || CASE WHEN t.typtype = 'd' THEN jsonb_build_object('default', t.typdefault) ELSE '{}' END
+  AS type_info
+  FROM pg_catalog.pg_type t
+  LEFT JOIN pg_catalog.pg_class c ON c.oid = t.typrelid
+  WHERE t.typnamespace = sch_id
+    AND t.typtype IN ('e', 'c', 'd')
+    AND (t.typtype <> 'c' OR c.relkind = 'c')
+) AS types;
+$$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
+
+
 CREATE OR REPLACE FUNCTION msar.list_schemas() RETURNS jsonb AS $$/*
 Return a json array of objects describing the user-defined schemas in the database.
 
@@ -3770,13 +3833,19 @@ CREATE OR REPLACE FUNCTION msar.build_cast_expr(
 ) RETURNS text AS $$/*
 Build an expression for casting a column in Mathesar, returning the text of that expression.
 
+A value is cast to a domain (other than Mathesar's own) by casting it to the type the domain is
+defined over, and then to the domain, which checks the domain's constraints.
+
 Args:
   val: This is quite general, and isn't sanitized in any way. It can be either a literal or a column
        identifier, since we want to be able to produce a casting expression in either case.
   type_: This type name string must cast properly to a regtype.
   cast_options: Suggestions to be used while type casting.
 */
-SELECT msar.get_cast_function_name(type_::regtype) || '(' ||
+SELECT CASE WHEN base.typ <> type_::regtype THEN
+  format('(%s)::%s', msar.build_cast_expr(val, base.typ::text, cast_options), type_::regtype)
+ELSE
+msar.get_cast_function_name(type_::regtype) || '(' ||
 CONCAT_WS(', ',
   val,
   CASE WHEN NULLIF(cast_options, '{}'::jsonb) IS NOT NULL THEN
@@ -3796,6 +3865,8 @@ CONCAT_WS(', ',
     END
   END
 ) || ')'
+END
+FROM msar.get_column_base_type(type_::regtype, -1) AS base;
 $$ LANGUAGE SQL RETURNS NULL ON NULL INPUT;
 
 

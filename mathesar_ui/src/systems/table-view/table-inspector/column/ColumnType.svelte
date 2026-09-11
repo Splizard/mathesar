@@ -10,6 +10,8 @@
   } from '@mathesar/stores/table-data';
   import { isTableView } from '@mathesar/utils/tables';
 
+  import ColumnDomain from './ColumnDomain.svelte';
+
   const tabularData = getTabularDataStoreFromContext();
   $: ({ table, columnsDataStore } = $tabularData);
   $: ({ currentRoleOwns } = table.currentAccess);
@@ -52,6 +54,9 @@
     disabled={disallowDataTypeChange}
   />
 {/key}
+{#if !isView}
+  <ColumnDomain {column} {table} disabled={disallowDataTypeChange} />
+{/if}
 {#if infoAlertText}
   <InfoBox>
     <span class="info-alert">

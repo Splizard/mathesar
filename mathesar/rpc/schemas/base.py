@@ -10,6 +10,7 @@ from db.schemas import (
     create_schema,
     drop_schemas,
     get_schema,
+    list_schema_types,
     list_schemas,
     patch_schema,
 )
@@ -39,6 +40,61 @@ class SchemaInfo(TypedDict):
     current_role_priv: list[Literal['USAGE', 'CREATE']]
     current_role_owns: bool
     table_count: int
+
+
+class TypeField(TypedDict):
+    """
+    A field of a composite type.
+
+    Attributes:
+        name: The name of the field.
+        type: The type of the field.
+    """
+    name: str
+    type: str
+
+
+class TypeConstraint(TypedDict):
+    """
+    A CHECK constraint of a domain.
+
+    Attributes:
+        name: The name of the constraint.
+        definition: The constraint, as SQL.
+    """
+    name: str
+    definition: str
+
+
+class TypeInfo(TypedDict):
+    """
+    A type defined in a schema: an enum, a composite type, or a domain.
+
+    Attributes:
+        oid: The OID of the type.
+        name: The name of the type.
+        kind: Which of the three it is.
+        description: The description of the type.
+        values: For enums, their labels, in order.
+        fields: For composite types, their fields, in order.
+        base_type: For domains, the type they're ultimately defined over.
+        over: For domains, the type they're directly defined over, which
+            may be another domain.
+        not_null: For domains, whether they disallow NULL.
+        default: For domains, their default, as SQL.
+        constraints: For domains, their CHECK constraints.
+    """
+    oid: int
+    name: str
+    kind: Literal['enum', 'composite', 'domain']
+    description: Optional[str]
+    values: Optional[list[str]]
+    fields: Optional[list[TypeField]]
+    base_type: Optional[str]
+    over: Optional[str]
+    not_null: Optional[bool]
+    default: Optional[str]
+    constraints: Optional[list[TypeConstraint]]
 
 
 class SchemaPatch(TypedDict):
@@ -116,6 +172,26 @@ def get(*, schema_oid: int, database_id: int, **kwargs) -> SchemaInfo:
     with connect(database_id, user) as conn:
         schema_info = get_schema(schema_oid, conn)
     return schema_info
+
+
+@mathesar_rpc_method(name="schemas.list_types", auth="login")
+def list_types(*, schema_oid: int, database_id: int, **kwargs) -> list[TypeInfo]:
+    """
+    List the enums, composite types, and domains defined in a schema.
+
+    Columns of a domain are treated as of the type the domain is defined
+    over, and can be changed to and from a domain like any other type.
+
+    Args:
+        schema_oid: The OID of the schema.
+        database_id: The Django id of the database containing the schema.
+
+    Returns:
+        The types, ordered by name.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return list_schema_types(schema_oid, conn)
 
 
 @mathesar_rpc_method(name="schemas.delete", auth="login")

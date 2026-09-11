@@ -10,6 +10,20 @@ def get_schema(schema_oid, conn):
     return db_conn.exec_msar_func(conn, 'get_schema', schema_oid).fetchone()[0]
 
 
+def list_schema_types(schema_oid, conn):
+    """
+    List the enums, composite types, and domains defined in a schema.
+
+    Args:
+        schema_oid: The OID of the schema.
+        conn: a psycopg connection
+
+    Returns:
+        A list of dicts describing the types; see msar.list_schema_types.
+    """
+    return db_conn.exec_msar_func(conn, 'list_schema_types', schema_oid).fetchone()[0]
+
+
 def patch_schema(schema_oid, conn, patch):
     """
     Patch a schema using a psycopg connection.

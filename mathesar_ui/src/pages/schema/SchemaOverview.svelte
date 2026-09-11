@@ -25,6 +25,7 @@
   import ExplorationsList from './ExplorationsList.svelte';
   import ExploreYourData from './ExploreYourData.svelte';
   import FormsSection from './FormsSection.svelte';
+  import OntologySection from './OntologySection.svelte';
   import SchemaOverviewSideSection from './SchemaOverviewSideSection.svelte';
   import TableSkeleton from './TableSkeleton.svelte';
   import TablesList from './TablesList.svelte';
@@ -164,6 +165,8 @@
     </SchemaOverviewSideSection>
 
     <FormsSection />
+
+    <OntologySection {schema} />
   </div>
 </div>
 

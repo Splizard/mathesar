@@ -1182,6 +1182,7 @@ INSERT INTO msar.all_mathesar_objects VALUES
   ('msar', 'msar.list_roles()', 'FUNCTION', NULL),
   ('msar', 'msar.list_schema_privileges(regnamespace)', 'FUNCTION', NULL),
   ('msar', 'msar.list_schema_privileges_for_current_role(regnamespace)', 'FUNCTION', NULL),
+  ('msar', 'msar.list_schema_types(regnamespace)', 'FUNCTION', NULL),
   ('msar', 'msar.list_schemas()', 'FUNCTION', NULL),
   ('msar', 'msar.list_table_privileges(regclass)', 'FUNCTION', NULL),
   ('msar', 'msar.list_table_privileges_for_current_role(regclass)', 'FUNCTION', NULL),

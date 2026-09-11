@@ -402,6 +402,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        schemas.list_types,
+        "schemas.list_types",
+        [user_is_authenticated]
+    ),
+    (
         schemas.patch,
         "schemas.patch",
         [user_is_authenticated]
