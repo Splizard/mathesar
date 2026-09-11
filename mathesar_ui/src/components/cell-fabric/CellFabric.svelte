@@ -19,6 +19,10 @@
   export let setFileManifest:
     | ((mash: string, manifest: FileManifest) => void)
     | undefined = undefined;
+  /** The file one value of an array of files refers to */
+  export let getFileManifest:
+    | ((value: unknown) => FileManifest | undefined)
+    | undefined = undefined;
   export let fileRequestParams: FileAttachmentRequestParams | undefined =
     undefined;
   export let setRecordSummary:
@@ -63,6 +67,7 @@
     {joinedRecordSummariesMap}
     {fileManifest}
     {setFileManifest}
+    {getFileManifest}
     {fileRequestParams}
     {searchValue}
     {isProcessing}

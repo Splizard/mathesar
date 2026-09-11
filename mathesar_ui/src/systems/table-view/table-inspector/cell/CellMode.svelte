@@ -3,10 +3,9 @@
 
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import ArrayElements from '@mathesar/components/cell-fabric/data-types/components/array/ArrayElements.svelte';
-  import {
-    getDbTypeBasedInputCap,
-    getInitialInputValue,
-  } from '@mathesar/components/cell-fabric/utils';
+  import { getCellInfo } from '@mathesar/components/cell-fabric/data-types/utils';
+  import { getCellCap } from '@mathesar/components/cell-fabric/utils';
+  import { parseFileReference } from '@mathesar/components/file-attachments/fileUtils';
   import CellInspector from '@mathesar/components/inspector/cell/CellInspector.svelte';
   import { parseCellId } from '@mathesar/components/sheet/cellIds';
   import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
@@ -26,7 +25,7 @@
     processedColumns,
     canUpdateRecords,
   } = $tabularData);
-  $: ({ selectableRowsMap } = recordsData);
+  $: ({ selectableRowsMap, fileManifests } = recordsData);
 
   /** The array cell the inspector edits, whose values are shown one by one */
   $: activeArrayCell = (() => {
@@ -41,12 +40,29 @@
     return { row, column, columnId, value: row.record[columnId] };
   })();
 
-  /** The column of one of the array's values, for the input to show it */
+  /** The column of one of the array's values, for its cell to show it */
   $: itemColumn = {
     type: activeArrayCell?.column.column.type_options?.item_type ?? 'string',
     type_options: null,
     metadata: activeArrayCell?.column.column.metadata ?? null,
   };
+  $: itemColumnFabric = {
+    id: `${activeArrayCell?.columnId ?? ''}-item`,
+    column: itemColumn,
+    cellComponentAndProps: getCellCap({
+      cellInfo: getCellInfo(itemColumn.type, itemColumn.metadata) ?? {
+        type: 'string',
+      },
+      column: itemColumn,
+    }),
+  };
+
+  /** Arrays of files show each file, as a file column's cells do */
+  function getFileManifest(columnId: string, value: unknown) {
+    const fileReference = parseFileReference(value);
+    if (!fileReference) return undefined;
+    return $fileManifests.get(columnId)?.get(fileReference.hmac);
+  }
 
   let values: unknown[] | null = null;
   let savedValues: unknown[] | null = null;
@@ -88,10 +104,17 @@
   <div class="array-cell">
     <header class="header">{$_('values')}</header>
     <ArrayElements
-      componentAndProps={getDbTypeBasedInputCap(itemColumn)}
-      initialValue={getInitialInputValue(itemColumn)}
+      {itemColumnFabric}
       bind:value={values}
       disabled={!isEditable || saveState?.state === 'processing'}
+      getFileManifest={(value) =>
+        getFileManifest(activeArrayCell?.columnId ?? '', value)}
+      setFileManifest={(hmac, manifest) =>
+        fileManifests.addBespokeValue({
+          columnId: activeArrayCell?.columnId ?? '',
+          key: hmac,
+          value: manifest,
+        })}
     />
     {#if hasChanges}
       <div class="footer">

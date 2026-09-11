@@ -115,6 +115,26 @@ def test_get_download_links(backends):
         assert li.sessions.filter(session_key=second_session_key).count() == 1
 
 
+def test_get_download_links_of_arrays(backends):
+    """A column of an array of files has all of its files' links."""
+    request = make_request('arraysession')
+    pic = make_file("s3://bleh/pic.jpeg", "image/jpeg", BACKEND_KEY)
+    pdf = make_file("s3://bleh/document.pdf", "application/pdf", BACKEND_KEY)
+    results = [
+        {"1": "abcde", "files": [pic, None, {"invalid": "blob"}]},
+        {"1": "defgh", "files": [pdf]},
+        {"1": "ghijk", "files": []},
+        {"1": "lmnop", "files": None},
+    ]
+
+    assert dl.get_download_links(request, results) == {
+        "files": {
+            pdf["hmac"]: expected_details(pdf, "document.pdf"),
+            pic["hmac"]: expected_details(pic, "pic.jpeg", thumbnail=True),
+        },
+    }
+
+
 def test_get_download_links_without_mime(backends):
     request = make_request('nomimesession')
     file = make_file("s3://bleh/README", None, BACKEND_KEY)

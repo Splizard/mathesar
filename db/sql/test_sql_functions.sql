@@ -8870,11 +8870,13 @@ BEGIN
     id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, tags text[], counts integer[]
   );
   rel_id := 'array_records'::regclass::oid;
-  RETURN NEXT is(msar.build_array_literal('[]'), '{}');
   RETURN NEXT is(
-    msar.build_array_literal('["a", null, "b,\"c\"", "d\\e"]'),
-    '{"a",NULL,"b,\"c\"","d\\e"}',
-    'values are quoted, with their quotes and backslashes escaped'
+    msar.build_value_expr('text[]'::regtype, '["a", null, "b,c"]'),
+    $e$ARRAY['a', NULL, 'b,c']::text[]$e$,
+    'each value is written as one of the array''s items'
+  );
+  RETURN NEXT is(
+    msar.build_value_expr('text[]'::regtype, '[]'), $e$ARRAY[]::text[]$e$
   );
   PERFORM msar.add_record_to_table(
     rel_id, '{"2": ["one", "two, and a half", null], "3": [1, 2, 3]}'
@@ -8890,5 +8892,16 @@ BEGIN
   RETURN NEXT is(
     (SELECT tags FROM array_records WHERE id = 1), ARRAY['just one'], 'records can be updated'
   );
+
+  CREATE TABLE array_files (id integer PRIMARY KEY GENERATED ALWAYS AS IDENTITY, pics mathesar_types.file[]);
+  PERFORM msar.add_record_to_table(
+    'array_files'::regclass::oid,
+    '{"2": [{"link": "file:///a.png", "mime": "image/png", "hmac": "v1-abc"}, null]}'
+  );
+  RETURN NEXT is(
+    (SELECT (pics[1]).link FROM array_files), 'file:///a.png', 'of files, too'
+  );
+  RETURN NEXT is((SELECT (pics[1]).hmac FROM array_files), 'v1-abc');
+  RETURN NEXT ok((SELECT pics[2] IS NULL FROM array_files));
 END;
 $f$ LANGUAGE plpgsql;

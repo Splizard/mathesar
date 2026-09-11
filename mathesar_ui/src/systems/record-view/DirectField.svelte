@@ -188,6 +188,13 @@
           value: recordSummary,
         })}
       {fileManifest}
+      getFileManifest={(elementValue) => {
+        const elementReference = parseFileReference(elementValue);
+        if (!elementReference) return undefined;
+        return $fileManifests
+          .get(String(column.id))
+          ?.get(elementReference.hmac);
+      }}
       setFileManifest={(mash, manifest) => {
         fileManifests.addBespokeValue({
           columnId: String(column.id),

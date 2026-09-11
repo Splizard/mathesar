@@ -81,6 +81,12 @@
   $: joinedRecordSummariesMap = isJoinedColumn(effectiveColumnFabric)
     ? $joinedRecordSummaries.get(columnId)
     : undefined;
+  /** For a column of an array of files, the file each of its values refers to */
+  $: getFileManifest = (elementValue: unknown) => {
+    const elementReference = parseFileReference(elementValue);
+    if (!elementReference) return undefined;
+    return $fileManifests.get(columnId)?.get(elementReference.hmac);
+  };
   $: fileManifest = (() => {
     const fileReference = parseFileReference(value);
     if (!fileReference) return undefined;
@@ -142,6 +148,7 @@
     {isProcessing}
     {canViewLinkedEntities}
     {fileManifest}
+    {getFileManifest}
     setFileManifest={(mash, manifest) => {
       recordsData.fileManifests.addBespokeValue({
         columnId: String(columnId),

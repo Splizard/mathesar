@@ -58,6 +58,28 @@ export function hasValuesShownOneByOne(column: ArrayLikeColumn): boolean {
   return typesShownOneByOne.includes(getItemDataType(column));
 }
 
+/** The column of one of the array's values, for a cell of it to show */
+function getItemColumnFabric(
+  componentFactoryMap: ComponentFactoryMap,
+  column: ArrayLikeColumn,
+) {
+  const itemDbType = column.type_options?.item_type ?? 'string';
+  const itemColumn = {
+    type: itemDbType,
+    type_options: null,
+    metadata: column.metadata,
+  };
+  const cellInfo = getCellInfo(itemDbType, column.metadata);
+  return {
+    id: `${itemDbType}-item`,
+    column: itemColumn,
+    cellComponentAndProps: componentFactoryMap[getItemDataType(column)].get(
+      itemColumn,
+      getCellConfiguration(itemDbType, cellInfo),
+    ),
+  };
+}
+
 function makeDisplayFormatter(
   componentFactoryMap: ComponentFactoryMap,
   column: ArrayLikeColumn,
@@ -139,10 +161,7 @@ export default function arrayType(
         return {
           component: ArrayButtonCell,
           props: {
-            formatElementForDisplay: makeDisplayFormatter(
-              componentFactoryMap,
-              column,
-            ),
+            itemColumnFabric: getItemColumnFabric(componentFactoryMap, column),
           },
         };
       }
@@ -150,22 +169,10 @@ export default function arrayType(
     },
     getInput: (column: ArrayLikeColumn): ComponentAndProps => {
       if (hasValuesShownOneByOne(column)) {
-        const itemDbType = column.type_options?.item_type ?? 'string';
-        const itemColumn = {
-          type: itemDbType,
-          type_options: null,
-          metadata: column.metadata,
-        };
-        const itemCellInfo = getCellInfo(itemDbType, column.metadata);
-        const itemFactory = componentFactoryMap[getItemDataType(column)];
         return {
           component: ArrayElements,
           props: {
-            componentAndProps: itemFactory.getInput(
-              itemColumn,
-              getCellConfiguration(itemDbType, itemCellInfo),
-            ),
-            initialValue: itemFactory.initialInputValue,
+            itemColumnFabric: getItemColumnFabric(componentFactoryMap, column),
           },
         };
       }

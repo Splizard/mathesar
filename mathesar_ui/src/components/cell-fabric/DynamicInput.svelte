@@ -26,6 +26,8 @@ during Sheet component creation.
     setRecordSummary?: (recordId: string, recordSummary: string) => void;
     fileManifest?: FileManifest;
     setFileManifest?: (mash: string, manifest: FileManifest) => void;
+    /** The file one value of an array of files refers to */
+    getFileManifest?: (value: unknown) => FileManifest | undefined;
     fileRequestParams?: FileAttachmentRequestParams;
     allowsHyperlinks?: boolean;
   }

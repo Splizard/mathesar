@@ -2,28 +2,27 @@
 @component
 
 An array whose values can't be shown as text, such as an array of booleans or
-of files. It shows them, with a button to edit them in the cell inspector.
+of files. It shows each of them in a cell of the type of the array's items, with
+a button to edit them in the cell inspector.
 -->
 <script lang="ts">
   import { createEventDispatcher } from 'svelte';
   import { _ } from 'svelte-i18n';
 
+  import type { FileManifest } from '@mathesar/api/rpc/records';
+  import CellFabric from '@mathesar/components/cell-fabric/CellFabric.svelte';
+  import type { CellColumnFabric } from '@mathesar/components/cell-fabric/types';
   import CellValue from '@mathesar/components/CellValue.svelte';
-  import Null from '@mathesar/components/Null.svelte';
   import { iconMoreActions } from '@mathesar/icons';
   import { showTableInspectorTab } from '@mathesar/stores/tableInspector';
-  import {
-    Button,
-    Icon,
-    Truncate,
-    isDefinedNonNullable,
-  } from '@mathesar-component-library';
+  import { Button, Icon } from '@mathesar-component-library';
 
   import CellWrapper from '../CellWrapper.svelte';
-  import type { CellTypeProps, CellValueFormatter } from '../typeDefinitions';
+  import type { CellTypeProps } from '../typeDefinitions';
 
   type $$Props = CellTypeProps<unknown[]> & {
-    formatElementForDisplay: CellValueFormatter<unknown>;
+    itemColumnFabric: CellColumnFabric;
+    getFileManifest?: (value: unknown) => FileManifest | undefined;
   };
 
   const dispatch = createEventDispatcher();
@@ -32,7 +31,9 @@ of files. It shows them, with a button to edit them in the cell inspector.
   export let value: $$Props['value'] = undefined;
   export let disabled: $$Props['disabled'];
   export let isIndependentOfSheet: $$Props['isIndependentOfSheet'];
-  export let formatElementForDisplay: $$Props['formatElementForDisplay'];
+  /** The column of one value, of the type of the array's items */
+  export let itemColumnFabric: $$Props['itemColumnFabric'];
+  export let getFileManifest: $$Props['getFileManifest'] = undefined;
 
   function handleWrapperKeyDown(e: KeyboardEvent) {
     switch (e.key) {
@@ -61,17 +62,16 @@ of files. It shows them, with a button to edit them in the cell inspector.
 >
   <div class="array-button-cell">
     <CellValue {value}>
-      {#if isDefinedNonNullable(value)}
+      {#if Array.isArray(value)}
         <div class="values">
-          {#each value as entry}
-            <span class="token">
-              {#if entry === null}
-                <Null />
-              {:else}
-                <Truncate>
-                  {formatElementForDisplay(entry)}
-                </Truncate>
-              {/if}
+          {#each value as element}
+            <span class="value">
+              <CellFabric
+                columnFabric={itemColumnFabric}
+                value={element}
+                disabled={true}
+                fileManifest={getFileManifest?.(element)}
+              />
             </span>
           {/each}
         </div>
@@ -106,16 +106,18 @@ of files. It shows them, with a button to edit them in the cell inspector.
     display: flex;
     flex-direction: row;
     flex-wrap: nowrap;
+    align-items: center;
     gap: var(--sm4);
     overflow: hidden;
   }
-  .token {
-    padding: 0 var(--sm3);
-    border-radius: var(--border-radius-l);
-    white-space: nowrap;
-    color: var(--color-fg-base);
-    background-color: var(--color-bg-token);
-    border: 1px solid var(--color-border-token);
+  .value {
+    display: flex;
+    align-items: center;
+    max-width: 12em;
+    padding: 0 var(--sm4);
+    border-radius: var(--border-radius-m);
+    border: 1px solid var(--color-border-base);
+    background: var(--color-bg-base);
   }
   .edit {
     margin-left: auto;

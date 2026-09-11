@@ -141,13 +141,15 @@ def get_download_links(request, results):
     Return links to the files in the results, keyed by column and then by HMAC.
 
     Files are recognised by their values alone, which only mathesar_types.file
-    columns produce.
+    columns produce, whether the column holds one file or an array of them.
     """
     files_by_column = {}
     for result in results:
         for column, value in result.items():
-            if is_file_value(value):
-                files_by_column.setdefault(column, []).append(value)
+            # A column of an array of files holds them in a list
+            values = value if isinstance(value, list) else [value]
+            for file in filter(is_file_value, values):
+                files_by_column.setdefault(column, []).append(file)
     return {
         column: get_links_details(
             request, sync_links(request.session.session_key, files)

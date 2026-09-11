@@ -5982,31 +5982,13 @@ $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
-msar.build_array_literal(val jsonb) RETURNS text AS $$/*
-Return the Postgres array literal of the given JSON array, holding each of its values as its text.
-
-Args:
-  val: A JSON array.
-*/
-SELECT '{' || COALESCE(
-  string_agg(
-    CASE WHEN jsonb_typeof(element) = 'null' THEN 'NULL'
-    ELSE '"' || replace(replace(element #>> '{}', '\', '\\'), '"', '\"') || '"' END,
-    ',' ORDER BY position
-  ),
-  ''
-) || '}'
-FROM jsonb_array_elements(val) WITH ORDINALITY AS elements(element, position);
-$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
-
-
-CREATE OR REPLACE FUNCTION
 msar.build_value_expr(typ_id regtype, val jsonb) RETURNS text AS $$/*
 Return an SQL expression giving a JSON value to write to a column of the given type.
 
 A JSON object written to a column of a composite type fills the fields named by its keys, and a
-JSON array written to a column of an array type holds its values. Any other value is given as its
-text (a JSON string without its quotes), which Postgres then casts to the column's type.
+JSON array written to a column of an array type holds its values, each of them written as one of
+the array's items. Any other value is given as its text (a JSON string without its quotes), which
+Postgres then casts to the column's type.
 
 Args:
   typ_id: The type of the column the value is for.
@@ -6016,7 +5998,18 @@ SELECT CASE
   WHEN jsonb_typeof(val) = 'object' AND (SELECT typtype FROM pg_catalog.pg_type WHERE oid = typ_id) = 'c'
     THEN format('jsonb_populate_record(NULL::%s, %L)', typ_id, val)
   WHEN jsonb_typeof(val) = 'array' AND (SELECT typcategory FROM pg_catalog.pg_type WHERE oid = typ_id) = 'A'
-    THEN quote_literal(msar.build_array_literal(val))
+    THEN format(
+      'ARRAY[%s]::%s',
+      COALESCE(
+        (
+          SELECT string_agg(msar.build_value_expr(item_typ_id, item), ', ' ORDER BY position)
+          FROM jsonb_array_elements(val) WITH ORDINALITY AS items(item, position),
+            LATERAL (SELECT typelem FROM pg_catalog.pg_type WHERE oid = typ_id) AS item_typ(item_typ_id)
+        ),
+        ''
+      ),
+      typ_id
+    )
   ELSE quote_nullable(val #>> '{}')
 END;
 $$ LANGUAGE SQL STABLE;
