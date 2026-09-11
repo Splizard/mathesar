@@ -51,6 +51,19 @@ def test_alter_columns_in_table_basic():
         assert json.loads(mock_exec.call_args.args[3]) == expect_json_arg
 
 
+def test_alter_columns_in_table_dynamic_default():
+    with patch.object(connection, 'exec_msar_func') as mock_exec:
+        columns.alter_columns_in_table(
+            123,
+            [{"id": 4, "default": {"value": "now()", "is_dynamic": True}}],
+            'conn'
+        )
+        expect_json_arg = [
+            {"attnum": 4, "default": "now()", "default_is_dynamic": True}
+        ]
+        assert json.loads(mock_exec.call_args.args[3]) == expect_json_arg
+
+
 @pytest.mark.parametrize(
     "in_name,out_name", [("test1", "test1"), ("", None), (None, None)]
 )

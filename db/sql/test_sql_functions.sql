@@ -2324,6 +2324,33 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_alter_columns_sets_dynamic_defaults() RETURNS SETOF TEXT AS $f$
+DECLARE
+  col_alters_jsonb jsonb := $j$[
+    {"attnum": 4, "type": {"name": "date"}, "default": "current_date", "default_is_dynamic": true},
+    {"attnum": 6, "default": "LOCALTIMESTAMP", "default_is_dynamic": true}
+  ]$j$;
+BEGIN
+  PERFORM __setup_column_alter();
+  RETURN NEXT is(
+    msar.alter_columns('test_schema.col_alters'::regclass::oid, col_alters_jsonb),
+    ARRAY[4, 6]
+  );
+  RETURN NEXT col_default_is('test_schema', 'col_alters', 'Col sp', 'CURRENT_DATE', 'default should be CURRENT_DATE');
+  RETURN NEXT col_default_is('test_schema', 'col_alters', 'coltim', 'LOCALTIMESTAMP', 'default should be LOCALTIMESTAMP');
+  RETURN NEXT is(msar.is_default_possibly_dynamic('test_schema.col_alters'::regclass, 6), true);
+  RETURN NEXT throws_ok(
+    $$SELECT msar.alter_columns(
+      'test_schema.col_alters'::regclass::oid,
+      '[{"attnum": 6, "default": "now() + interval ''1 day''", "default_is_dynamic": true}]'
+    )$$,
+    'P0001',
+    'Unsupported dynamic default: now() + interval ''1 day'''
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_alter_columns_combo() RETURNS SETOF TEXT AS $f$
 DECLARE
   col_alters_jsonb jsonb := $j$[

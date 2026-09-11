@@ -70,6 +70,10 @@ class ColumnDefault(TypedDict):
     """
     A dictionary describing the default value for a column.
 
+    When setting a default, `is_dynamic: true` means `value` is an SQL
+    expression rather than a literal. Only the expressions giving the
+    current date and/or time are accepted, e.g. `now()` or `CURRENT_DATE`.
+
     Attributes:
         value: An SQL expression giving the default value.
         is_dynamic: Whether the `value` is possibly dynamic.

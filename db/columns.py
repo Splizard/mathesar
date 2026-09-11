@@ -81,7 +81,7 @@ def _transform_column_alter_dict(data):
         "cast_options": <dict>,
         "type_options": <dict>,
         "nullable": <bool>,
-        "default": {"value": <any>}
+        "default": {"value": <any>, "is_dynamic": <bool>}
         "description": <str>
     }
 
@@ -93,6 +93,7 @@ def _transform_column_alter_dict(data):
         "name": <str>,
         "not_null": <bool>,
         "default": <any>,
+        "default_is_dynamic": <bool>,
         "description": <str>
     }
 
@@ -121,6 +122,8 @@ def _transform_column_alter_dict(data):
         alter_def.update(default=None)
     elif "value" in default_dict:
         alter_def.update(default=default_dict["value"])
+        if default_dict.get("is_dynamic"):
+            alter_def.update(default_is_dynamic=True)
 
     return alter_def
 

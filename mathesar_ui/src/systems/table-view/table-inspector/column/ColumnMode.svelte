@@ -26,6 +26,7 @@
   import ColumnOptions from './ColumnOptions.svelte';
   import ColumnType from './ColumnType.svelte';
   import ColumnTypeSpecifierTag from './ColumnTypeSpecifierTag.svelte';
+  import { canSetDefaultValue } from './defaultValueOptions';
   import JoinedColumnTooltipContent from './JoinedColumnTooltipContent.svelte';
   import SetDefaultValue from './SetDefaultValue.svelte';
 
@@ -140,7 +141,7 @@
     </InspectorSection>
   {/if}
 
-  {#if !isView && column && !column.column.default?.is_dynamic}
+  {#if !isView && column && canSetDefaultValue(column)}
     <InspectorSection
       title={$_('default_value')}
       bind:isOpen={$tableInspectorColumnDefaultValueVisible}

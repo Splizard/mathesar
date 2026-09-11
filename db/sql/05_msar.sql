@@ -3724,6 +3724,47 @@ $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
+msar.set_col_dynamic_default(tab_id regclass, col_id smallint, default_ text) RETURNS text AS $$/*
+Sets a dynamic default for a given column, returning the text of the expression executed.
+
+The default is written into the column definition as an SQL expression rather than a literal, so
+only the expressions giving the current date and/or time are accepted (case-insensitively): now(),
+CURRENT_TIMESTAMP, LOCALTIMESTAMP, CURRENT_DATE, CURRENT_TIME, and LOCALTIME.
+
+Args:
+  tab_id: The OID of the table containing the column whose default we'll alter.
+  col_id: The attnum of the column whose default we'll alter.
+  default_: The desired default expression.
+*/
+DECLARE
+  default_expr text;
+  col_default_sql text;
+BEGIN
+  default_expr := CASE lower(btrim(default_))
+    WHEN 'now()' THEN 'now()'
+    WHEN 'current_timestamp' THEN 'CURRENT_TIMESTAMP'
+    WHEN 'localtimestamp' THEN 'LOCALTIMESTAMP'
+    WHEN 'current_date' THEN 'CURRENT_DATE'
+    WHEN 'current_time' THEN 'CURRENT_TIME'
+    WHEN 'localtime' THEN 'LOCALTIME'
+  END;
+  IF default_expr IS NULL THEN
+    RAISE EXCEPTION 'Unsupported dynamic default: %', default_;
+  END IF;
+  SELECT format(
+    'ALTER TABLE %I.%I ALTER COLUMN %I SET DEFAULT %s',
+    msar.get_relation_schema_name(tab_id),
+    msar.get_relation_name(tab_id),
+    msar.get_column_name(tab_id, col_id),
+    default_expr
+  ) INTO col_default_sql;
+  EXECUTE col_default_sql;
+  RETURN col_default_sql;
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
 msar.set_old_col_default(
   tab_id regclass,
   col_id smallint,
@@ -3808,6 +3849,7 @@ The col_alters JSONB should have the form:
     "attnum": <int>,
     "type": <obj> (optional),
     "default": <any> (optional),
+    "default_is_dynamic": <bool> (optional),
     "not_null": <bool> (optional),
     "delete": <bool> (optional),
     "name": <str> (optional),
@@ -3817,6 +3859,9 @@ The col_alters JSONB should have the form:
   },
   ...
 ]
+
+If "default_is_dynamic" is true, "default" is an SQL expression rather than a literal value; see
+msar.set_col_dynamic_default for the accepted expressions.
 
 Note that for all alterations, we create and execute separate SQL queries rather than combining them
 into a giant SQL statement. This has the benefit of providing better error messages(for users)
@@ -3837,6 +3882,7 @@ BEGIN
       COALESCE((col_alter_obj -> 'cast_options')::jsonb, '{}'::jsonb) AS cast_options,
       pg_catalog.pg_get_expr(adbin, tab_id) AS old_default,
       col_alter_obj -> 'default' AS new_default,
+      COALESCE((col_alter_obj -> 'default_is_dynamic')::boolean, false) AS new_default_is_dynamic,
 
       col_alter_obj->>'description' AS comment_,
       __msar.jsonb_key_exists(col_alter_obj, 'description') AS has_comment
@@ -3866,7 +3912,11 @@ BEGIN
     PERFORM msar.retype_column(tab_id, col.attnum, col.new_type, col.cast_options);
     IF col.new_default #>> '{}' IS NOT NULL THEN
       -- set new default
-      PERFORM msar.set_col_default(tab_id, col.attnum, col.new_default #>> '{}');
+      IF col.new_default_is_dynamic THEN
+        PERFORM msar.set_col_dynamic_default(tab_id, col.attnum, col.new_default #>> '{}');
+      ELSE
+        PERFORM msar.set_col_default(tab_id, col.attnum, col.new_default #>> '{}');
+      END IF;
     ELSEIF (col.new_default IS NULL OR jsonb_typeof(col.new_default)<>'null') AND col.new_type IS NOT NULL THEN
       -- preserve old default
       -- when a new_default is absent and col is retyped with a new_type.

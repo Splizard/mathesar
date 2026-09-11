@@ -30,7 +30,11 @@
   $: options = getDefaultValueOptions(column);
   $: initialDefaultMode = options.initialMode;
 
-  $: initialValue = column.column.default?.value ?? column.initialInputValue;
+  // A dynamic default is an SQL expression rather than a value to edit
+  $: initialValue =
+    column.column.default && !column.column.default.is_dynamic
+      ? column.column.default.value
+      : column.initialInputValue;
 
   // Track column ID to reset when column changes
   let previousColumnId = column.id;
@@ -80,17 +84,13 @@
   async function save() {
     typeChangeState = { state: 'processing' };
     try {
-      const defaultRequest = isDefaultNull
-        ? null
-        : {
-            // For user type columns, the default is always static (a user ID)
-            // For other types, preserve existing is_dynamic setting
-            is_dynamic:
-              defaultMode === 'set_default_user'
-                ? false
-                : !!column.column.default?.is_dynamic,
-            value: String(value),
-          };
+      const defaultRequest = (() => {
+        if (isDefaultNull) return null;
+        if (defaultMode === 'current_time' && options.currentTimeExpression) {
+          return { is_dynamic: true, value: options.currentTimeExpression };
+        }
+        return { is_dynamic: false, value: String(value) };
+      })();
       await columnsDataStore.patch({
         id: column.column.id,
         default: defaultRequest,
@@ -138,6 +138,16 @@
       {disabled}
     />
   </LabeledInput>
+  {#if options.availableModes.includes('current_time') && options.currentTimeLabel}
+    <LabeledInput layout="inline-input-first">
+      <span slot="label">{$_(options.currentTimeLabel)}</span>
+      <Radio
+        checked={defaultMode === 'current_time'}
+        on:change={() => setDefaultMode('current_time')}
+        {disabled}
+      />
+    </LabeledInput>
+  {/if}
   {#if options.availableModes.includes('set_default_user')}
     <LabeledInput layout="inline-input-first">
       <span slot="label">{$_(options.customValueLabel)}</span>
