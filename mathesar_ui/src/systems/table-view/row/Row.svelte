@@ -192,7 +192,9 @@
                 on:click={(e) => handleRecordLinkClick(e, record?.[columnId])}
                 on:contextmenu|stopPropagation
               >
-                <Icon {...iconModalRecordView} />
+                <span class="link-icon">
+                  <Icon {...iconModalRecordView} />
+                </span>
               </a>
             {:else if plain.display === null}
               <span class="postgres-keyword">NULL</span>
@@ -322,14 +324,18 @@
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      // As in `RecordHyperlink` and `PrimaryKeyCell`
       .record-link {
         display: inline-grid;
         align-items: center;
         justify-content: center;
+        color: var(--color-fg-base);
+      }
+      .link-icon {
         padding: 0 var(--sm4);
         color: var(--color-fg-link);
       }
-      .record-link:hover {
+      .link-icon:hover {
         color: var(--color-fg-link-hover);
       }
     }
