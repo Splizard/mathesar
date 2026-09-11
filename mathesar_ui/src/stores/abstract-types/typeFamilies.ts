@@ -142,15 +142,6 @@ export function getTypeFamily(abstractType: Pick<AbstractType, 'identifier'>) {
 }
 
 /**
- * What a type is called as a kind of its family: its name, except where that
- * would read as the family itself.
- */
-export function getKindName(abstractType: AbstractType): string {
-  if (abstractType.identifier === t.Time) return 'Time of Day';
-  return abstractType.name;
-}
-
-/**
  * Group types by family, keeping the families' order and each family's order
  * of its types.
  */

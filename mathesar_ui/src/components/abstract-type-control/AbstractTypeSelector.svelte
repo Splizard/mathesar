@@ -4,7 +4,6 @@
 
   import {
     getAllowedAbstractTypesForDbTypeAndItsTargetTypes,
-    getKindName,
     getTypeFamily,
     groupByFamily,
     isAbstractTypeDisabled,
@@ -127,7 +126,7 @@
     <Select
       options={selectedGroup.members}
       value={selectedAbstractType}
-      getLabel={(entry) => (entry ? getKindName(entry) : '')}
+      getLabel={(entry) => entry?.name ?? ''}
       autoSelect="none"
       isOptionDisabled={(t) => isOptionDisabled(t)}
       on:change={(e) => selectAbstractType(e.detail)}
@@ -135,7 +134,7 @@
       {disabled}
     >
       {#if option}
-        <AbstractTypeName abstractType={option} label={getKindName(option)} />
+        <AbstractTypeName abstractType={option} />
       {/if}
     </Select>
   </LabeledInput>

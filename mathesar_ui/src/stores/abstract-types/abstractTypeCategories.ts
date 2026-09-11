@@ -234,7 +234,7 @@ const typesResponse: AbstractTypeResponse[] = [
   },
   {
     identifier: 'time',
-    name: 'Time',
+    name: 'Time of Day',
     db_types: [DB_TYPES.TIME_WITH_TZ, DB_TYPES.TIME_WITHOUT_TZ],
   },
   {

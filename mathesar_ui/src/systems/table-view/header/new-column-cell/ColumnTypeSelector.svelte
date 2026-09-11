@@ -5,7 +5,6 @@
   import {
     defaultAbstractType,
     getAllowedAbstractTypesForNewColumn,
-    getKindName,
     getTypeFamily,
     groupByFamily,
     isAbstractTypeDisabled,
@@ -59,7 +58,7 @@
     <Select
       options={selectedGroup.members}
       {value}
-      getLabel={(entry) => (entry ? getKindName(entry) : '')}
+      getLabel={(entry) => entry?.name ?? ''}
       autoSelect="none"
       isOptionDisabled={(t) => (t ? isAbstractTypeDisabled(t) : false)}
       on:change={(e) => {
@@ -71,7 +70,7 @@
       {disabled}
     >
       {#if option}
-        <AbstractTypeName abstractType={option} label={getKindName(option)} />
+        <AbstractTypeName abstractType={option} />
       {/if}
     </Select>
   </div>

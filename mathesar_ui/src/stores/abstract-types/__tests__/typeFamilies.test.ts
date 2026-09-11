@@ -7,12 +7,7 @@ import {
   getAllowedAbstractTypesForNewColumn,
 } from '../abstractTypeCategories';
 import { DB_TYPES } from '../dbTypes';
-import {
-  getKindName,
-  getTypeFamily,
-  groupByFamily,
-  typeFamilies,
-} from '../typeFamilies';
+import { getTypeFamily, groupByFamily, typeFamilies } from '../typeFamilies';
 
 vi.mock('svelte-i18n', () => {
   const translate = (s: string) => s;
@@ -65,7 +60,7 @@ describe('type families', () => {
     expect(names.slice(0, 3)).toEqual(['Text', 'Number', 'Time']);
     expect(names).not.toContain('Other');
     const time = groups.find((g) => g.family.name === 'Time');
-    expect(time?.members.map(getKindName)).toEqual([
+    expect(time?.members.map((m) => m.name)).toEqual([
       'Date & Time',
       'Date',
       'Time of Day',

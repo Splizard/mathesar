@@ -18,9 +18,4 @@ export {
 } from './operations/filtering';
 export { getPreprocFunctionsForAbstractType } from './operations/preprocFunctions';
 export { getSummarizationFunctionsForAbstractType } from './operations/summarization';
-export {
-  type TypeFamily,
-  getKindName,
-  getTypeFamily,
-  groupByFamily,
-} from './typeFamilies';
+export { type TypeFamily, getTypeFamily, groupByFamily } from './typeFamilies';
