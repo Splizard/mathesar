@@ -1,6 +1,5 @@
 <script lang="ts">
   import { map } from 'iter-tools';
-  import type { ComponentProps } from 'svelte';
   import { get } from 'svelte/store';
   import { _ } from 'svelte-i18n';
 
@@ -22,6 +21,7 @@
     getTabularDataStoreFromContext,
     isJoinedColumn,
   } from '@mathesar/stores/table-data';
+  import { tableInspectorTab } from '@mathesar/stores/tableInspector';
   import { toast } from '@mathesar/stores/toast';
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
 
@@ -47,9 +47,6 @@
   export let table: Table;
   export let sheetElement: HTMLElement | undefined = undefined;
 
-  let tableInspectorTab: ComponentProps<WithTableInspector>['activeTabId'] =
-    'table';
-
   $: ({ currentRoleOwns } = table.currentAccess);
   $: usesVirtualList = context !== 'widget';
   $: sheetHasBorder = context === 'widget';
@@ -63,7 +60,7 @@
     displayedColumns,
     columnsDataStore,
   } = $tabularData);
-  $: $tabularData, (tableInspectorTab = 'table');
+  $: $tabularData, ($tableInspectorTab = 'table');
   $: clipboardHandler = new SheetClipboardHandler({
     copyingContext: {
       getRows: () =>
@@ -152,7 +149,7 @@
     {context}
     {table}
     {showTableInspector}
-    bind:activeTabId={tableInspectorTab}
+    bind:activeTabId={$tableInspectorTab}
   >
     <div class="sheet-area">
       {#if $processedColumns.size}
@@ -164,10 +161,10 @@
           {persistColumnWidths}
           onCellSelectionStart={(cell) => {
             if (cell.type === 'column-header-cell') {
-              tableInspectorTab = 'column';
+              $tableInspectorTab = 'column';
             }
             if (cell.type === 'row-header-cell') {
-              tableInspectorTab = 'record';
+              $tableInspectorTab = 'record';
             }
           }}
           onCellContextMenu={({

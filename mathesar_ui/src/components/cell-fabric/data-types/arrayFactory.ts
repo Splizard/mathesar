@@ -9,12 +9,13 @@ import {
 } from '@mathesar-component-library';
 import type {
   ComponentAndProps,
-  FormattedInputProps,
   InputFormatter,
   ParseResult,
 } from '@mathesar-component-library/types';
 
+import ArrayButtonCell from './components/array/ArrayButtonCell.svelte';
 import { formatArray, parseArray } from './components/array/arrayCsv';
+import ArrayElements from './components/array/ArrayElements.svelte';
 import FormattedInputCell from './components/formatted-input/FormattedInputCell.svelte';
 import type { FormattedInputCellExternalProps } from './components/typeDefinitions';
 import type {
@@ -33,6 +34,30 @@ export interface ArrayLikeColumn extends CellColumnLike {
 
 type ComponentFactoryMap = Record<SimpleCellDataTypes, CellComponentFactory>;
 
+/**
+ * The types whose values can't be written as text, so are shown and edited one
+ * by one, rather than as the values of the array separated by its delimiter.
+ */
+const typesShownOneByOne: SimpleCellDataTypes[] = [
+  'boolean',
+  'composite',
+  'enum',
+  'file',
+];
+
+function getItemDataType(column: ArrayLikeColumn): SimpleCellDataTypes {
+  const cellInfo = getCellInfo(
+    column.type_options?.item_type ?? 'string',
+    column.metadata,
+  );
+  const dataType = cellInfo?.type ?? 'string';
+  return dataType === 'array' ? 'string' : dataType;
+}
+
+export function hasValuesShownOneByOne(column: ArrayLikeColumn): boolean {
+  return typesShownOneByOne.includes(getItemDataType(column));
+}
+
 function makeDisplayFormatter(
   componentFactoryMap: ComponentFactoryMap,
   column: ArrayLikeColumn,
@@ -40,9 +65,7 @@ function makeDisplayFormatter(
   const itemDbType = column.type_options?.item_type ?? 'string';
   const cellInfo = getCellInfo(itemDbType, column.metadata);
   const config = getCellConfiguration(itemDbType, cellInfo);
-  const elementDataType =
-    !cellInfo || cellInfo.type === 'array' ? 'string' : cellInfo.type;
-  const elementCellFactory = componentFactoryMap[elementDataType];
+  const elementCellFactory = componentFactoryMap[getItemDataType(column)];
   return (cellValue: unknown): string => {
     if (!isDefinedNonNullable(cellValue)) {
       return String(cellValue);
@@ -111,18 +134,43 @@ export default function arrayType(
   }
 
   return {
-    get: (
-      column: ArrayLikeColumn,
-    ): ComponentAndProps<FormattedInputCellExternalProps<unknown[]>> => ({
-      component: FormattedInputCell,
-      props: getProps(column),
-    }),
-    getInput: (
-      column: ArrayLikeColumn,
-    ): ComponentAndProps<FormattedInputProps<unknown[]>> => ({
-      component: FormattedInput,
-      props: getProps(column),
-    }),
+    get: (column: ArrayLikeColumn): ComponentAndProps => {
+      if (hasValuesShownOneByOne(column)) {
+        return {
+          component: ArrayButtonCell,
+          props: {
+            formatElementForDisplay: makeDisplayFormatter(
+              componentFactoryMap,
+              column,
+            ),
+          },
+        };
+      }
+      return { component: FormattedInputCell, props: getProps(column) };
+    },
+    getInput: (column: ArrayLikeColumn): ComponentAndProps => {
+      if (hasValuesShownOneByOne(column)) {
+        const itemDbType = column.type_options?.item_type ?? 'string';
+        const itemColumn = {
+          type: itemDbType,
+          type_options: null,
+          metadata: column.metadata,
+        };
+        const itemCellInfo = getCellInfo(itemDbType, column.metadata);
+        const itemFactory = componentFactoryMap[getItemDataType(column)];
+        return {
+          component: ArrayElements,
+          props: {
+            componentAndProps: itemFactory.getInput(
+              itemColumn,
+              getCellConfiguration(itemDbType, itemCellInfo),
+            ),
+            initialValue: itemFactory.initialInputValue,
+          },
+        };
+      }
+      return { component: FormattedInput, props: getProps(column) };
+    },
     getDisplayFormatter: (column: ArrayLikeColumn) => {
       const { formatForDisplay } = getProps(column);
       return (value: unknown) =>

@@ -1,3 +1,4 @@
+import { hasValuesShownOneByOne } from '../../../arrayFactory';
 import { formatArray, parseArray } from '../arrayCsv';
 
 describe('arrays as text', () => {
@@ -49,5 +50,27 @@ describe('arrays as text', () => {
     expect(formatArray([1000, 2000], ',', (v) => `${Number(v) / 1000}k`)).toBe(
       '1k,2k',
     );
+  });
+});
+
+describe("arrays of values that text can't show", () => {
+  const column = (itemType: string) => ({
+    type: '_array',
+    type_options: { item_type: itemType },
+    metadata: null,
+  });
+
+  test('are shown one value at a time', () => {
+    expect(hasValuesShownOneByOne(column('boolean'))).toBe(true);
+    expect(hasValuesShownOneByOne(column('mathesar_types.file'))).toBe(true);
+    expect(hasValuesShownOneByOne(column('_enum'))).toBe(true);
+    expect(hasValuesShownOneByOne(column('_composite'))).toBe(true);
+  });
+
+  test('are otherwise shown as text', () => {
+    expect(hasValuesShownOneByOne(column('text'))).toBe(false);
+    expect(hasValuesShownOneByOne(column('integer'))).toBe(false);
+    expect(hasValuesShownOneByOne(column('date'))).toBe(false);
+    expect(hasValuesShownOneByOne(column('uuid'))).toBe(false);
   });
 });

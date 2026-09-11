@@ -33,6 +33,8 @@ Having chosen a kind, you can also choose for the column to hold **ranges** of i
 
 - **Range**: a range of values, such as from 1 to 10, as a PostgreSQL [range](https://www.postgresql.org/docs/17/rangetypes.html). Integer, Decimal, Date & Time, and Date columns can hold ranges, as `int4range` or `int8range`, `numrange`, `tsrange` or `tstzrange`, and `daterange`. Ranges are shown and edited as PostgreSQL writes them (e.g. `[1,10)`).
 - **Array**: a list of values, as a PostgreSQL [array](https://www.postgresql.org/docs/17/arrays.html) of the kind's type, such as `integer[]`. An array's values are shown and edited as text, separated by the column's **delimiter**, a comma by default, which you can change under Formatting in the column inspector. A backslash escapes the delimiter within a value, as it does a backslash, and a value written as `\N` is NULL. So with the default delimiter, `red,two\, and a half,\N` is three values, the second holding a comma and the third NULL.
+
+    The values of a Boolean, Choice, File, or Composite array can't be written as text, so its cells show them with a **…** button, which opens the column's values in the **Cell** section of the inspector. There each value has its own input, to change, remove, or add to, and the changes are saved together. The Cell section edits the values of any array that way, whichever its kind.
 - **Range** and **Array**: any number of ranges that don't overlap, as a PostgreSQL multirange, such as `int4multirange`.
 
 Mathesar can change a column of values to ranges of them (each value becoming the range of just it), and between ranges and multiranges: a multirange becomes a range only if it has no gaps. It can't change columns to or from arrays.
