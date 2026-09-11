@@ -1,5 +1,8 @@
 <script lang="ts">
+  import { States } from '@mathesar/api/rest/utils/requestUtils';
   import { SheetRow, SheetRowHeaderCell } from '@mathesar/components/sheet';
+  import { makeCellId } from '@mathesar/components/sheet/cellIds';
+  import { getSheetContext } from '@mathesar/components/sheet/utils';
   import { ROW_HEIGHT_PX } from '@mathesar/geometry';
   import {
     type DisplayRowDescriptor,
@@ -10,6 +13,7 @@
     getTabularDataStoreFromContext,
     isGroupHeaderRow,
     isHelpTextRow,
+    isPersistedRecordRow,
     isPlaceholderRecordRow,
     isRecordRow,
   } from '@mathesar/stores/table-data';
@@ -17,8 +21,11 @@
 
   import GroupHeader from './GroupHeader.svelte';
   import NewRecordMessage from './NewRecordMessage.svelte';
+  import { getPlainCell } from './plainCell';
   import RowCell from './RowCell.svelte';
   import RowControl from './RowControl.svelte';
+
+  const { columnStyleMap } = getSheetContext().stores;
 
   export let row: Row;
   export let rowDescriptor: DisplayRowDescriptor;
@@ -40,7 +47,12 @@
     cellModificationStatus,
     cellClientSideErrors,
   } = meta);
-  $: ({ grouping, linkedRecordSummaries, fileManifests } = recordsData);
+  $: ({
+    grouping,
+    linkedRecordSummaries,
+    fileManifests,
+    state: recordsDataState,
+  } = recordsData);
   $: isPlaceholderRow = isPlaceholderRecordRow(row);
   $: rowSelectionId = getRowSelectionId(row);
   $: creationStatus = $rowCreationStatus.get(row.identifier)?.state;
@@ -50,6 +62,17 @@
   $: hasWholeRowErrors = wholeRowState === 'failure';
   /** Including whole row errors and individual cell errors */
   $: hasAnyErrors = !!status?.errorsFromWholeRowAndCells?.length;
+  /**
+   * Idle cells of saved records render as plain elements (see `plainCell.ts`).
+   * Anything with its own state (drafts, saving, errors, loading skeletons,
+   * selected or active cells) uses the full `RowCell`.
+   */
+  $: record = isRecordRow(row) ? row.record : undefined;
+  $: usesPlainCells =
+    isPersistedRecordRow(row) &&
+    !hasWholeRowErrors &&
+    wholeRowState !== 'processing' &&
+    $recordsDataState !== States.Loading;
 
   async function handleRowHeaderMouseDown(e: MouseEvent) {
     if (!isPlaceholderRecordRow(row)) return;
@@ -106,18 +129,50 @@
       />
     {:else if isRecordRow(row)}
       {#each [...$displayedColumns] as [columnId, columnFabric] (columnId)}
-        <RowCell
-          {selection}
-          {row}
-          rowHasErrors={hasWholeRowErrors}
-          key={getCellKey(row.identifier, columnId)}
-          modificationStatusMap={cellModificationStatus}
-          clientSideErrorMap={cellClientSideErrors}
-          value={row.record[columnId]}
-          {columnFabric}
-          {recordsData}
-          canUpdateRecords={$canUpdateRecords}
-        />
+        {@const key = getCellKey(row.identifier, columnId)}
+        {@const cellId = makeCellId(rowSelectionId, columnFabric.id)}
+        {@const plain =
+          usesPlainCells &&
+          !$selection.cellIds.has(cellId) &&
+          !$cellModificationStatus.get(key) &&
+          !$cellClientSideErrors.get(key)?.length
+            ? getPlainCell(columnFabric, record?.[columnId], $canUpdateRecords)
+            : undefined}
+        {#if plain}
+          <div
+            class="plain-cell"
+            class:align-right={plain.alignRight}
+            class:tabular={plain.tabular}
+            class:disabled={plain.disabled}
+            data-sheet-element="data-cell"
+            data-sheet-row-type="data"
+            data-cell-selection-id={cellId}
+            style={$columnStyleMap.get(columnFabric.id)?.styleString}
+          >
+            <span class="value">
+              {#if plain.display === null}
+                <span class="postgres-keyword">NULL</span>
+              {:else if plain.display === undefined}
+                <span class="postgres-keyword">DEFAULT</span>
+              {:else}
+                {plain.display}
+              {/if}
+            </span>
+          </div>
+        {:else}
+          <RowCell
+            {selection}
+            {row}
+            rowHasErrors={hasWholeRowErrors}
+            {key}
+            modificationStatusMap={cellModificationStatus}
+            clientSideErrorMap={cellClientSideErrors}
+            value={row.record[columnId]}
+            {columnFabric}
+            {recordsData}
+            canUpdateRecords={$canUpdateRecords}
+          />
+        {/if}
       {/each}
     {:else if isHelpTextRow(row)}
       <NewRecordMessage columnCount={$processedColumns.size} />
@@ -138,6 +193,10 @@
       display: none;
     }
 
+    &:hover .plain-cell::after {
+      display: block;
+    }
+
     &.is-add-placeholder {
       // Hide the display of cell values like `NULL` and `DEFAULT` in the
       // placeholder row. (There is probably a cleaner way to do this via props
@@ -150,6 +209,66 @@
         ) {
         visibility: hidden;
       }
+    }
+  }
+
+  // Mirrors the idle appearance of SheetDataCell > CellFabric > CellWrapper.
+  .plain-cell {
+    position: absolute;
+    top: 0;
+    left: 0;
+    height: 100%;
+    padding: var(--sm4);
+    border-bottom: var(--cell-border-horizontal);
+    border-right: var(--cell-border-vertical);
+    background: var(--cell-bg-color-base);
+    line-height: 1.2;
+    user-select: none;
+    -webkit-user-select: none;
+
+    &.align-right {
+      text-align: right;
+    }
+    &.tabular {
+      font-variant-numeric: tabular-nums;
+    }
+
+    // Background layers, blended like `CellBackground`: column (disabled) and
+    // row hover.
+    &::before,
+    &::after {
+      content: '';
+      position: absolute;
+      inset: 0;
+      display: none;
+      pointer-events: none;
+      mix-blend-mode: var(--cell-bg-mix-blend-mode);
+    }
+    &.disabled::before {
+      display: block;
+      background-color: var(--cell-bg-color-disabled);
+    }
+    &::after {
+      background-color: var(
+        --cell-bg-color-row-hover,
+        var(--cell-bg-color-base)
+      );
+    }
+
+    .value {
+      display: block;
+      position: relative;
+      z-index: 1;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+
+    // Same as `.cell-wrapper .postgres-keyword` in App.svelte
+    .postgres-keyword {
+      color: var(--color-fg-faint);
+      font-weight: 300;
+      background: transparent;
     }
   }
 </style>
