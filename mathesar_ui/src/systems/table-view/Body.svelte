@@ -8,6 +8,7 @@
   } from '@mathesar/geometry';
   import {
     type DisplayRowDescriptor,
+    ID_ROW_CONTROL_COLUMN,
     type Row as RowType,
     getTabularDataStoreFromContext,
     isGroupHeaderRow,
@@ -69,6 +70,31 @@
     const row = $displayRowDescriptors?.[index].row;
     return row ? getItemSizeFromRow(row) : ROW_HEIGHT_PX;
   }
+
+  /**
+   * The empty grid drawn behind the rows assumes uniform row heights, so it's
+   * only used without grouping or other rows of a different height.
+   */
+  function getEmptyRowsGrid(
+    rowDescriptors: DisplayRowDescriptor[],
+    canInsert: boolean,
+  ) {
+    let rowCount = 0;
+    for (const { row } of rowDescriptors) {
+      if (getItemSizeFromRow(row) !== ROW_HEIGHT_PX) return undefined;
+      if (!isPlaceholderRecordRow(row) || canInsert) rowCount += 1;
+    }
+    return {
+      rowHeight: ROW_HEIGHT_PX,
+      rowCount,
+      rowHeaderColumnId: ID_ROW_CONTROL_COLUMN,
+    };
+  }
+
+  $: emptyRowsGrid = getEmptyRowsGrid(
+    $displayRowDescriptors,
+    $canInsertRecords,
+  );
 </script>
 
 {#key oid}
@@ -77,6 +103,7 @@
       itemCount={$displayRowDescriptors.length}
       paddingBottom={30}
       overscanScreens={1}
+      {emptyRowsGrid}
       itemSize={getItemSizeFromIndex}
       itemKey={(index) => getIterationKey(index, $displayRowDescriptors[index])}
       let:items
