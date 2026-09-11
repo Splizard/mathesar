@@ -25,7 +25,8 @@
    * rows, so that when a fast scroll outpaces rendering, the not-yet-rendered
    * area looks like the sheet instead of blank space. Only valid when all rows
    * have the same height. `columnBackgrounds` gives the background of columns
-   * whose cells have one (e.g. read-only columns), blended like the cells'.
+   * whose cells have one (e.g. read-only columns). They're painted directly
+   * on `--cell-bg-color-base`, which the cells' blend mode leaves unchanged.
    */
   export let emptyRowsGrid:
     | {
@@ -98,17 +99,12 @@
     const images = [
       columnLines(columnEdges),
       rowLines('var(--color-border-grid)'),
+      ...(fills ? [fills] : []),
     ];
-    const blendModes = ['normal', 'normal'];
-    if (fills) {
-      images.push(fills);
-      blendModes.push('var(--cell-bg-mix-blend-mode)');
-    }
     return {
       cells:
         `width:${width}px;height:${height}px;` +
-        `background-image:${images.join(',')};` +
-        `background-blend-mode:${blendModes.join(',')};`,
+        `background-image:${images.join(',')};`,
       rowHeader: header
         ? `width:${header.width}px;height:${height}px;` +
           'background-image:linear-gradient(to left, ' +

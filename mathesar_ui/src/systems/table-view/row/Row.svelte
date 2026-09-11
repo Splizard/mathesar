@@ -282,8 +282,11 @@
       font-variant-numeric: tabular-nums;
     }
 
-    // Background layers, blended like `CellBackground`: column (disabled) and
-    // row hover.
+    // Background layers like `CellBackground`: column (disabled) and row
+    // hover. The column layer lies directly on the base colour, which is
+    // black in the dark theme and white in the light one, where its blend
+    // mode (screen or multiply) would give the layer's own colour anyway.
+    // Not blending it is much cheaper for Chrome to rasterize.
     &::before,
     &::after {
       content: '';
@@ -292,13 +295,13 @@
       z-index: -1;
       display: none;
       pointer-events: none;
-      mix-blend-mode: var(--cell-bg-mix-blend-mode);
     }
     &.disabled::before {
       display: block;
       background-color: var(--cell-bg-color-disabled);
     }
     &::after {
+      mix-blend-mode: var(--cell-bg-mix-blend-mode);
       background-color: var(
         --cell-bg-color-row-hover,
         var(--cell-bg-color-base)
