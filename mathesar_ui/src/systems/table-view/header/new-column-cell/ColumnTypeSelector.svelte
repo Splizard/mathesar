@@ -33,25 +33,31 @@
   }
 </script>
 
-<SelectionList
-  options={groups}
-  getLabel={(group) => group?.family.name ?? ''}
-  value={selectedGroup}
-  on:change={(e) => selectGroup(e.detail)}
-  valuesAreEqual={(a, b) => a?.family === b?.family}
-  offsetOnFocus={2}
-  isOptionDisabled={(group) =>
-    group.members.every((m) => isAbstractTypeDisabled(m))}
-  {disabled}
-  let:option
->
-  <AbstractTypeName
-    abstractType={option.members[0]}
-    label={option.family.name}
-    icon={option.family.icon}
-    showHelp={option.members.length === 1}
-  />
-</SelectionList>
+<!--
+  This sits in a label, where clicking would also click the first button in it,
+  the kind select's, opening its menu.
+-->
+<div on:click|preventDefault>
+  <SelectionList
+    options={groups}
+    getLabel={(group) => group?.family.name ?? ''}
+    value={selectedGroup}
+    on:change={(e) => selectGroup(e.detail)}
+    valuesAreEqual={(a, b) => a?.family === b?.family}
+    offsetOnFocus={2}
+    isOptionDisabled={(group) =>
+      group.members.every((m) => isAbstractTypeDisabled(m))}
+    {disabled}
+    let:option
+  >
+    <AbstractTypeName
+      abstractType={option.members[0]}
+      label={option.family.name}
+      icon={option.family.icon}
+      showHelp={option.members.length === 1}
+    />
+  </SelectionList>
+</div>
 
 {#if selectedGroup && selectedGroup.members.length > 1}
   <div class="kind">
