@@ -1,6 +1,7 @@
 <script lang="ts">
   import { SheetVirtualRows } from '@mathesar/components/sheet';
   import { parseCellId } from '@mathesar/components/sheet/cellIds';
+  import { getSheetContext } from '@mathesar/components/sheet/utils';
   import {
     GROUP_HEADER_ROW_HEIGHT_PX,
     HELP_TEXT_ROW_HEIGHT_PX,
@@ -16,6 +17,7 @@
     isPlaceholderRecordRow,
   } from '@mathesar/stores/table-data';
 
+  import ColumnWindow from './ColumnWindow';
   import Row from './row/Row.svelte';
   import RowSlotAllocator from './RowSlotAllocator';
   import ScrollAndRowHeightHandler from './ScrollAndRowHeightHandler.svelte';
@@ -33,17 +35,22 @@
   // for another row.
   const rowSlots = new RowSlotAllocator();
 
-  function getActiveRowId(activeCellId: string | undefined) {
+  function parseActiveCellId(activeCellId: string | undefined) {
     if (!activeCellId) return undefined;
     try {
-      return parseCellId(activeCellId).rowId;
+      return parseCellId(activeCellId);
     } catch {
       return undefined;
     }
   }
 
-  $: activeRowId = getActiveRowId($selection.activeCellId);
+  $: activeCell = parseActiveCellId($selection.activeCellId);
+  $: activeRowId = activeCell?.rowId;
   $: isStatefulRow = (key: string | number) => key === activeRowId;
+
+  // Only render cells for columns in (or near) the horizontally visible area.
+  const { columnStyleMap, horizontalScrollOffset } = getSheetContext().stores;
+  const columnWindow = new ColumnWindow();
 
   function getItemSizeFromRow(row: RowType) {
     if (isHelpTextRow(row)) {
@@ -108,7 +115,14 @@
       itemKey={(index) => getIterationKey(index, $displayRowDescriptors[index])}
       let:items
       let:api
+      let:viewportWidth
     >
+      {@const renderedColumnIds = columnWindow.get(
+        $columnStyleMap,
+        $horizontalScrollOffset,
+        viewportWidth,
+        activeCell?.columnId,
+      )}
       <ScrollAndRowHeightHandler {api} />
       {#each rowSlots.assign(items, isStatefulRow) as item (item.slotKey)}
         {@const shouldRender = !(
@@ -120,6 +134,7 @@
             style={item.style}
             row={$displayRowDescriptors[item.index].row}
             rowDescriptor={$displayRowDescriptors[item.index]}
+            {renderedColumnIds}
           />
         {/if}
       {/each}

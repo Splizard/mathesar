@@ -30,6 +30,8 @@
   export let row: Row;
   export let rowDescriptor: DisplayRowDescriptor;
   export let style: { [key: string]: string | number };
+  /** Columns to render cells for; all when undefined */
+  export let renderedColumnIds: ReadonlySet<string> | undefined = undefined;
 
   const tabularData = getTabularDataStoreFromContext();
 
@@ -67,6 +69,10 @@
    * Anything with its own state (drafts, saving, errors, loading skeletons,
    * selected or active cells) uses the full `RowCell`.
    */
+  $: columnsToRender = [...$displayedColumns].filter(
+    ([, columnFabric]) =>
+      !renderedColumnIds || renderedColumnIds.has(columnFabric.id),
+  );
   $: record = isRecordRow(row) ? row.record : undefined;
   $: usesPlainCells =
     isPersistedRecordRow(row) &&
@@ -128,7 +134,7 @@
         fileManifestsForSheet={$fileManifests}
       />
     {:else if isRecordRow(row)}
-      {#each [...$displayedColumns] as [columnId, columnFabric] (columnId)}
+      {#each columnsToRender as [columnId, columnFabric] (columnId)}
         {@const key = getCellKey(row.identifier, columnId)}
         {@const cellId = makeCellId(rowSelectionId, columnFabric.id)}
         {@const plain =

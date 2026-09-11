@@ -84,7 +84,7 @@
 </script>
 
 <div data-sheet-element="body" tabindex="-1">
-  <Resizer let:height>
+  <Resizer let:height let:width>
     <VirtualList
       horizontalScrollOffset={$horizontalScrollOffset}
       scrollOffset={$scrollOffset}
@@ -122,7 +122,7 @@
           />
         {/if}
       {/if}
-      <slot {items} api={virtualListApi} />
+      <slot {items} api={virtualListApi} viewportWidth={width} />
     </VirtualList>
   </Resizer>
 </div>

@@ -7,7 +7,7 @@
    * This fork contains the following changes:
    * 1. Ported to Svelte, TS
    * 2. Stripped down to essentials
-   * 3. Works only on height, width always assumed to be 100%
+   * 3. Sizes only the height; width is always 100% (but is measured too)
    */
 
   import { onMount } from 'svelte';
@@ -26,9 +26,13 @@
 
   let bailoutOnSlot = false;
   let height = 0;
+  let width = 0;
 
   function onResize() {
     if (parentNode) {
+      if (width !== parentNode.offsetWidth) {
+        width = parentNode.offsetWidth;
+      }
       const parentOffsetHeight = parentNode.offsetHeight || 0;
       const style =
         window.getComputedStyle(parentNode) || ({} as CSSStyleDeclaration);
@@ -67,6 +71,6 @@
 
 <div class={outerClass} bind:this={wrapperRef}>
   {#if !bailoutOnSlot}
-    <slot {height} />
+    <slot {height} {width} />
   {/if}
 </div>
