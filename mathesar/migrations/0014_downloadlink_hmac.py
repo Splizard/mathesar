@@ -15,6 +15,9 @@ class Migration(migrations.Migration):
 
     operations = [
         migrations.RunPython(delete_download_links, migrations.RunPython.noop),
+        # The deletion leaves the checks of the (deferred) foreign keys from the
+        # links' sessions pending, and Postgres won't alter the table until they've run.
+        migrations.RunSQL('SET CONSTRAINTS ALL IMMEDIATE', migrations.RunSQL.noop),
         migrations.RenameField(
             model_name='downloadlink',
             old_name='mash',
