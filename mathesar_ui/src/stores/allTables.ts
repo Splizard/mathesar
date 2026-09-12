@@ -6,8 +6,9 @@ type AllTablesStore = ReturnType<Database['constructAllTablesStore']>;
 const storesByDatabase = new Map<Database['id'], AllTablesStore>();
 
 /**
- * Every table of the database, of all its schemas, loaded once and kept, since
- * it's only used to choose among them and to name the one a column holds.
+ * Every table of the database, of all the schemas a user sees, loaded once and
+ * kept, since it's only used to choose among them and to name the one a column
+ * holds.
  */
 export function getAllTablesStore(database: Database): AllTablesStore {
   const existingStore = storesByDatabase.get(database.id);

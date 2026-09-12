@@ -3861,6 +3861,10 @@ BEGIN
     NOT ('information_schema' = ANY(schema_names)) AND NOT ('pg_catalog' = ANY(schema_names)),
     'but none of information_schema or PostgreSQL''s own'
   );
+  RETURN NEXT ok(
+    NOT (schema_names && msar.mathesar_system_schemas()),
+    'and none of Mathesar''s own, presentation_schema included'
+  );
 END;
 $$ LANGUAGE plpgsql;
 

@@ -1569,15 +1569,17 @@ CREATE OR REPLACE FUNCTION msar.get_all_table_info() RETURNS jsonb AS $$/*
 Return an array of objects describing every table of the database's user-defined schemas, in the
 form msar.get_table_info gives them, each with the name of its schema.
 
-The schemas are those msar.get_schemas returns: every one but information_schema and PostgreSQL's
-own.
+The schemas are the ones a user sees: not information_schema, not PostgreSQL's own, and not
+Mathesar's, which hold how the database is presented rather than anything it is about.
 */
 SELECT coalesce(
   jsonb_agg(to_jsonb(table_data) || jsonb_build_object('schema_name', nsp.nspname)), '[]'::jsonb
 )
 FROM msar.table_info_table() AS table_data
   JOIN pg_catalog.pg_namespace AS nsp ON nsp.oid = table_data.schema
-WHERE nsp.nspname <> 'information_schema' AND nsp.nspname NOT LIKE 'pg_%';
+WHERE nsp.nspname <> 'information_schema'
+  AND NOT (nsp.nspname = ANY(msar.mathesar_system_schemas()))
+  AND nsp.nspname NOT LIKE 'pg_%';
 $$ LANGUAGE SQL STABLE;
 
 

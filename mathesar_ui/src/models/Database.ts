@@ -70,8 +70,8 @@ export class Database {
   }
 
   /**
-   * Every table of the database, of all its schemas, which is what a Database
-   * Table column holds one of.
+   * Every table of the database, of all the schemas a user sees, which is what
+   * a Database Table column holds one of.
    */
   constructAllTablesStore() {
     return new AsyncRpcApiStore(api.tables.list_all, {
