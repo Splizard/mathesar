@@ -4,6 +4,7 @@ import {
   abstractTypeToColumnSaveSpec,
   getAbstractTypeForDbType,
   getAutoFillChangesForTypeChange,
+  getRecordTimestampColumnSpecs,
 } from '../abstractTypeCategories';
 import { DB_TYPES } from '../dbTypes';
 import { getColumnSaveSpec } from '../typeFamilies';
@@ -166,5 +167,37 @@ describe('getAutoFillChangesForTypeChange', () => {
     ['Date & Time to Text', [dateTime, TZ], [text, DB_TYPES.TEXT], {}],
   ] as const)('%s', (_label, from, to, expected) => {
     expect(change([...from], [...to])).toEqual(expected);
+  });
+});
+
+describe('getRecordTimestampColumnSpecs', () => {
+  test('a table records when each record was made and changed', () => {
+    expect(getRecordTimestampColumnSpecs()).toEqual([
+      {
+        name: 'created_at',
+        type: TZ,
+        type_options: {},
+        default: now,
+      },
+      {
+        name: 'updated_at',
+        type: TZ,
+        type_options: {},
+        updated_at_trigger: true,
+      },
+    ]);
+  });
+
+  test('the columns are the ones those types are recognised by', () => {
+    const [created, updated] = getRecordTimestampColumnSpecs();
+    expect(
+      getAbstractTypeForDbType(TZ, null, { default: created.default })
+        .identifier,
+    ).toBe('createdAt');
+    expect(
+      getAbstractTypeForDbType(TZ, null, {
+        updated_at_trigger: updated.updated_at_trigger,
+      }).identifier,
+    ).toBe('updatedAt');
   });
 });

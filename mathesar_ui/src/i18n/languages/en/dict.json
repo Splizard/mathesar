@@ -641,6 +641,8 @@
   "record_summary_detail_help_2": "Use the form below to customize the fields included in the [tableName] record summary.",
   "record_summary_no_pk_error": "The [tableName] table's record summaries cannot be configured because it does not have a primary key column.",
   "record_summary_preview_help": "This is how the currently selected [tableName] record will be summarized.",
+  "record_timestamps": "Record when each record was made and changed",
+  "record_timestamps_help": "Adds a \"created_at\" column and an \"updated_at\" column. The database fills them in for you: \"created_at\" when the record is made, \"updated_at\" whenever it changes.",
   "recover_query_click_button": "You can attempt to recover the query by clicking on the button below.",
   "redirect_to_url": "Redirect to URL",
   "redirected_login_page_password_change": "You'll be redirected to the login page once you change your password.",

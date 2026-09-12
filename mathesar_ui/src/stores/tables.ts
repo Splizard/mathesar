@@ -29,6 +29,7 @@ import {
   type RpcRequest,
   batchRun,
 } from '@mathesar/packages/json-rpc-client-builder';
+import { getRecordTimestampColumnSpecs } from '@mathesar/stores/abstract-types';
 import { getErrorMessage } from '@mathesar/utils/errors';
 import { preloadCommonData } from '@mathesar/utils/preloadData';
 import {
@@ -312,6 +313,7 @@ export async function createTable({
   name,
   description,
   pkColumn,
+  recordTimestamps = false,
 }: {
   schema: Schema;
   name?: string;
@@ -320,6 +322,8 @@ export async function createTable({
     name: string;
     type: NewPkColumnType;
   };
+  /** Whether the table records when each of its records was made and changed */
+  recordTimestamps?: boolean;
 }): Promise<Table> {
   const created = await api.tables
     .add({
@@ -330,6 +334,19 @@ export async function createTable({
       pkey_column_info: pkColumn,
     })
     .run();
+
+  // Added afterwards rather than passed to tables.add, which takes plain column
+  // definitions: a default of the current time and an "Updated At" trigger both
+  // need the column to exist before they can be set.
+  if (recordTimestamps) {
+    await api.columns
+      .add({
+        database_id: schema.database.id,
+        table_oid: created.oid,
+        column_data_list: getRecordTimestampColumnSpecs(),
+      })
+      .run();
+  }
 
   // TODO: Remove once tables.patch response provides RawTable
   const rawTableWithMetadata = await api.tables

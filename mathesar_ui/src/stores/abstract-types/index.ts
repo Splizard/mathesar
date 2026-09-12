@@ -7,10 +7,12 @@ export {
   getDefaultDbType,
   getAbstractTypeForDbType,
   getAutoFillChangesForTypeChange,
+  getRecordTimestampColumnSpecs,
   isAutoFilledAbstractType,
   mergeMetadataOnTypeChange,
   isFileTypeSupported,
   isAbstractTypeDisabled,
+  recordTimestampColumnNames,
 } from './abstractTypeCategories';
 export {
   filterDefinitionMap,

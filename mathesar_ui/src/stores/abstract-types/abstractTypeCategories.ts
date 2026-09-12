@@ -829,6 +829,33 @@ export function getAllowedAbstractTypesForNewColumn() {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
+/**
+ * The names of the columns recording when a record was made and last changed.
+ * They are the usual spelling, and the database makes them unique if the table
+ * already has a column so named.
+ */
+export const recordTimestampColumnNames = {
+  createdAt: 'created_at',
+  updatedAt: 'updated_at',
+} as const;
+
+/**
+ * What a table needs in order to record when each of its records was made and
+ * last changed: a "Created At" column and an "Updated At" one, set up exactly
+ * as they would be if they had been added by hand, so that they are recognised
+ * as those types afterwards.
+ */
+export function getRecordTimestampColumnSpecs(): ColumnCreationSpec[] {
+  return [
+    { name: recordTimestampColumnNames.createdAt, type: createdAtAbstractType },
+    { name: recordTimestampColumnNames.updatedAt, type: updatedAtAbstractType },
+  ].map(({ name, type }) => {
+    const { typeOptions, ...dbOptions } =
+      abstractTypeToColumnSaveSpec(type).dbOptions;
+    return { name, ...dbOptions, type_options: typeOptions };
+  });
+}
+
 export function getDbTypesForAbstractType(
   abstractTypeIdentifier: AbstractType['identifier'],
 ): Set<DbType> {

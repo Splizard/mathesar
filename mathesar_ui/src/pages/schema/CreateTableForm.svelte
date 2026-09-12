@@ -18,7 +18,12 @@
   } from '@mathesar/components/select-new-pk-column-type';
   import type { Schema } from '@mathesar/models/Schema';
   import { createTable } from '@mathesar/stores/tables';
-  import { portalToWindowFooter } from '@mathesar-component-library';
+  import {
+    Checkbox,
+    Help,
+    LabeledInput,
+    portalToWindowFooter,
+  } from '@mathesar-component-library';
 
   export let close: () => void;
   export let schema: Schema;
@@ -40,6 +45,12 @@
   $: pkColumnType = requiredField<NewPkColumnType>('IDENTITY');
   $: form = makeForm({ name, description, pkColumnName, pkColumnType });
 
+  /**
+   * On unless turned off: a record is nearly always worth being able to date,
+   * and the two columns are easier to drop afterwards than to add.
+   */
+  const recordTimestamps = requiredField(true);
+
   async function save(values: FilledFormValues<typeof form>) {
     await createTable({
       schema,
@@ -49,6 +60,7 @@
         name: values.pkColumnName,
         type: values.pkColumnType,
       },
+      recordTimestamps: $recordTimestamps,
     });
     close();
   }
@@ -67,6 +79,18 @@
       input={{ component: SelectNewPkColumnType }}
     />
   </CollapsibleFieldset>
+</FieldLayout>
+
+<FieldLayout>
+  <LabeledInput layout="inline-input-first">
+    <div slot="label">
+      {$_('record_timestamps')}
+      <Help>
+        <p>{$_('record_timestamps_help')}</p>
+      </Help>
+    </div>
+    <Checkbox bind:checked={$recordTimestamps} />
+  </LabeledInput>
 </FieldLayout>
 
 <div use:portalToWindowFooter>
