@@ -116,6 +116,7 @@ import type { IconProps } from '@mathesar-component-library/types';
 
 import {
   arrayIcon,
+  circleIcon,
   circleLowercaseIIcon,
   connectDatabaseIcon,
   createDatabaseIcon,
@@ -123,10 +124,16 @@ import {
   explorationIcon,
   filterGroupIcon,
   jsonIcon,
+  lineIcon,
+  lineSegmentIcon,
   mathesarNameIcon,
   modalRecordViewIcon,
   outcomeIcon,
+  pathIcon,
   permissionsIcon,
+  pointIcon,
+  polygonIcon,
+  rectangleIcon,
   tableIcon,
   treeChildNodeArrowIcon,
 } from './customIcons';
@@ -316,6 +323,13 @@ export const iconUiTypeEnum: IconProps = { data: faTags };
 export const iconUiTypeBinary: IconProps = { data: faMicrochip };
 export const iconUiTypeNetwork: IconProps = { data: faNetworkWired };
 export const iconUiTypeGeometry: IconProps = { data: faDrawPolygon };
+export const iconUiTypePoint: IconProps = { data: pointIcon };
+export const iconUiTypeLine: IconProps = { data: lineIcon };
+export const iconUiTypeLineSegment: IconProps = { data: lineSegmentIcon };
+export const iconUiTypeRectangle: IconProps = { data: rectangleIcon };
+export const iconUiTypePath: IconProps = { data: pathIcon };
+export const iconUiTypePolygon: IconProps = { data: polygonIcon };
+export const iconUiTypeCircle: IconProps = { data: circleIcon };
 export const iconUiTypeXml: IconProps = { data: faCode };
 export const iconUiTypeDatabaseTable: IconProps = { data: tableIcon };
 export const iconUiTypeRange: IconProps = { data: faArrowsLeftRight };

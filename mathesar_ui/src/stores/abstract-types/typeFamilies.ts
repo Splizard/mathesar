@@ -407,6 +407,8 @@ export interface KindOption {
   name: string;
   /** The abstract type of the kind's values */
   abstractType: AbstractType;
+  /** The icon of the kind's own DB type, where its type has one for it */
+  icon?: IconProps;
 }
 
 export interface FamilyOption {
@@ -461,11 +463,21 @@ export function groupByFamily(
           }),
         );
         if (!valuesAllowed && !modifiedAllowed) return [];
+        // A type gives each of its DB types an icon where they differ, as 2D
+        // does its shapes
+        const icon = kindDbTypes[0]
+          ? abstractType.getIcon({
+              dbType: kindDbTypes[0],
+              typeOptions: null,
+              metadata: null,
+            })
+          : undefined;
         return [
           {
             kind: typeKind,
             name: typeKind.name ?? abstractType.name,
             abstractType,
+            icon: Array.isArray(icon) ? icon[0] : icon,
           },
         ];
       }),

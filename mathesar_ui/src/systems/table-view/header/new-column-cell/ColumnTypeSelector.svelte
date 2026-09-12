@@ -86,6 +86,7 @@
         <AbstractTypeName
           abstractType={option.abstractType}
           label={option.name}
+          icon={option.icon}
         />
       {/if}
     </Select>

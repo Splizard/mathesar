@@ -16,7 +16,6 @@ import {
   iconUiTypeArray,
   iconUiTypeComposite,
   iconUiTypeDatabaseTable,
-  iconUiTypeGeometry,
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
   iconUiTypeXml,
@@ -40,6 +39,7 @@ import Enum from './type-configs/enum';
 import Fallback from './type-configs/fallback';
 // eslint-disable-next-line import/no-cycle
 import File from './type-configs/file/file';
+import Geometry from './type-configs/geometry';
 import Json from './type-configs/json';
 import Money from './type-configs/money';
 import Network from './type-configs/network';
@@ -90,11 +90,7 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
   [abstractTypeCategory.Enum]: Enum,
   [abstractTypeCategory.Binary]: Binary,
   [abstractTypeCategory.Network]: Network,
-  [abstractTypeCategory.Geometry]: plainType(
-    iconUiTypeGeometry,
-    '2D',
-    DB_TYPES.POINT,
-  ),
+  [abstractTypeCategory.Geometry]: Geometry,
   [abstractTypeCategory.Xml]: plainType(iconUiTypeXml, 'XML', DB_TYPES.XML),
   [abstractTypeCategory.Composite]: {
     getIcon: () => ({ ...iconUiTypeComposite, label: 'Composite' }),

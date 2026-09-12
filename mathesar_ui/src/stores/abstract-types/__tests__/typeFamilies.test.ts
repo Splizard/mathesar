@@ -116,6 +116,32 @@ describe('type families', () => {
     ]);
   });
 
+  test('give each 2D kind the icon of its shape', () => {
+    const groups = groupByFamily(getAllowedAbstractTypesForNewColumn());
+    const kindsOf = (family: string) =>
+      groups.find((g) => g.family.name === family)?.kinds ?? [];
+    const shapes = kindsOf('2D');
+    expect(shapes).toHaveLength(7);
+    expect(new Set(shapes.map((k) => k.icon?.data)).size).toBe(7);
+    // As a column of the shape is given, wherever its type is shown
+    const iconFor = (dbType: string) =>
+      getAbstractTypeForDbType(dbType, null).getIcon({
+        dbType,
+        typeOptions: null,
+        metadata: null,
+      });
+    expect(iconFor(DB_TYPES.BOX)).toBe(
+      shapes.find((k) => k.name === 'Rectangle')?.icon,
+    );
+    expect(iconFor(DB_TYPES.CIRCLE)).not.toBe(iconFor(DB_TYPES.POINT));
+    // Kinds of the same type share its icon, Money having one of its own
+    const number = kindsOf('Number').filter(
+      (k) => k.abstractType.identifier === 'number',
+    );
+    expect(number).toHaveLength(3);
+    expect(new Set(number.map((k) => k.icon?.data)).size).toBe(1);
+  });
+
   test('leave out kinds with none of their DB types allowed', () => {
     const groups = groupByFamily(
       getAllowedAbstractTypesForNewColumn(),

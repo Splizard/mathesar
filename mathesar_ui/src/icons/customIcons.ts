@@ -208,3 +208,82 @@ export const filterGroupIcon: IconProps['data'] = {
     ],
   ],
 };
+
+/*
+The shapes a 2D column holds, drawn as outlines in a 16x16 box: a filled dot
+for a point, a stroke for a line, and the shapes themselves for the rest, with
+the inside of a closed one cut out of it by the even-odd fill rule.
+*/
+
+export const pointIcon: IconProps['data'] = {
+  icon: [16, 16, [], '', 'M8 4A4 4 0 1 1 8 12A4 4 0 1 1 8 4Z'],
+};
+
+export const lineIcon: IconProps['data'] = {
+  icon: [16, 16, [], '', 'M2 15.2L15.2 2L14 0.8L0.8 14Z'],
+};
+
+export const lineSegmentIcon: IconProps['data'] = {
+  icon: [
+    16,
+    16,
+    [],
+    '',
+    'M4.87 12.27L12.27 4.87L11.13 3.73L3.73 11.13ZM4.3 9.8A1.9 1.9 0 1 1 4.3 13.6A1.9 1.9 0 1 1 ' +
+      '4.3 9.8ZM11.7 2.4A1.9 1.9 0 1 1 11.7 6.2A1.9 1.9 0 1 1 11.7 2.4Z',
+  ],
+};
+
+export const rectangleIcon: IconProps['data'] = {
+  icon: [
+    16,
+    16,
+    [],
+    '',
+    {
+      fillRule: 'evenodd',
+      path: 'M1.4 3.4L14.6 3.4L14.6 12.6L1.4 12.6ZM2.9 4.9L13.1 4.9L13.1 11.1L2.9 11.1Z',
+    },
+  ],
+};
+
+export const pathIcon: IconProps['data'] = {
+  icon: [
+    16,
+    16,
+    [],
+    '',
+    'M2.6 12.79L6.4 5.99L5 5.21L1.2 12.01ZM5.12 6.15L9.72 10.95L10.88 9.85L6.28 5.05ZM11 ' +
+      '10.79L14.8 3.99L13.4 3.21L9.6 10.01ZM1.9 11.6A0.8 0.8 0 1 1 1.9 13.2A0.8 0.8 0 1 1 1.9 ' +
+      '11.6ZM5.7 4.8A0.8 0.8 0 1 1 5.7 6.4A0.8 0.8 0 1 1 5.7 4.8ZM10.3 9.6A0.8 0.8 0 1 1 10.3 ' +
+      '11.2A0.8 0.8 0 1 1 10.3 9.6ZM14.1 2.8A0.8 0.8 0 1 1 14.1 4.4A0.8 0.8 0 1 1 14.1 2.8Z',
+  ],
+};
+
+export const polygonIcon: IconProps['data'] = {
+  icon: [
+    16,
+    16,
+    [],
+    '',
+    {
+      fillRule: 'evenodd',
+      path:
+        'M8 1.4L14.66 6.24L12.11 14.06L3.89 14.06L1.34 6.24ZM8 3.8L12.37 6.98L10.7 12.12L5.3 ' +
+        '12.12L3.63 6.98Z',
+    },
+  ],
+};
+
+export const circleIcon: IconProps['data'] = {
+  icon: [
+    16,
+    16,
+    [],
+    '',
+    {
+      fillRule: 'evenodd',
+      path: 'M8 1.2A6.8 6.8 0 1 1 8 14.8A6.8 6.8 0 1 1 8 1.2ZM8 3.6A4.4 4.4 0 1 1 8 12.4A4.4 4.4 0 1 1 8 3.6Z',
+    },
+  ],
+};
