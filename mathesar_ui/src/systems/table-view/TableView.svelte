@@ -80,7 +80,7 @@
     allColumns,
     displayedColumns,
     columnsDataStore,
-    hasPrimaryKey,
+    hasSingleColumnPrimaryKey,
   } = $tabularData);
   $: $tabularData, ($tableInspectorTab = 'table');
   $: clipboardHandler = new SheetClipboardHandler({
@@ -132,7 +132,9 @@
    * column of things that cannot be told apart.
    */
   $: effectiveLayout =
-    layout === 'recordList' && !$hasPrimaryKey ? 'compactSheet' : layout;
+    layout === 'recordList' && !$hasSingleColumnPrimaryKey
+      ? 'compactSheet'
+      : layout;
   $: supportsTableInspector = context === 'page';
   /**
    * Whether the inspector covers the table rather than sitting beside it.

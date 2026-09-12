@@ -51,6 +51,18 @@ import {
 } from './processedColumns';
 import { RecordsData } from './records';
 
+/**
+ * Whether one of this table's columns can stand for a whole record.
+ *
+ * Mirrors `msar.get_selectable_pkey_attnum`, which answers with nothing for a key made of more
+ * than one column -- and a query built around nothing raises "null values cannot be formatted as
+ * an SQL identifier" rather than saying what is wrong. Asked here so that what cannot be done is
+ * not offered.
+ */
+function countsAsAnId(columns: RawColumnWithMetadata[]): boolean {
+  return columns.filter((column) => column.primary_key).length === 1;
+}
+
 function getSelectedCellData(
   selection: SheetSelection,
   selectableRowsMap: Map<string, RecordRow>,
@@ -141,7 +153,16 @@ export class TabularData {
 
   selectedCellData: Readable<SelectedCellData>;
 
-  hasPrimaryKey: Readable<boolean>;
+  /**
+   * Whether a record of this table can be pointed at by one value.
+   *
+   * Not the same question as whether the table has a primary key. A key made of two columns is a
+   * key, and Postgres is happy with it, but everything Mathesar does to one record at a time --
+   * reading it, changing it, deleting it, linking to it -- names the record by a single column,
+   * and the server has nothing to put there for a table keyed on two. So a table like that is
+   * read as a sheet and nothing else is offered for it.
+   */
+  hasSingleColumnPrimaryKey: Readable<boolean>;
 
   canSelectRecords: Readable<boolean>;
 
@@ -200,8 +221,10 @@ export class TabularData {
 
     this.processedColumns = derived(
       [this.columnsDataStore.columns, this.constraintsDataStore],
-      ([columns, constraintsData]) =>
-        orderProcessedColumns(
+      ([columns, constraintsData]) => {
+        // A cell only offers to open the record it belongs to when there is a record to open.
+        const canOpenRecords = countsAsAnId(columns);
+        return orderProcessedColumns(
           new Map(
             columns.map((column, columnIndex) => [
               String(column.id),
@@ -210,17 +233,20 @@ export class TabularData {
                 column,
                 columnIndex,
                 constraints: constraintsData.constraints,
-                hasEnhancedPrimaryKeyCell: props.hasEnhancedPrimaryKeyCell,
+                hasEnhancedPrimaryKeyCell:
+                  (props.hasEnhancedPrimaryKeyCell ?? true) && canOpenRecords,
                 userTrackingAttnum: this.table.metadata?.user_tracking_attnum,
               }),
             ]),
           ),
           this.table,
-        ),
+        );
+      },
     );
 
-    this.hasPrimaryKey = derived(this.processedColumns, (processedColumns) =>
-      [...processedColumns.values()].some((pc) => pc.column.primary_key),
+    this.hasSingleColumnPrimaryKey = derived(
+      this.columnsDataStore.columns,
+      countsAsAnId,
     );
 
     this.canSelectRecords = derived(
@@ -238,22 +264,23 @@ export class TabularData {
 
     // TODO: We should be able to insert without a primary key column
     this.canInsertRecords = derived(
-      [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
-      ([hasPrimaryKey, tableCurrentRolePrivileges]) =>
-        isWritableSchema &&
-        hasPrimaryKey &&
-        tableCurrentRolePrivileges.has('INSERT'),
+      [
+        this.hasSingleColumnPrimaryKey,
+        this.table.currentAccess.currentRolePrivileges,
+      ],
+      ([hasId, tableCurrentRolePrivileges]) =>
+        isWritableSchema && hasId && tableCurrentRolePrivileges.has('INSERT'),
     );
 
     this.canUpdateRecords = derived(
       [
-        this.hasPrimaryKey,
+        this.hasSingleColumnPrimaryKey,
         this.table.currentAccess.currentRolePrivileges,
         this.processedColumns,
       ],
-      ([hasPrimaryKey, tableCurrentRolePrivileges, processedColumns]) =>
+      ([hasId, tableCurrentRolePrivileges, processedColumns]) =>
         isWritableSchema &&
-        hasPrimaryKey &&
+        hasId &&
         (tableCurrentRolePrivileges.has('UPDATE') ||
           [...processedColumns.values()].some((col) =>
             col.currentRolePrivileges.has('UPDATE'),
@@ -261,11 +288,12 @@ export class TabularData {
     );
 
     this.canDeleteRecords = derived(
-      [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
-      ([hasPrimaryKey, tableCurrentRolePrivileges]) =>
-        isWritableSchema &&
-        hasPrimaryKey &&
-        tableCurrentRolePrivileges.has('DELETE'),
+      [
+        this.hasSingleColumnPrimaryKey,
+        this.table.currentAccess.currentRolePrivileges,
+      ],
+      ([hasId, tableCurrentRolePrivileges]) =>
+        isWritableSchema && hasId && tableCurrentRolePrivileges.has('DELETE'),
     );
 
     this.joinableTables = new AsyncRpcApiStore(api.tables.list_joinable, {

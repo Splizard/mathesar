@@ -43,7 +43,10 @@
   );
   $: form = makeForm({ templateConfig });
   $: templateErrors = templateConfig.fieldErrors;
-  $: hasPk = [...processedColumns].some(([, c]) => c.column.primary_key);
+  // One column, not merely one or more: a summary query names the record by a single column, so
+  // a key made of two leaves it with nothing to name it by.
+  $: hasPk =
+    [...processedColumns].filter(([, c]) => c.column.primary_key).length === 1;
 
   async function save() {
     try {
