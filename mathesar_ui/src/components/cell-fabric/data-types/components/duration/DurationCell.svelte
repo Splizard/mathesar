@@ -1,5 +1,8 @@
 <script lang="ts">
-  import type { DurationSpecification } from '@mathesar/utils/duration';
+  import type {
+    DurationFormatter,
+    DurationSpecification,
+  } from '@mathesar/utils/duration';
 
   import SteppedInputCell from '../SteppedInputCell.svelte';
   import type { TextBoxCellProps } from '../typeDefinitions';
@@ -7,6 +10,7 @@
   import DurationInput from './DurationInput.svelte';
 
   type $$Props = TextBoxCellProps & {
+    formatter: DurationFormatter;
     specification: DurationSpecification;
     formatValue?: (
       value: string | null | undefined,
@@ -19,6 +23,8 @@
   export let disabled: $$Props['disabled'];
   export let searchValue: $$Props['searchValue'] = undefined;
   export let isIndependentOfSheet: $$Props['isIndependentOfSheet'];
+  export let showTruncationPopover: $$Props['showTruncationPopover'] = false;
+  export let formatter: $$Props['formatter'];
   export let specification: $$Props['specification'];
   export let formatValue: $$Props['formatValue'] = undefined;
 </script>
@@ -30,9 +36,10 @@
   {disabled}
   {searchValue}
   {isIndependentOfSheet}
+  {showTruncationPopover}
   {formatValue}
+  highlightSubstringMatches={false}
   useTabularNumbers={true}
-  horizontalAlignment="right"
   let:handleInputBlur
   let:setValueInEditMode
   on:movementKeyDown
@@ -41,9 +48,10 @@
   <DurationInput
     focusOnMount={true}
     {disabled}
+    {formatter}
     {specification}
     value={typeof value === 'string' ? value : undefined}
-    onValueChange={setValueInEditMode}
     on:blur={handleInputBlur}
+    on:artificialInput={({ detail }) => setValueInEditMode(detail)}
   />
 </SteppedInputCell>

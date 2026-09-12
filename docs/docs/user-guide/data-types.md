@@ -76,7 +76,7 @@ Decimal, Integer, and Float columns have the same formatting: the number of deci
     - Formatting: the format of the displayed date.
 - **Time of Day**: [`time with time zone`](https://www.postgresql.org/docs/17/datatype-datetime.html) **(default)** and `time without time zone`.
     - Formatting: the format of the displayed time.
-- **Duration**: a length of time, for example "1 hour" or "3 days", as [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html). A duration is entered as an amount and a unit — 30 minutes, 3 days — the units offered being those between the column's largest and smallest, and it's shown in the largest unit it's a whole number of, so an hour and a half reads as 90 minutes where minutes are the smallest unit.
+- **Duration**: a length of time, for example "1 hour" or "3 days", as [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html). A duration is typed as a time on a clock in the column's format, and a picker below the cell holds it as an amount and a unit — 30 minutes, 3 days — the units offered being those between the column's largest and smallest. It's shown there in the largest unit it's a whole number of, so an hour and a half reads as 90 minutes where minutes are the smallest unit.
     - Formatting: the largest and smallest unit a duration is shown in, which give the format of the displayed duration (e.g. `HH:mm:ss`).
 - **Created At**: a Date & Time column whose default is the current time, so it records when each record was created. Its cells can't be edited.
 - **Updated At**: a Date & Time column kept at the time its record was last changed, by a trigger in the database. Its cells can't be edited.

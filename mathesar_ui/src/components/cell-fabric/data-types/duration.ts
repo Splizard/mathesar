@@ -50,13 +50,16 @@ const durationType: CellComponentFactory = {
   get: (column: RawColumnWithMetadata): ComponentAndProps => ({
     component: DurationCell,
     props: {
+      ...getProps(column),
       specification: getSpecification(column),
-      formatValue: getProps(column).formatForDisplay,
     },
   }),
   getInput: (column: RawColumnWithMetadata): ComponentAndProps => ({
     component: DurationInput,
-    props: { specification: getSpecification(column) },
+    props: {
+      ...getProps(column),
+      specification: getSpecification(column),
+    },
   }),
   getSimpleInput: (
     column: RawColumnWithMetadata,
