@@ -142,7 +142,10 @@ const moneyType: AbstractTypeConfiguration = {
   cellInfo: {
     type: 'money',
   },
-  defaultDbType: DB_TYPES.MSAR__MATHESAR_MONEY,
+  // Money is a plain number that carries a currency symbol, not a type of its
+  // own: `mathesar_types.mathesar_money` is still useful for recognising an
+  // amount while importing, but nothing is stored as one.
+  defaultDbType: DB_TYPES.NUMERIC,
   getDisplayConfig: () => ({
     form: displayForm,
     determineDisplayOptions,

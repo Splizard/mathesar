@@ -281,6 +281,9 @@ const typesResponse: AbstractTypeResponse[] = [
       DB_TYPES.MONEY,
       DB_TYPES.MSAR__MATHESAR_MONEY,
       DB_TYPES.MSAR__MULTICURRENCY_MONEY,
+      // Where money is stored now. The others are still read, for columns that
+      // predate this or were made outside Mathesar.
+      DB_TYPES.NUMERIC,
     ],
   },
   {
@@ -464,6 +467,20 @@ function identifyAutoFilledAbstractType(
   return undefined;
 }
 
+/**
+ * Whether a column holds money, which is a plain `numeric` carrying a currency
+ * symbol rather than a type of its own.
+ *
+ * The symbol is what says so. Money has no predicate a constraint could check —
+ * any number is a valid amount — so unlike a text box there is nothing in the
+ * database to read it from, and the metadata has to carry it. The presence of
+ * the key is the signal, not its value: a column whose currency symbol has been
+ * emptied is still money.
+ */
+function isMoneyColumn(dbType: DbType, metadata: ColumnMetadata | null) {
+  return dbType === DB_TYPES.NUMERIC && metadata?.mon_currency_symbol != null;
+}
+
 function identifyAbstractTypeForDbType(
   dbType: DbType,
   metadata: ColumnMetadata | null,
@@ -471,6 +488,12 @@ function identifyAbstractTypeForDbType(
 ): AbstractType | undefined {
   if (fileAbstractType.dbTypes.has(dbType)) {
     return fileAbstractType;
+  }
+  if (isMoneyColumn(dbType, metadata)) {
+    // `mathesar_types.mathesar_money` is still recognised by the map below, for
+    // any column that predates this or was made outside Mathesar.
+    const money = abstractTypesMap.get(abstractTypeCategory.Money);
+    if (money) return money;
   }
   const autoFilledAbstractType = identifyAutoFilledAbstractType(
     dbType,
@@ -481,6 +504,14 @@ function identifyAbstractTypeForDbType(
   }
   let abstractTypeOfDbType;
   for (const [, abstractType] of abstractTypesMap) {
+    // A numeric column is money only when its metadata says so, which was
+    // settled above: left to this loop it would claim every numeric column.
+    if (
+      abstractType.identifier === abstractTypeCategory.Money &&
+      dbType === DB_TYPES.NUMERIC
+    ) {
+      continue;
+    }
     if (abstractType.dbTypes.has(dbType)) {
       abstractTypeOfDbType = abstractType;
       break;
@@ -499,6 +530,12 @@ function identifyAllPossibleAbstractTypesForDbType(
   if (createdAtAbstractType.dbTypes.has(dbType)) {
     allPossibleAbstractTypes.add(createdAtAbstractType);
     allPossibleAbstractTypes.add(updatedAtAbstractType);
+  }
+  // Money lives on `numeric`, so a numeric column can become one or stop being
+  // one without its type changing at all.
+  if (dbType === DB_TYPES.NUMERIC) {
+    const money = abstractTypesMap.get(abstractTypeCategory.Money);
+    if (money) allPossibleAbstractTypes.add(money);
   }
   for (const [, abstractType] of abstractTypesMap) {
     if (abstractType.dbTypes.has(dbType)) {
@@ -665,6 +702,11 @@ export function abstractTypeToColumnSaveSpec(
         file_backend: getDefaultFileStorageBackend()?.backend,
       };
     }
+    // Without the symbol the column would just be a number, there being nothing
+    // else to tell it apart from one.
+    if (abstractType.identifier === abstractTypeCategory.Money) {
+      return { mon_currency_symbol: defaultColumnMetadata.mon_currency_symbol };
+    }
     return null;
   })();
 
@@ -716,6 +758,22 @@ export function mergeMetadataOnTypeChange(
     result = {
       ...result,
       user_display_field: null,
+    };
+  }
+
+  // The currency symbol is what makes a number money, so changing to or from
+  // Money is a change of metadata rather than of type.
+  if (newAbstractType.identifier === abstractTypeCategory.Money) {
+    if (metadata?.mon_currency_symbol == null) {
+      result = {
+        ...result,
+        mon_currency_symbol: defaultColumnMetadata.mon_currency_symbol,
+      };
+    }
+  } else if (metadata?.mon_currency_symbol != null) {
+    result = {
+      ...result,
+      mon_currency_symbol: null,
     };
   }
 
