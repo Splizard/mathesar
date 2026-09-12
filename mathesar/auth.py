@@ -1,9 +1,10 @@
 from django.http import HttpResponse, JsonResponse
 from django.contrib.auth.views import redirect_to_login
 from functools import wraps
-from mathesar.models.base import Form, ColumnMetaData
+from mathesar.models.base import Form
 import functools
 
+from mathesar.utils.columns import get_columns_meta_data
 from mathesar.utils.download_links import get_public_form_conf_for_file_backend
 
 
@@ -95,12 +96,9 @@ def shared_form_field_column_has_file_backend(request):
         return False
 
     table_oid = form_field.parent_field.related_table_oid if form_field.parent_field else form_model.base_table_oid
-    column_metadata = ColumnMetaData.objects.filter(
-        attnum=form_field.column_attnum,
-        table_oid=table_oid,
-        database=form_model.database
-    ).first()
-    return column_metadata is not None and column_metadata.file_backend is not None
+    with form_model.connection as conn:
+        column_metadata = get_columns_meta_data(conn, table_oid).get(form_field.column_attnum)
+    return column_metadata is not None and column_metadata.get("file_backend") is not None
 
 
 # Note: This function is memoized on the request object to cache results only

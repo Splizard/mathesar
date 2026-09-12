@@ -3,7 +3,10 @@ Classes and functions exposed to the RPC endpoint for managing column metadata.
 """
 from typing import Literal, Optional, TypedDict
 
+from modernrpc.core import REQUEST_KEY
+
 from mathesar.rpc.decorators import mathesar_rpc_method
+from mathesar.rpc.utils import connect
 from mathesar.utils.columns import get_columns_meta_data, set_columns_meta_data
 
 
@@ -63,29 +66,9 @@ class ColumnMetaDataRecord(TypedDict):
     array_delimiter: Optional[str]
 
     @classmethod
-    def from_model(cls, model):
+    def from_options(cls, database_id, table_oid, attnum, options):
         return cls(
-            database_id=model.database.id,
-            table_oid=model.table_oid,
-            attnum=model.attnum,
-            bool_input=model.bool_input,
-            bool_true=model.bool_true,
-            bool_false=model.bool_false,
-            num_min_frac_digits=model.num_min_frac_digits,
-            num_max_frac_digits=model.num_max_frac_digits,
-            num_grouping=model.num_grouping,
-            num_format=model.num_format,
-            mon_currency_symbol=model.mon_currency_symbol,
-            mon_currency_location=model.mon_currency_location,
-            time_format=model.time_format,
-            date_format=model.date_format,
-            duration_min=model.duration_min,
-            duration_max=model.duration_max,
-            duration_format=model.duration_format,
-            display_width=model.display_width,
-            file_backend=model.file_backend,
-            user_display_field=model.user_display_field,
-            array_delimiter=model.array_delimiter,
+            database_id=database_id, table_oid=table_oid, attnum=attnum, **options
         )
 
 
@@ -139,28 +122,8 @@ class ColumnMetaDataBlob(TypedDict):
     array_delimiter: Optional[str]
 
     @classmethod
-    def from_model(cls, model):
-        return cls(
-            attnum=model.attnum,
-            bool_input=model.bool_input,
-            bool_true=model.bool_true,
-            bool_false=model.bool_false,
-            num_min_frac_digits=model.num_min_frac_digits,
-            num_max_frac_digits=model.num_max_frac_digits,
-            num_grouping=model.num_grouping,
-            num_format=model.num_format,
-            mon_currency_symbol=model.mon_currency_symbol,
-            mon_currency_location=model.mon_currency_location,
-            time_format=model.time_format,
-            date_format=model.date_format,
-            duration_min=model.duration_min,
-            duration_max=model.duration_max,
-            duration_format=model.duration_format,
-            display_width=model.display_width,
-            file_backend=model.file_backend,
-            user_display_field=model.user_display_field,
-            array_delimiter=model.array_delimiter,
-        )
+    def from_options(cls, attnum, options):
+        return cls(attnum=attnum, **options)
 
 
 @mathesar_rpc_method(name="columns.metadata.list", auth="login")
@@ -175,9 +138,12 @@ def list_(*, table_oid: int, database_id: int, **kwargs) -> list[ColumnMetaDataR
     Returns:
         A list of column metadata objects.
     """
-    columns_meta_data = get_columns_meta_data(table_oid, database_id)
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        presentation = get_columns_meta_data(conn, table_oid)
     return [
-        ColumnMetaDataRecord.from_model(model) for model in columns_meta_data
+        ColumnMetaDataRecord.from_options(database_id, table_oid, attnum, options)
+        for attnum, options in sorted(presentation.items())
     ]
 
 
@@ -197,6 +163,6 @@ def set_(
         table_oid: Identity of the table whose metadata we'll modify.
         database_id: The Django id of the database containing the table.
     """
-    set_columns_meta_data(
-        column_meta_data_list, table_oid, database_id
-    )
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        set_columns_meta_data(conn, table_oid, column_meta_data_list)

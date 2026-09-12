@@ -19,8 +19,9 @@ from db.deprecated.functions.base import (
     PeakMonth,
 )
 from db.deprecated.functions.packed import DistinctArrayAgg
-from mathesar.models.base import Explorations, ColumnMetaData, Database
+from mathesar.models.base import Explorations, Database
 from mathesar.rpc.columns.metadata import ColumnMetaDataRecord
+from mathesar.utils.columns import get_columns_meta_data
 from datetime import date, time, datetime
 from collections.abc import Mapping, Sequence
 
@@ -220,16 +221,22 @@ def _get_exploration_column_metadata(
     metadata
 ):
     exploration_column_metadata = {}
+    # One lookup per table rather than per column; an exploration usually draws on few tables.
+    presentation_by_table = {}
     for alias, sa_col in db_query.all_sa_columns_map.items():
         initial_column = None
         for col in processed_initial_columns:
             if alias == col.alias:
                 initial_column = col
-        column_metadata = ColumnMetaData.objects.filter(
-            database__id=exploration_def["database_id"],
-            table_oid=initial_column.reloid,
-            attnum=sa_col.column_attnum
-        ).first() if initial_column else None
+        column_metadata = None
+        if initial_column:
+            if initial_column.reloid not in presentation_by_table:
+                presentation_by_table[initial_column.reloid] = get_columns_meta_data(
+                    conn, initial_column.reloid
+                )
+            column_metadata = presentation_by_table[initial_column.reloid].get(
+                sa_col.column_attnum
+            )
         input_table_name = get_table(initial_column.reloid, conn)["name"] if initial_column else None
         input_column_name = initial_column.get_name(engine, metadata) if initial_column else None
         display_names = exploration_def.get("display_names", None)
@@ -239,7 +246,10 @@ def _get_exploration_column_metadata(
             "type": sa_col.db_type.id,
             "primary_key": sa_col.primary_key,
             "type_options": sa_col.type_options,
-            "metadata": ColumnMetaDataRecord.from_model(column_metadata) if column_metadata else None,
+            "metadata": ColumnMetaDataRecord.from_options(
+                exploration_def["database_id"], initial_column.reloid, sa_col.column_attnum,
+                column_metadata
+            ) if column_metadata else None,
             "is_initial_column": True if initial_column else False,
             "input_column_name": input_column_name,
             "input_table_name": input_table_name,

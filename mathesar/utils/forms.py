@@ -7,9 +7,10 @@ from db.connection import set_mathesar_user
 from db.forms import get_tab_col_info_map, form_insert
 from db.roles import get_current_role_from_db
 from mathesar.models.base import (
-    Database, Form, FormField, ConfiguredRole, UserDatabaseRoleMap, ColumnMetaData
+    Database, Form, FormField, ConfiguredRole, UserDatabaseRoleMap
 )
 from mathesar.rpc.columns.metadata import ColumnMetaDataBlob
+from mathesar.utils.columns import get_columns_meta_data
 from mathesar.utils.tables import get_table_meta_data
 
 
@@ -47,19 +48,16 @@ def get_field_tab_col_info_map(form_model):
     table_oid_attnums_map = get_table_oid_attnums_map(form_model)
     with form_model.connection as conn:
         tab_col_info_map = get_tab_col_info_map(table_oid_attnums_map, conn)
-    for oid, table_data in tab_col_info_map.items():
-        expected_attnums = table_oid_attnums_map[int(oid)]
-        column_attnums = table_data["columns"].keys()
-        for attn in expected_attnums:
-            if str(attn) not in column_attnums:
-                table_data["columns"][str(attn)] = {"error": {"code": -31025, "message": f"Column {attn} not found"}}
-        metadata_list = (
-            ColumnMetaData.objects.filter(attnum__in=column_attnums, table_oid=oid, database=form_model.database)
-        )
-        for meta in metadata_list:
-            col_info = table_data["columns"].get(str(meta.attnum))
-            if col_info:
-                col_info["metadata"] = ColumnMetaDataBlob.from_model(meta)
+        for oid, table_data in tab_col_info_map.items():
+            expected_attnums = table_oid_attnums_map[int(oid)]
+            column_attnums = table_data["columns"].keys()
+            for attn in expected_attnums:
+                if str(attn) not in column_attnums:
+                    table_data["columns"][str(attn)] = {"error": {"code": -31025, "message": f"Column {attn} not found"}}
+            for attnum, options in get_columns_meta_data(conn, int(oid)).items():
+                col_info = table_data["columns"].get(str(attnum))
+                if col_info:
+                    col_info["metadata"] = ColumnMetaDataBlob.from_options(attnum, options)
     return tab_col_info_map
 
 

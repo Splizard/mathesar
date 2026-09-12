@@ -38,7 +38,7 @@ def get_user_linked_record_summaries(columns_meta_data, results):
     Build user display values for user columns in the given results.
 
     Args:
-        columns_meta_data: List of column metadata objects (already fetched)
+        columns_meta_data: The table's presentation options, keyed by attnum
         results: List of record dicts from the database
 
     Returns:
@@ -46,9 +46,9 @@ def get_user_linked_record_summaries(columns_meta_data, results):
         or None if there are no user columns.
     """
     user_columns = [
-        (c.attnum, c.user_display_field)
-        for c in columns_meta_data
-        if c.user_display_field
+        (attnum, options["user_display_field"])
+        for attnum, options in columns_meta_data.items()
+        if options.get("user_display_field")
     ]
     if not user_columns:
         return None

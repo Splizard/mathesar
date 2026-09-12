@@ -34,6 +34,9 @@ def test_records_list(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     expect_records_list = {
         "count": 50123,
         "results": [{"1": "abcde", "2": 12345}, {"1": "fghij", "2": 67890}],
@@ -88,6 +91,9 @@ def test_records_get(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     expect_record = {
         "count": 1,
         "results": [{"1": "abcde", "2": 12345}, {"1": "fghij", "2": 67890}],
@@ -133,6 +139,9 @@ def test_records_add(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     mock_table_meta = MagicMock()
     mock_table_meta.user_tracking_attnum = None
     monkeypatch.setattr(records, 'get_table_meta_data', lambda *_: mock_table_meta)
@@ -178,6 +187,9 @@ def test_records_patch(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     mock_table_meta = MagicMock()
     mock_table_meta.user_tracking_attnum = None
     monkeypatch.setattr(records, 'get_table_meta_data', lambda *_: mock_table_meta)
@@ -225,6 +237,9 @@ def test_records_delete(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     expect_result = 2
     mocked_exec_msar_func.fetchone.return_value = [expect_result]
     actual_result = records.delete(
@@ -255,6 +270,9 @@ def test_records_search(rf, monkeypatch, mocked_exec_msar_func):
             raise AssertionError('incorrect parameters passed')
 
     monkeypatch.setattr(records, 'connect', mock_connect)
+    # These tests mock exec_msar_func wholesale; the presentation read would pick up the
+    # records it returns. It is incidental to what's under test, so stub it out.
+    monkeypatch.setattr(records, 'get_columns_meta_data', lambda conn, table_oid: {})
     expect_records_list = {
         "count": 50123,
         "results": [{"1": "abcde", "2": 12345}, {"1": "fghij", "2": 67890}],

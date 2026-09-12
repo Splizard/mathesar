@@ -20,12 +20,9 @@ def _make_user(id, full_name="", email="", username=""):
     return user
 
 
-def _make_column_meta(attnum, user_display_field=None):
-    """Create a mock ColumnMetaData object."""
-    col = MagicMock()
-    col.attnum = attnum
-    col.user_display_field = user_display_field
-    return col
+def _column_presentation(*columns):
+    """A table's presentation options keyed by attnum, as get_columns_meta_data returns them."""
+    return {attnum: {"user_display_field": field} for attnum, field in columns}
 
 
 def _make_table_meta(user_tracking_attnum=None):
@@ -105,18 +102,12 @@ class TestGetUserDisplayValues:
 class TestGetUserLinkedRecordSummaries:
     def test_no_user_columns(self):
         """When no columns have user_display_field, returns None."""
-        cols = [
-            _make_column_meta(1, user_display_field=None),
-            _make_column_meta(2, user_display_field=None),
-        ]
+        cols = _column_presentation((1, None), (2, None))
         result = ud.get_user_linked_record_summaries(cols, [{"1": "a", "2": "b"}])
         assert result is None
 
     def test_single_user_column(self, monkeypatch):
-        cols = [
-            _make_column_meta(1, user_display_field=None),
-            _make_column_meta(3, user_display_field="full_name"),
-        ]
+        cols = _column_presentation((1, None), (3, "full_name"))
         results = [
             {"1": "foo", "3": str(_uuid(10))},
             {"1": "bar", "3": str(_uuid(20))},
@@ -132,10 +123,7 @@ class TestGetUserLinkedRecordSummaries:
         assert result == {"3": {str(_uuid(10)): "Alice", str(_uuid(20)): "Bob"}}
 
     def test_multiple_user_columns(self, monkeypatch):
-        cols = [
-            _make_column_meta(2, user_display_field="email"),
-            _make_column_meta(5, user_display_field="username"),
-        ]
+        cols = _column_presentation((2, "email"), (5, "username"))
         results = [
             {"2": str(_uuid(1)), "5": str(_uuid(3))},
             {"2": str(_uuid(2)), "5": str(_uuid(3))},
@@ -157,7 +145,7 @@ class TestGetUserLinkedRecordSummaries:
 
     def test_null_and_non_uuid_values_in_results(self, monkeypatch):
         """Null user IDs, and values that aren't UUIDs (as in an old integer User column), are skipped."""
-        cols = [_make_column_meta(3, user_display_field="full_name")]
+        cols = _column_presentation((3, "full_name"))
         results = [
             {"3": str(_uuid(10))},
             {"3": None},
@@ -175,7 +163,7 @@ class TestGetUserLinkedRecordSummaries:
 
     def test_returns_none_when_no_user_values(self, monkeypatch):
         """If all user columns have null values in results, returns None."""
-        cols = [_make_column_meta(3, user_display_field="full_name")]
+        cols = _column_presentation((3, "full_name"))
         results = [{"3": None}]
 
         result = ud.get_user_linked_record_summaries(cols, results)

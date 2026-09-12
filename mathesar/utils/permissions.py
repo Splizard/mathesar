@@ -205,7 +205,7 @@ def _setup_connection_models(
     )[0]
 
 
-def _convert_sample_money_columns(conn, database):
+def _convert_sample_money_columns(conn):
     """
     Put the sample data's money columns away as Mathesar stores money now.
 
@@ -218,7 +218,7 @@ def _convert_sample_money_columns(conn, database):
         if not may_alter:
             continue
         convert_money_column(schema, table, column, conn)
-        record_money_column(database, table_oid, attnum)
+        record_money_column(conn, table_oid, attnum)
 
 
 def _load_sample_data(conn, sample_data, database):
@@ -243,7 +243,7 @@ def _load_sample_data(conn, sample_data, database):
             # generally succeeded.
             continue
     if loaded:
-        _convert_sample_money_columns(conn, database)
+        _convert_sample_money_columns(conn)
 
 
 def _grant_create_on_public(conn, owner):

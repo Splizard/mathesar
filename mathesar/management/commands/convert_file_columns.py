@@ -1,6 +1,5 @@
 from db.columns import convert_to_file_column, get_legacy_file_refs
 from mathesar.management.commands._column_conversion import ColumnConversionCommand
-from mathesar.models.base import ColumnMetaData
 from mathesar.utils.download_links import sign_legacy_file_refs
 
 
@@ -12,9 +11,7 @@ class Command(ColumnConversionCommand):
         " Mathesar's SQL into its databases."
     )
     old_types = ('json', 'jsonb')
-
-    def get_columns(self):
-        return ColumnMetaData.objects.filter(file_backend__isnull=False)
+    presentation_filter = 'file_backend IS NOT NULL'
 
     def convert(self, conn, column, where, dry_run):
         refs = get_legacy_file_refs(column.table_oid, column.attnum, conn)

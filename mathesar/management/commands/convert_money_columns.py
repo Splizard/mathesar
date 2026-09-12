@@ -86,12 +86,14 @@ class Command(BaseCommand):
                 return True
             try:
                 convert_money_column(schema, table, column, conn)
+                # The symbol now lives in the same database as the column, so it goes in with the
+                # same commit: a converted column is never left without one.
+                record_money_column(conn, table_oid, attnum)
             except Exception as e:
                 conn.rollback()
                 self.stderr.write(f"{where}: {e}")
                 return False
             conn.commit()
-            record_money_column(database, table_oid, attnum)
             self.stdout.write(f"{where}: now a numeric holding money")
             return True
         self.stderr.write(f"{where}: no configured role can alter it.")

@@ -385,8 +385,9 @@ def list_with_metadata(*, table_oid: int, database_id: int, **kwargs) -> list:
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         column_info = get_column_info_for_table(table_oid, conn)
-    column_metadata = get_columns_meta_data(table_oid, database_id)
+        presentation = get_columns_meta_data(conn, table_oid)
     metadata_map = {
-        c.attnum: ColumnMetaDataBlob.from_model(c) for c in column_metadata
+        attnum: ColumnMetaDataBlob.from_options(attnum, options)
+        for attnum, options in presentation.items()
     }
     return [col | {"metadata": metadata_map.get(col["id"])} for col in column_info]

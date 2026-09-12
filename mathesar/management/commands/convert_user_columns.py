@@ -1,6 +1,5 @@
 from db.columns import convert_to_user_column
 from mathesar.management.commands._column_conversion import ColumnConversionCommand
-from mathesar.models.base import ColumnMetaData
 from mathesar.models.users import User
 
 
@@ -11,9 +10,7 @@ class Command(ColumnConversionCommand):
         " ids. Run it after installing Mathesar's SQL into its databases."
     )
     old_types = ('smallint', 'integer', 'bigint')
-
-    def get_columns(self):
-        return ColumnMetaData.objects.filter(user_display_field__isnull=False)
+    presentation_filter = 'user_display_field IS NOT NULL'
 
     def convert(self, conn, column, where, dry_run):
         users = {

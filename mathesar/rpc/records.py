@@ -333,8 +333,8 @@ def list_(
         The requested records, along with some metadata.
     """
     user = kwargs.get(REQUEST_KEY).user
-    columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     with connect(database_id, user) as conn:
+        columns_meta_data = get_columns_meta_data(conn, table_oid)
         record_info = list_records_from_table(
             conn,
             table_oid,
@@ -398,8 +398,8 @@ def get(
         The requested record, along with some metadata.
     """
     user = kwargs.get(REQUEST_KEY).user
-    columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     with connect(database_id, user) as conn:
+        columns_meta_data = get_columns_meta_data(conn, table_oid)
         record_info = get_record_from_table(
             conn,
             record_id,
@@ -457,11 +457,11 @@ def add(
         The created record, along with some metadata.
     """
     user = kwargs.get(REQUEST_KEY).user
-    columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     table_meta_data = get_table_meta_data(table_oid, database_id)
     record_def = apply_track_editing_user(record_def, table_meta_data, str(user.id))
 
     with connect(database_id, user) as conn:
+        columns_meta_data = get_columns_meta_data(conn, table_oid)
         record_info = add_record_to_table(
             conn,
             record_def,
@@ -513,11 +513,11 @@ def patch(
         The modified record, along with some metadata.
     """
     user = kwargs.get(REQUEST_KEY).user
-    columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     table_meta_data = get_table_meta_data(table_oid, database_id)
     record_def = apply_track_editing_user(record_def, table_meta_data, str(user.id))
 
     with connect(database_id, user) as conn:
+        columns_meta_data = get_columns_meta_data(conn, table_oid)
         record_info = patch_record_in_table(
             conn,
             record_def,
@@ -599,8 +599,8 @@ def search(
         The requested records, along with some metadata.
     """
     user = kwargs.get(REQUEST_KEY).user
-    columns_meta_data = list(get_columns_meta_data(table_oid, database_id))
     with connect(database_id, user) as conn:
+        columns_meta_data = get_columns_meta_data(conn, table_oid)
         record_info = search_records_from_table(
             conn,
             table_oid,
