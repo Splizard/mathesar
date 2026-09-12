@@ -9,6 +9,9 @@ export const LOCAL_STORAGE_KEYS = {
   // UI theme
   uiThemePreference: 'ui-theme-preference',
 
+  // The breadcrumb above a table, on a screen with no room to spare for it
+  compactPageHeaderVisible: 'compact-page-header-visible',
+
   // Table inspector
   tableInspectorVisible: 'table-inspector-visible',
   tableInspectorWidth: 'table-inspector-width',
@@ -34,6 +37,18 @@ export const LOCAL_STORAGE_KEYS = {
   dataFormInspectorVisible: 'data-form-inspector-visible',
   dataFormInspectorWidth: 'data-form-inspector-width',
 } as const;
+
+/**
+ * Whether the breadcrumb shows above a table on a screen too small for the table's panes.
+ *
+ * Off to begin with: it says where the table is, which is worth a fifth of a phone's landscape
+ * screen only when somebody is going somewhere. The row of controls under it has the way to
+ * bring it back.
+ */
+export const compactPageHeaderVisible = new LocalStorageStore({
+  key: LOCAL_STORAGE_KEYS.compactPageHeaderVisible,
+  defaultValue: false,
+});
 
 export const tableInspectorWidth = new LocalStorageStore({
   key: LOCAL_STORAGE_KEYS.tableInspectorWidth,

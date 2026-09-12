@@ -3,8 +3,16 @@
 
   import InspectorButton from '@mathesar/components/InspectorButton.svelte';
   import ModificationStatus from '@mathesar/components/ModificationStatus.svelte';
-  import { iconRequiresAttention, iconTableActions } from '@mathesar/icons';
-  import { tableInspectorVisible } from '@mathesar/stores/localStorage';
+  import {
+    iconHidePageHeader,
+    iconRequiresAttention,
+    iconRevealPageHeader,
+    iconTableActions,
+  } from '@mathesar/icons';
+  import {
+    compactPageHeaderVisible,
+    tableInspectorVisible,
+  } from '@mathesar/stores/localStorage';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { isTableView } from '@mathesar/utils/tables';
   import { Dropdown, Icon, Tooltip } from '@mathesar-component-library';
@@ -40,6 +48,23 @@
   one button on the right -- which is where somebody looks for it.
 -->
 <div class="compact-toolbar">
+  <!-- The table's name, and the way to the breadcrumb it came from, which is kept out of the way
+  until it is wanted. Naming the table here is the other half of that: the breadcrumb is what
+  otherwise says which table this is. -->
+  <button
+    type="button"
+    class="reveal"
+    aria-label={table.name}
+    aria-expanded={$compactPageHeaderVisible}
+    on:click={() => compactPageHeaderVisible.update((v) => !v)}
+  >
+    <span class="name">{table.name}</span>
+    <Icon
+      {...$compactPageHeaderVisible ? iconHidePageHeader : iconRevealPageHeader}
+      size="0.8em"
+    />
+  </button>
+
   {#if isSelectable}
     <div class="operations">
       <TableFilter />
@@ -107,6 +132,36 @@
     border-bottom: 1px solid var(--color-border-base);
     /* Nothing here is worth a second line, and there is no second line to give it. */
     overflow: hidden;
+  }
+
+  .reveal {
+    display: flex;
+    align-items: center;
+    gap: var(--sm5);
+    flex: 0 1 auto;
+    min-width: 0;
+    padding: var(--sm5) var(--sm4);
+    border: none;
+    border-radius: var(--border-radius-m);
+    background: transparent;
+    color: var(--color-fg-base);
+    font-size: var(--sm1);
+    font-weight: var(--font-weight-bold);
+    cursor: pointer;
+  }
+
+  .reveal .name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Where the row is narrow enough that a name would crowd the buttons out, the arrow says
+  enough on its own. */
+  @media (max-width: 560px) {
+    .reveal .name {
+      display: none;
+    }
   }
 
   .operations {

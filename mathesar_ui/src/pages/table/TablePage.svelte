@@ -8,6 +8,7 @@
   import LayoutWithHeader from '@mathesar/layouts/LayoutWithHeader.svelte';
   import type { Table } from '@mathesar/models/Table';
   import { makeSimplePageTitle } from '@mathesar/pages/pageTitleUtils';
+  import { compactPageHeaderVisible } from '@mathesar/stores/localStorage';
   import {
     Meta,
     TabularData,
@@ -126,7 +127,8 @@
 <LayoutWithHeader
   fitViewport
   restrictWidth={false}
-  hideHeader={$tableIsFullScreen}
+  hideHeader={$tableIsFullScreen ||
+    ($tableLayout !== 'sheet' && !$compactPageHeaderVisible)}
 >
   <div
     class="table-page"
