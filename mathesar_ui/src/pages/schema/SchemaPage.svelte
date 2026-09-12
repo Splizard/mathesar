@@ -36,6 +36,9 @@
 
   $: ({ name, description, currentAccess } = schema);
   $: ({ currentRoleOwns } = currentAccess);
+  // A schema the database or Mathesar keeps for itself opens like any other and is renamed by
+  // nobody. The server refuses it either way; this is so that it is not offered.
+  $: canRename = $currentRoleOwns && !schema.isInternal;
 </script>
 
 <svelte:head><title>{makeSimplePageTitle($name)}</title></svelte:head>
@@ -56,7 +59,7 @@
         <Button
           on:click={handleEditSchema}
           appearance="secondary"
-          disabled={!$currentRoleOwns}
+          disabled={!canRename}
         >
           <Icon {...iconEdit} />
           <span>{$_('rename_schema')}</span>

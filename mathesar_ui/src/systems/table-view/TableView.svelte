@@ -74,6 +74,7 @@
     allColumns,
     displayedColumns,
     columnsDataStore,
+    hasPrimaryKey,
   } = $tabularData);
   $: $tabularData, ($tableInspectorTab = 'table');
   $: clipboardHandler = new SheetClipboardHandler({
@@ -115,7 +116,18 @@
    */
   // On a screen with no room for the panes there is no room for the inspector either: it would
   // take half of what is left, and what is left is the table.
-  $: supportsTableInspector = context === 'page' && layout === 'sheet';
+  /**
+   * Which layout the table actually gets.
+   *
+   * A list of records needs a way to tell one record from another, and a table with no primary
+   * key has none: no summary, no key, nothing to open. Most views are like that, and every view
+   * in information_schema is. So a table without one gets the spreadsheet however narrow the
+   * screen is -- it needs scrolling sideways, but it shows what the records say rather than a
+   * column of things that cannot be told apart.
+   */
+  $: effectiveLayout =
+    layout === 'recordList' && !$hasPrimaryKey ? 'compactSheet' : layout;
+  $: supportsTableInspector = context === 'page' && effectiveLayout === 'sheet';
   $: sheetColumns = (() => {
     const columns: Array<{ column: { id: string; name: string } }> = [
       { column: { id: ID_ROW_CONTROL_COLUMN, name: 'ROW_CONTROL' } },
@@ -209,7 +221,7 @@
     bind:activeTabId={$tableInspectorTab}
   >
     <div class="sheet-area">
-      {#if layout === 'recordList'}
+      {#if effectiveLayout === 'recordList'}
         <!-- Too narrow for a spreadsheet to be read, so the records are listed to pick one
         from, and picking one opens it. -->
         <RecordSummaryList {table} />
@@ -260,7 +272,7 @@
             {hasNewColumnButton}
             {columnOrder}
             {table}
-            hasPaneToggle={layout === 'compactSheet'}
+            hasPaneToggle={effectiveLayout === 'compactSheet'}
             bind:showPanes
           />
           <Body {usesVirtualList} />
@@ -272,7 +284,7 @@
       {/if}
     </div>
   </WithTableInspector>
-  {#if layout === 'sheet' || showPanes}
+  {#if effectiveLayout === 'sheet' || showPanes}
     <StatusPane {context} />
   {/if}
 </div>

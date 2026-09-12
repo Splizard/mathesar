@@ -141,5 +141,37 @@
         display: none;
       }
     }
+
+    /* Where there is not room for the name and every action on one line, squeezing them onto one
+    leaves too little room for either: the name gets a third of a narrow screen and the actions
+    are crammed into what is left. They get a line each instead.
+
+    The width is the one at which a table stops showing the panes around it, so that a header
+    which is still being shown at that size is one that has been asked for.
+
+    .heading has min-height: 100% for the case where it is the only thing on its line and should
+    fill the header. Once it is a line of its own that reads as "as tall as both lines", which
+    inflates it to the whole header and pushes the actions out of the bottom of it -- so it is
+    relaxed here, where the heading's line is its own height and nothing else's. */
+    @media (max-width: 820px) {
+      flex-wrap: wrap;
+
+      .heading {
+        max-width: 100%;
+        flex-basis: 100%;
+        min-height: 0;
+      }
+
+      .actions {
+        margin-left: 0;
+        min-width: 0;
+        /* Rather than be compressed into nothing, on the narrowest screens. */
+        overflow-x: auto;
+      }
+
+      .actions-left {
+        min-width: 0;
+      }
+    }
   }
 </style>
