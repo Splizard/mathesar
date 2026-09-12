@@ -191,3 +191,66 @@ def test_the_server_is_told_we_have_started_and_stopped():
         asyncio.wait_for(application({'type': 'lifespan'}, receive, send), 5)
     )
     assert sent == ['lifespan.startup.complete', 'lifespan.shutdown.complete']
+
+
+class ConnectionInATransaction:
+    """
+    A connection as `connect` hands one over: already in a transaction, and so refusing
+    autocommit until that is dealt with.
+
+    psycopg raises ProgrammingError("can't change 'autocommit' now: connection in transaction
+    status INTRANS"), which is what the listener has to get past before it can hear anything.
+    """
+
+    def __init__(self):
+        self.in_transaction = True
+        self._autocommit = False
+        self.listened = []
+
+    @property
+    def autocommit(self):
+        return self._autocommit
+
+    @autocommit.setter
+    def autocommit(self, value):
+        if self.in_transaction:
+            raise AssertionError("tried to set autocommit while in a transaction")
+        self._autocommit = value
+
+    def rollback(self):
+        self.in_transaction = False
+
+    def commit(self):
+        self.in_transaction = False
+
+    def execute(self, statement, *args):
+        self.listened.append(statement)
+
+    def notifies(self, **kwargs):
+        return []
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+def test_the_listener_gets_past_the_transaction_it_is_handed(monkeypatch):
+    """
+    The connection arrives in a transaction and must be listening outside one.
+
+    This is the seam the unit tests used to mock over: the socket was tested with the listening
+    stubbed out, and the listening was tested against a connection of its own making, so nothing
+    exercised the one `connect` actually hands over.
+    """
+    conn = ConnectionInATransaction()
+    monkeypatch.setattr(changes, 'connect', lambda database_id, user: conn)
+    stop = threading.Event()
+    stop.set()
+
+    changes._listen(3, 'alice', lambda payload: None, stop)
+
+    assert conn.in_transaction is False
+    assert conn.autocommit is True
+    assert conn.listened == [f'LISTEN {changes.CHANGE_CHANNEL}']

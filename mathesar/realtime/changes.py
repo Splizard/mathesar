@@ -79,6 +79,13 @@ def _listen(database_id, user, put, stop):
     """
     try:
         with connect(database_id, user) as conn:
+            # connect() has already run a statement to say which Mathesar user this is, so the
+            # connection is in a transaction, and psycopg will not have autocommit turned on
+            # while it is. There is nothing here worth keeping -- that setting is
+            # transaction-local and a listener never writes -- so the transaction is thrown away.
+            # Autocommit is what lets notifications arrive: inside a transaction Postgres holds
+            # them until it ends, which for a connection that only listens would be never.
+            conn.rollback()
             conn.autocommit = True
             conn.execute(f'LISTEN {CHANGE_CHANNEL}')
             while not stop.is_set():
