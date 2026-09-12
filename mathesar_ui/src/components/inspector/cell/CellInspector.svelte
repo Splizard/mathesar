@@ -5,6 +5,13 @@
   import type { SelectedCellData } from '@mathesar/components/sheet/selection';
 
   export let selectedCellData: SelectedCellData;
+  /**
+   * Given, the cell is edited here as it would be in the sheet. Left out, it is
+   * only shown — as in the Data Explorer, whose results are a query's and not
+   * a table's to change.
+   */
+  export let setValue: ((value: unknown) => void) | undefined = undefined;
+  export let isProcessing = false;
 
   $: ({ activeCellData } = selectedCellData);
 
@@ -37,7 +44,10 @@
         {#if column}
           <CellFabric
             isIndependentOfSheet={true}
-            disabled={true}
+            isActive={!!setValue}
+            disabled={!setValue}
+            setValue={setValue ?? (() => {})}
+            {isProcessing}
             columnFabric={column}
             {value}
             {recordSummary}

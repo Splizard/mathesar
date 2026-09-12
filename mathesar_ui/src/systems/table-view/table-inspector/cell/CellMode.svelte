@@ -35,30 +35,36 @@
   $: ({ selectableRowsMap, fileManifests } = recordsData);
 
   /**
-   * The cell the inspector edits part by part: an array's values, a composite's
-   * fields, or the bounds of a range
+   * The cell the inspector shows. A joined column's cell has no entry here, and
+   * so is shown but not edited, which is right: it belongs to another table.
    */
-  $: activePartedCell = (() => {
+  $: activeCell = (() => {
     const { activeCellId } = $selection;
     if (!activeCellId) return undefined;
     const { rowId, columnId } = parseCellId(activeCellId);
     const row = $selectableRowsMap.get(rowId);
     const column = $processedColumns.get(columnId);
-    const type = column?.column.type;
     if (!row || !column) return undefined;
-    const rangeTypes = type ? getRangeTypesOf(type) : undefined;
+    return { row, column, columnId, value: row.record[columnId] };
+  })();
+
+  /**
+   * The cell the inspector edits part by part: an array's values, a composite's
+   * fields, or the bounds of a range
+   */
+  $: activePartedCell = (() => {
+    if (!activeCell) return undefined;
+    const { type } = activeCell.column.column;
+    const rangeTypes = getRangeTypesOf(type);
     if (type !== DB_TYPES.ARRAY && type !== DB_TYPES.COMPOSITE && !rangeTypes) {
       return undefined;
     }
     return {
-      row,
-      column,
-      columnId,
-      value: row.record[columnId],
+      ...activeCell,
       isArray: type === DB_TYPES.ARRAY,
       /** The type of the range's values, when it holds ranges */
       rangeValueType: rangeTypes?.value,
-      isMultirange: !!type && isMultirangeType(type),
+      isMultirange: isMultirangeType(type),
     };
   })();
 
@@ -111,12 +117,14 @@
   $: reset(activePartedCell);
 
   $: hasChanges = JSON.stringify(value) !== JSON.stringify(savedValue);
-  $: isEditable = !!activePartedCell?.column.isEditable && $canUpdateRecords;
+  $: isEditable = !!activeCell?.column.isEditable && $canUpdateRecords;
 
-  async function save() {
-    if (!activePartedCell) return;
-    const { row, columnId } = activePartedCell;
-    const cells = [{ columnId, value }];
+  async function saveValue(
+    cell: NonNullable<typeof activeCell>,
+    newValue: unknown,
+  ) {
+    const { row, columnId } = cell;
+    const cells = [{ columnId, value: newValue }];
     saveState = { state: 'processing' };
     try {
       await recordsData.bulkDml(
@@ -131,6 +139,11 @@
       toast.error(message);
       saveState = { state: 'failure', errors: [message] };
     }
+  }
+
+  async function save() {
+    if (!activePartedCell) return;
+    await saveValue(activePartedCell, value);
   }
 </script>
 
@@ -194,7 +207,14 @@
     {/if}
   </div>
 {:else}
-  <CellInspector selectedCellData={$selectedCellData} />
+  {@const cell = activeCell}
+  <CellInspector
+    selectedCellData={$selectedCellData}
+    isProcessing={saveState?.state === 'processing'}
+    setValue={isEditable && cell
+      ? (newValue) => void saveValue(cell, newValue)
+      : undefined}
+  />
 {/if}
 
 <style lang="scss">
