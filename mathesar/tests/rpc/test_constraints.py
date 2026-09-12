@@ -42,7 +42,8 @@ def test_constraints_list(rf, monkeypatch, mocked_select_from_msar_func):
             'referent_table_oid': 2254492,
             'referent_columns': [1],
             'expression': None,
-            'validated': True
+            'validated': True,
+            'pattern': None
         },
         {
             'oid': 2254572,
@@ -52,7 +53,8 @@ def test_constraints_list(rf, monkeypatch, mocked_select_from_msar_func):
             'referent_table_oid': 2254483,
             'referent_columns': [1],
             'expression': None,
-            'validated': True
+            'validated': True,
+            'pattern': None
         },
         {
             'oid': 2254544,
@@ -62,7 +64,8 @@ def test_constraints_list(rf, monkeypatch, mocked_select_from_msar_func):
             'referent_table_oid': 0,
             'referent_columns': None,
             'expression': None,
-            'validated': True
+            'validated': True,
+            'pattern': None
         },
         {
             'oid': 2254588,
@@ -72,7 +75,8 @@ def test_constraints_list(rf, monkeypatch, mocked_select_from_msar_func):
             'referent_table_oid': 0,
             'referent_columns': None,
             'expression': '("Role" = btrim("Role"))',
-            'validated': False
+            'validated': False,
+            'pattern': None
         }
     ]
     mocked_select_from_msar_func.return_value = expect_constraints_list

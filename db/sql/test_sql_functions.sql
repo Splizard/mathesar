@@ -1253,6 +1253,89 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION  test_match_check_pattern_roundtrip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  -- Whatever we write, we have to be able to read back as the pattern it was. This is what keeps
+  -- the writing and the matching from drifting apart.
+  CREATE TABLE match_roundtrip (t text, v varchar(50), c character(10));
+  PERFORM msar.add_constraints(
+    'match_roundtrip'::regclass::oid,
+    $j$[{"name": "on_text", "type": "c", "pattern": "text_box", "columns": [1]}]$j$
+  );
+  PERFORM msar.add_constraints(
+    'match_roundtrip'::regclass::oid,
+    $j$[{"name": "on_varchar", "type": "c", "pattern": "text_box", "columns": [2]}]$j$
+  );
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_roundtrip'::regclass::oid)
+     WHERE name = 'on_text'),
+    'text_box',
+    'a text column'
+  );
+  -- A varchar renders the column as (v)::text throughout, so this only passes because the
+  -- comparison drops casts.
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_roundtrip'::regclass::oid)
+     WHERE name = 'on_varchar'),
+    'text_box',
+    'a varchar column, whose expression is rendered with casts'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_match_check_pattern_leaves_others_alone() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE match_others (t text, u text);
+  ALTER TABLE match_others ADD CONSTRAINT someone_elses CHECK (t <> 'banned');
+  -- Half of the text_box pattern is not the text_box pattern.
+  ALTER TABLE match_others ADD CONSTRAINT only_trimmed CHECK (u = btrim(u));
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_others'::regclass::oid)
+     WHERE name = 'someone_elses'),
+    NULL,
+    'an unrelated expression is not claimed'
+  );
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_others'::regclass::oid)
+     WHERE name = 'only_trimmed'),
+    NULL,
+    'a partial match is not claimed'
+  );
+  -- But it is still reported, so it can be shown.
+  RETURN NEXT isnt(
+    (SELECT expression FROM msar.get_constraints_for_table('match_others'::regclass::oid)
+     WHERE name = 'someone_elses'),
+    NULL,
+    'and is still reported'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_match_check_pattern_is_per_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE match_percol (a text, b text);
+  -- The pattern names a column, so the right expression on the wrong column is not a match.
+  ALTER TABLE match_percol ADD CONSTRAINT wrong_col CHECK (a = btrim(a) AND a !~ '[\r\n]');
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_percol'::regclass::oid)
+     WHERE name = 'wrong_col'),
+    'text_box',
+    'matches against the column the constraint is actually on'
+  );
+  -- A multi-column check is never one of our single-column patterns.
+  ALTER TABLE match_percol ADD CONSTRAINT two_cols CHECK (a = btrim(a) AND b = btrim(b));
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('match_percol'::regclass::oid)
+     WHERE name = 'two_cols'),
+    NULL,
+    'a constraint over two columns is not a single-column pattern'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_add_constraint_duplicate_name() RETURNS SETOF TEXT AS $f$
 DECLARE
   con_create_arr jsonb := '[{"name": "myuniqcons", "type": "u", "columns": [2]}]';

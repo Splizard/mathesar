@@ -130,6 +130,8 @@ class ConstraintInfo(TypedDict):
                     and null for every other type of constraint.
         validated: False for a constraint added with NOT VALID, whose pre-existing rows were
                    never checked against it.
+        pattern: The check pattern the expression turns out to be, where Mathesar recognizes it,
+                 and null for a check constraint written by someone else.
     """
     oid: int
     name: str
@@ -139,6 +141,7 @@ class ConstraintInfo(TypedDict):
     referent_columns: Optional[list[int]]
     expression: Optional[str]
     validated: bool
+    pattern: Optional[str]
 
     @classmethod
     def from_dict(cls, con_info):
@@ -150,7 +153,8 @@ class ConstraintInfo(TypedDict):
             referent_table_oid=con_info["referent_table_oid"],
             referent_columns=con_info["referent_columns"],
             expression=con_info["expression"],
-            validated=con_info["validated"]
+            validated=con_info["validated"],
+            pattern=con_info["pattern"]
         )
 
 

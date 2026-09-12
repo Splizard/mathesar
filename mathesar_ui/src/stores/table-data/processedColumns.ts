@@ -35,7 +35,10 @@ import type {
 import { makeRecordSelectorOrchestratorFactory } from '@mathesar/systems/record-selector/recordSelectorOrchestrator';
 import type { ComponentAndProps } from '@mathesar-component-library/types';
 
-import { findFkConstraintsForColumn } from './constraintsUtils';
+import {
+  findFkConstraintsForColumn,
+  hasCheckPattern,
+} from './constraintsUtils';
 import type { RecordSummariesForSheet } from './record-summaries/recordSummaryUtils';
 
 /**
@@ -96,6 +99,9 @@ export class ProcessedColumn implements CellColumnFabric {
 
   readonly isUserTrackingColumn: boolean;
 
+  /** The abstract type's cellInfo, narrowed by what this column's constraints say. */
+  readonly cellInfo: AbstractType['cellInfo'];
+
   readonly userTrackingAttnum: number | null | undefined;
 
   constructor(props: {
@@ -129,10 +135,24 @@ export class ProcessedColumn implements CellColumnFabric {
       this.column,
     );
 
+    // A text column constrained to trimmed, single-line values is shown as a
+    // text box rather than a text area. Without a constraint saying so, the
+    // fall-back is what the DB type implies: only `character` is single-line.
+    this.cellInfo = (() => {
+      const { cellInfo } = this.abstractType;
+      if (
+        cellInfo?.type !== 'string' ||
+        !hasCheckPattern(this.exclusiveConstraints, this.column.id, 'text_box')
+      ) {
+        return cellInfo;
+      }
+      return { ...cellInfo, config: { ...cellInfo.config, multiLine: false } };
+    })();
+
     this.initialInputValue = getInitialInputValue(
       this.column,
       undefined,
-      this.abstractType.cellInfo,
+      this.cellInfo,
     );
 
     [this.linkFk] = findFkConstraintsForColumn(
@@ -147,7 +167,7 @@ export class ProcessedColumn implements CellColumnFabric {
       : undefined;
 
     this.cellComponentAndProps = getCellCap({
-      cellInfo: this.abstractType.cellInfo,
+      cellInfo: this.cellInfo,
       column: this.column,
       fkTargetTableId,
       pkTargetTableId: displayEnhancedPkCell ? this.tableOid : undefined,
@@ -161,10 +181,10 @@ export class ProcessedColumn implements CellColumnFabric {
             }),
           targetTableId: fkTargetTableId,
         })
-      : getDbTypeBasedInputCap(this.column, this.abstractType.cellInfo);
+      : getDbTypeBasedInputCap(this.column, this.cellInfo);
 
     this.simpleInputComponentAndProps =
-      getDbTypeBasedSimpleInputCap(this.column, this.abstractType.cellInfo) ??
+      getDbTypeBasedSimpleInputCap(this.column, this.cellInfo) ??
       this.inputComponentAndProps;
 
     this.allowedFiltersMap = (() =>

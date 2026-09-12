@@ -1,5 +1,6 @@
 import type { RawColumnWithMetadata } from '@mathesar/api/rpc/columns';
 import type {
+  CheckPattern,
   FkConstraint,
   RawConstraint,
 } from '@mathesar/api/rpc/constraints';
@@ -24,5 +25,27 @@ export function findFkConstraintsForColumn(
     (constraint) =>
       constraint.columns.length === 1 && // only single-column foreign keys
       constraint.columns.includes(columnId),
+  );
+}
+
+/**
+ * Whether the given column carries one of Mathesar's own check patterns.
+ *
+ * This is how a column's type is told from the constraint on it rather than
+ * from a domain of our own invention: the database reports which pattern an
+ * expression turns out to be, and a constraint written by someone else reports
+ * none, so it can be shown without being claimed.
+ */
+export function hasCheckPattern(
+  constraints: RawConstraint[],
+  columnId: RawColumnWithMetadata['id'],
+  pattern: CheckPattern,
+): boolean {
+  return constraints.some(
+    (c) =>
+      c.type === 'check' &&
+      c.pattern === pattern &&
+      c.columns.length === 1 &&
+      c.columns.includes(columnId),
   );
 }

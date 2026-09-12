@@ -610,6 +610,111 @@ END;
 $$ LANGUAGE SQL;
 
 
+CREATE OR REPLACE FUNCTION msar.check_patterns() RETURNS text[] AS $$/*
+The check constraint patterns Mathesar knows how to write and recognize.
+*/
+SELECT ARRAY['text_box'];
+$$ LANGUAGE SQL IMMUTABLE;
+
+
+CREATE OR REPLACE FUNCTION msar.normalize_check_expression(expression text) RETURNS text AS $$/*
+Reduce a check constraint's expression to a form that can be compared.
+
+PostgreSQL renders an expression back from its parse tree rather than storing what was typed, so
+what comes out has every operand parenthesized and every cast spelled out: the text_box pattern
+comes back as ((c = btrim(c)) AND (c !~ '[\r\n]'::text)), and on a varchar column as
+(((c)::text = btrim((c)::text)) AND ...). Dropping casts and parentheses and collapsing whitespace
+leaves both of those, and the expression we wrote in the first place, looking the same.
+
+This is deliberately loose, and two expressions that differ only in ways it discards would be
+treated as one. That is safe only because matching decides how to *present* a column and never what
+to do to it: an expression Mathesar doesn't recognize is left alone, not rewritten.
+
+Note that it also reaches inside string literals, so a pattern whose literal contains parentheses
+would need a cleverer comparison than this.
+*/
+SELECT btrim(
+  regexp_replace(
+    regexp_replace(
+      regexp_replace(
+        regexp_replace(expression, '::character varying', '', 'g'),
+        '::[a-z_]+(\[\])?', '', 'g'
+      ),
+      '[()]', ' ', 'g'
+    ),
+    '\s+', ' ', 'g'
+  )
+);
+$$ LANGUAGE SQL IMMUTABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_check_expression(tab_id oid, pattern text, columns jsonb) RETURNS text AS $$/*
+Build the boolean expression of a CHECK constraint from a named pattern.
+
+Mathesar recognizes a column's type by the constraint on it, so the expressions it writes have to be
+drawn from a fixed set rather than composed by the caller: this function is that set. Callers name a
+pattern and the columns to apply it to, and never supply SQL. Keeping the registry here means the
+column names are quoted by msar.get_column_names, which also validates that they exist.
+
+The patterns:
+  'text_box': the value is trimmed of surrounding whitespace and holds no line break.
+
+Args:
+  tab_id: The OID of the table the constraint is for.
+  pattern: The name of the pattern to build.
+  columns: A JSONB array of the names or attnums of the columns to apply it to.
+*/
+DECLARE
+  col text;
+  expression text;
+BEGIN
+  col := (msar.get_column_names(tab_id, columns))[1];
+  IF col IS NULL THEN
+    RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  expression := CASE pattern
+    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', col)
+  END;
+  IF expression IS NULL THEN
+    RAISE EXCEPTION 'Unknown check constraint pattern: %', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  RETURN expression;
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.match_check_pattern(tab_id oid, columns smallint[], expression text) RETURNS text AS $$/*
+Return the name of the check pattern the given expression is, or null if it isn't one of ours.
+
+Args:
+  tab_id: The OID of the table the constraint is on.
+  columns: The attnums the constraint covers, from pg_constraint.conkey.
+  expression: The constraint's expression, as PostgreSQL renders it.
+*/
+DECLARE
+  pattern text;
+BEGIN
+  IF expression IS NULL OR columns IS NULL OR array_length(columns, 1) <> 1 THEN
+    RETURN NULL;
+  END IF;
+  FOREACH pattern IN ARRAY msar.check_patterns() LOOP
+    IF msar.normalize_check_expression(expression)
+       = msar.normalize_check_expression(
+           msar.build_check_expression(tab_id, pattern, to_jsonb(columns))
+         )
+    THEN
+      RETURN pattern;
+    END IF;
+  END LOOP;
+  RETURN NULL;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
 CREATE OR REPLACE FUNCTION msar.get_constraints_for_table(tab_id oid) RETURNS TABLE
 (
   oid oid,
@@ -619,7 +724,8 @@ CREATE OR REPLACE FUNCTION msar.get_constraints_for_table(tab_id oid) RETURNS TA
   referent_table_oid oid,
   referent_columns smallint[],
   expression text,
-  validated boolean
+  validated boolean,
+  pattern text
 )
 AS $$/*
 Return data describing the constraints set on a given table.
@@ -633,6 +739,10 @@ identifier case and schema qualification, but preserves the order of an operator
 spells out casts, so two expressions that mean the same thing don't necessarily render alike.
 
 `validated` is false for a constraint added with NOT VALID, whose existing rows were never checked.
+
+`pattern` names the check pattern the expression turns out to be, where Mathesar recognizes it, so
+that a caller can tell a column's type from its constraint without having to read SQL. It is null
+for a check constraint written by someone else, which Mathesar shows but never rewrites.
 */
 WITH constraints AS (
   SELECT
@@ -643,7 +753,10 @@ WITH constraints AS (
     confrelid AS referent_table_oid,
     confkey AS referent_columns,
     CASE WHEN contype = 'c' THEN pg_catalog.pg_get_expr(conbin, conrelid) END AS expression,
-    convalidated AS validated
+    convalidated AS validated,
+    CASE WHEN contype = 'c' THEN msar.match_check_pattern(
+      conrelid, conkey, pg_catalog.pg_get_expr(conbin, conrelid)
+    ) END AS pattern
   FROM pg_catalog.pg_constraint
   WHERE conrelid = tab_id
 )
@@ -3103,44 +3216,6 @@ SELECT CASE
   END
   || CASE WHEN con.deferrable_ THEN 'DEFERRABLE' ELSE '' END;
 $$ LANGUAGE SQL RETURNS NULL ON NULL INPUT;
-
-
-CREATE OR REPLACE FUNCTION
-msar.build_check_expression(tab_id oid, pattern text, columns jsonb) RETURNS text AS $$/*
-Build the boolean expression of a CHECK constraint from a named pattern.
-
-Mathesar recognizes a column's type by the constraint on it, so the expressions it writes have to be
-drawn from a fixed set rather than composed by the caller: this function is that set. Callers name a
-pattern and the columns to apply it to, and never supply SQL. Keeping the registry here means the
-column names are quoted by msar.get_column_names, which also validates that they exist.
-
-The patterns:
-  'text_box': the value is trimmed of surrounding whitespace and holds no line break.
-
-Args:
-  tab_id: The OID of the table the constraint is for.
-  pattern: The name of the pattern to build.
-  columns: A JSONB array of the names or attnums of the columns to apply it to.
-*/
-DECLARE
-  col text;
-  expression text;
-BEGIN
-  col := (msar.get_column_names(tab_id, columns))[1];
-  IF col IS NULL THEN
-    RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
-      USING ERRCODE = 'invalid_parameter_value';
-  END IF;
-  expression := CASE pattern
-    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', col)
-  END;
-  IF expression IS NULL THEN
-    RAISE EXCEPTION 'Unknown check constraint pattern: %', pattern
-      USING ERRCODE = 'invalid_parameter_value';
-  END IF;
-  RETURN expression;
-END;
-$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION

@@ -1,5 +1,12 @@
 import { rpcMethodTypeContainer } from '@mathesar/packages/json-rpc-client-builder';
 
+/**
+ * The check patterns the API accepts. Mathesar recognizes a column's type by the
+ * constraint on it, so the expression is composed in the database from one of a
+ * fixed set of patterns rather than written by the caller.
+ */
+export type CheckPattern = 'text_box';
+
 interface BaseConstraint {
   oid: number;
   name: string;
@@ -30,6 +37,12 @@ export interface FkConstraint extends BaseConstraint {
 
 export interface CheckConstraint extends BaseConstraint {
   type: 'check';
+  /**
+   * The check pattern the expression turns out to be, where Mathesar recognizes
+   * it, and null for a check constraint written by someone else — which we show
+   * but never rewrite.
+   */
+  pattern: CheckPattern | null;
   /**
    * The boolean expression the constraint checks, as PostgreSQL renders it back
    * to us. The rendering normalizes whitespace, parentheses, identifier case and
@@ -67,13 +80,6 @@ export interface FkConstraintRecipe {
   fkey_relation_id: number;
   fkey_columns: number[];
 }
-
-/**
- * The check patterns the API accepts. Mathesar recognizes a column's type by the
- * constraint on it, so the expression is composed in the database from one of a
- * fixed set of patterns rather than written by the caller.
- */
-export type CheckPattern = 'text_box';
 
 export interface CheckConstraintRecipe {
   type: 'c';
