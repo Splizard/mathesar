@@ -18,6 +18,10 @@
   export let tableId: $$Props['tableId'];
   export let isIndependentOfSheet: $$Props['isIndependentOfSheet'];
   export let canViewLinkedEntities: $$Props['canViewLinkedEntities'];
+  export let formatForDisplay: $$Props['formatForDisplay'] = undefined;
+
+  $: shown =
+    value === undefined ? undefined : formatForDisplay?.(value) ?? value;
 
   function handleLinkContextMenu(e: MouseEvent) {
     // This is so users can right-click on the link without triggering the
@@ -56,10 +60,10 @@
     class:is-independent-of-sheet={isIndependentOfSheet}
   >
     <span class="value">
-      {#if value === undefined}
+      {#if shown === undefined}
         <Default />
       {:else}
-        {value}
+        {shown}
       {/if}
     </span>
     {#if canViewLinkedEntities}

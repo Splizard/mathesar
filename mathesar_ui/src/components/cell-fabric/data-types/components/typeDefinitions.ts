@@ -54,11 +54,17 @@ export type PrimaryKeyCellValue = string | number;
 
 export interface PrimaryKeyCellExternalProps {
   tableId: DBObjectEntry['id'];
+  /**
+   * How the column's own type would have shown the value. A primary key is
+   * still a value of a type, and a table keyed on a Unix time or an amount has
+   * as much right to be read as any other.
+   */
+  formatForDisplay?: CellValueFormatter<PrimaryKeyCellValue>;
 }
 
 export interface PrimaryKeyCellProps
-  extends CellTypeProps<ForeignKeyCellValue>,
-    LinkedRecordCellExternalProps {}
+  extends CellTypeProps<PrimaryKeyCellValue>,
+    PrimaryKeyCellExternalProps {}
 
 // Foreign key
 

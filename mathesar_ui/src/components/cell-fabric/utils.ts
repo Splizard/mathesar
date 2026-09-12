@@ -13,6 +13,7 @@ import PrimaryKeyCell from './data-types/components/primary-key/PrimaryKeyCell.s
 import type {
   LinkedRecordCellExternalProps,
   LinkedRecordInputExternalProps,
+  PrimaryKeyCellExternalProps,
 } from './data-types/components/typeDefinitions';
 import type { CellColumnLike } from './data-types/typeDefinitions';
 import { getCellConfiguration, getCellInfo } from './data-types/utils';
@@ -22,6 +23,31 @@ export interface JoinedColumnInfo {
   joinPath: JoinPath;
   targetTableOid: Table['oid'];
   type: 'simple-many-to-many';
+}
+
+export function getDisplayFormatter(
+  column: CellColumnLike,
+  columnId?: RawColumnWithMetadata['id'],
+): (
+  value: unknown,
+  recordSummaries?: RecordSummariesForSheet,
+) => string | null | undefined {
+  const cellInfo = getCellInfo(column.type, column.metadata);
+  const config = getCellConfiguration(column.type, cellInfo);
+  const dataType = cellInfo?.type ?? 'string';
+  const format = DataTypes[dataType].getDisplayFormatter(column, config);
+  return (cellValue: unknown, recordSummaries?: RecordSummariesForSheet) => {
+    if (!recordSummaries || columnId === undefined) {
+      return format(cellValue);
+    }
+    const recordSummary = recordSummaries
+      .get(String(columnId))
+      ?.get(String(cellValue));
+    if (recordSummary) {
+      return recordSummary;
+    }
+    return format(cellValue);
+  };
 }
 
 export function getCellCap({
@@ -56,10 +82,11 @@ export function getCellCap({
   }
 
   if (pkTargetTableId) {
-    return {
-      component: PrimaryKeyCell,
-      props: { tableId: pkTargetTableId },
+    const props: PrimaryKeyCellExternalProps = {
+      tableId: pkTargetTableId,
+      formatForDisplay: getDisplayFormatter(column),
     };
+    return { component: PrimaryKeyCell, props };
   }
 
   if (joinedColumnInfo) {
@@ -116,29 +143,4 @@ export function getInitialInputValue(
   const cellInfo =
     optionalCellInfo ?? getCellInfo(column.type, column.metadata);
   return DataTypes[cellInfo?.type ?? 'string'].initialInputValue;
-}
-
-export function getDisplayFormatter(
-  column: CellColumnLike,
-  columnId?: RawColumnWithMetadata['id'],
-): (
-  value: unknown,
-  recordSummaries?: RecordSummariesForSheet,
-) => string | null | undefined {
-  const cellInfo = getCellInfo(column.type, column.metadata);
-  const config = getCellConfiguration(column.type, cellInfo);
-  const dataType = cellInfo?.type ?? 'string';
-  const format = DataTypes[dataType].getDisplayFormatter(column, config);
-  return (cellValue: unknown, recordSummaries?: RecordSummariesForSheet) => {
-    if (!recordSummaries || columnId === undefined) {
-      return format(cellValue);
-    }
-    const recordSummary = recordSummaries
-      .get(String(columnId))
-      ?.get(String(cellValue));
-    if (recordSummary) {
-      return recordSummary;
-    }
-    return format(cellValue);
-  };
 }

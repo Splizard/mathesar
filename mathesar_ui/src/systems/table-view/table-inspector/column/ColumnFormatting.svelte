@@ -68,11 +68,16 @@
     actionButtonsVisible = true;
   }
 
-  $: isFkOrPk = column.column.primary_key || !!column.linkFk;
+  /**
+   * A foreign key column shows the record it points at, so how its own values
+   * would have been written doesn't arise. A primary key column shows its own
+   * value, and formats it like any other.
+   */
+  $: isFk = !!column.linkFk;
   $: isFormDisabled = typeChangeState?.state === 'processing';
 </script>
 
-{#if displayOptionsConfig && displayForm && !isFkOrPk}
+{#if displayOptionsConfig && displayForm && !isFk}
   <div on:focus={showActionButtons} on:mousedown={showActionButtons}>
     <AbstractTypeDisplayOptions
       bind:displayOptions
