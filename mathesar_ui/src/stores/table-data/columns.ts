@@ -20,6 +20,16 @@ import {
   isDefinedNonNullable,
 } from '@mathesar-component-library';
 
+/**
+ * The display options which change what a records request comes back with, as opposed to only how
+ * the client draws what it already has.
+ *
+ * Only `user_display_field` does: it is what makes the back end build user display values for a
+ * column, in the `linked_record_summaries` of the response. A width, a date format, a currency
+ * symbol and the rest are the client's business entirely.
+ */
+const METADATA_AFFECTING_RECORDS: (keyof ColumnMetadata)[] = ['user_display_field'];
+
 export class ColumnsDataStore extends EventHandler<{
   columnRenamed: void;
   columnAdded: void;
@@ -184,10 +194,30 @@ export class ColumnsDataStore extends EventHandler<{
     this.fetchedColumns.update((columns) =>
       columns.map((column) => {
         const metadata = changes.get(column.id);
-        return metadata === undefined ? column : { ...column, metadata };
+        if (metadata === undefined) return column;
+        /**
+         * Merged, not replaced, so that our copy says what the request said. Each request sets
+         * only the options it names and leaves the column's others alone; replacing here would
+         * drop them, so resizing a money column would stop it showing its currency symbol until
+         * the page was loaded again.
+         */
+        return { ...column, metadata: { ...column.metadata, ...metadata } };
       }),
     );
-    await this.dispatch('columnPatched');
+
+    /**
+     * Nothing to fetch unless an option changed that the records response depends on. Dragging a
+     * column border changes a width, which no record knows anything about, and re-fetching every
+     * record for it is what made resizing flicker.
+     */
+    const affectsRecords = [...changes.values()].some(
+      (metadata) =>
+        metadata !== null &&
+        METADATA_AFFECTING_RECORDS.some((option) => option in metadata),
+    );
+    if (affectsRecords) {
+      await this.dispatch('columnPatched');
+    }
   }
 
   async changeType(spec: {
