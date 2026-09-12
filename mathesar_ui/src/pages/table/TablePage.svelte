@@ -13,6 +13,7 @@
     TabularData,
     setTabularDataStoreInContext,
   } from '@mathesar/stores/table-data';
+  import { tableLayout } from '@mathesar/stores/viewport';
   import WithModalRecordView from '@mathesar/systems/record-view-modal/WithModalRecordView.svelte';
   import ActionsPane from '@mathesar/systems/table-view/actions-pane/ActionsPane.svelte';
   import TableView from '@mathesar/systems/table-view/TableView.svelte';
@@ -36,14 +37,27 @@
   export let table: Table;
 
   let sheetElement: HTMLElement;
+  /**
+   * Whether to show the panes above and below the table, which are taken away when the screen
+   * has no room to spare for them and put back together by the button in the corner of the
+   * sheet. Together, because everything either of them offers has to stay reachable.
+   */
+  let showPanes = false;
 
   $: ({ query } = $router);
   $: meta = Meta.fromSerialization(query[metaSerializationQueryKey] ?? '');
   $: ({ currentRolePrivileges } = table.currentAccess);
+  /**
+   * A list of records is shown by what each record is called, so the summaries have to be asked
+   * for. Only where one will be shown: on a screen with room for the spreadsheet they would be a
+   * query per page for something nothing displays.
+   */
+  $: needsRecordSummaries = $tableLayout !== 'sheet';
   $: tabularData = new TabularData({
     database: table.schema.database,
     table,
     meta,
+    loadIntrinsicRecordSummaries: needsRecordSummaries,
   });
   $: ({ isLoading, selection } = tabularData);
   $: tabularDataStore.set(tabularData);
@@ -73,12 +87,22 @@
 <svelte:head><title>{makeSimplePageTitle(table.name)}</title></svelte:head>
 
 <LayoutWithHeader fitViewport restrictWidth={false}>
-  <div class="table-page">
-    <ActionsPane />
+  <div
+    class="table-page"
+    class:compact={$tableLayout !== 'sheet' && !showPanes}
+  >
+    {#if $tableLayout === 'sheet' || showPanes}
+      <ActionsPane />
+    {/if}
     {#if $currentRolePrivileges.has('SELECT')}
       <WithModalRecordView>
         <div class="table-view-area">
-          <TableView {table} bind:sheetElement />
+          <TableView
+            {table}
+            bind:sheetElement
+            layout={$tableLayout}
+            bind:showPanes
+          />
         </div>
       </WithModalRecordView>
     {:else}
@@ -96,6 +120,13 @@
     display: grid;
     grid-template: auto 1fr / 1fr;
     height: 100%;
+  }
+  /* With the pane gone there is one row, and the table takes all of it. */
+  .table-page.compact {
+    grid-template: 1fr / 1fr;
+  }
+  .table-page.compact :global(.table-view-area) {
+    padding: 0;
   }
   .warning {
     padding: 1rem;

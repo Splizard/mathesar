@@ -955,6 +955,7 @@
   "table": "Table",
   "table_access_read_help": "Can read table records",
   "table_access_write_help": "Can read, update, delete, and create table records",
+  "table_actions": "Table actions",
   "table_can_have_many": "With these relationships, one [tableName] record can have [bold](many) related records.",
   "table_can_have_one": "With these relationships, one [tableName] record can have [bold](one) related record.",
   "table_description": "Table Description",

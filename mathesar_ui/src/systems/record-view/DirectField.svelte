@@ -68,8 +68,15 @@
   $: value = $field;
   $: fieldIsDisabled = field.disabled;
   $: ({ showsError } = field);
+  /**
+   * A column worked out from a formula holds what Postgres worked out, and Postgres refuses any
+   * other value for it. Nothing about the privileges says so, so it is said here.
+   */
+  $: isWorkedOut =
+    column.formula_sql !== undefined && column.formula_sql !== null;
   $: disabled =
     column.primary_key ||
+    isWorkedOut ||
     $fieldIsDisabled ||
     !canUpdateTableRecords ||
     !canUpdateColumn;

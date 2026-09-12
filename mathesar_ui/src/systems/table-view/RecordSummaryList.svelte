@@ -1,0 +1,157 @@
+<script lang="ts">
+  import { get } from 'svelte/store';
+  import { _ } from 'svelte-i18n';
+
+  import { iconAddNew, iconRecord } from '@mathesar/icons';
+  import type { Table } from '@mathesar/models/Table';
+  import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
+  import { currentTablesMap } from '@mathesar/stores/tables';
+  import RecordStore from '@mathesar/systems/record-view/RecordStore';
+  import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
+  import { Button, Icon, Spinner } from '@mathesar-component-library';
+
+  export let table: Table;
+
+  const tabularData = getTabularDataStoreFromContext();
+  const modalRecordView = modalRecordViewContext.get();
+
+  $: ({ recordsData, isLoading, canInsertRecords } = $tabularData);
+  $: ({ selectableRowsMap, recordSummaries } = recordsData);
+  /**
+   * One entry per record on the page: what it is called, and the record it stands for. A record
+   * with nothing to call it is shown by its key, which is at least something to tap.
+   */
+  $: entries = [...$selectableRowsMap].map(([rowKey]) => {
+    const recordId = $tabularData.getRecordIdFromRowId(rowKey);
+    const key = recordId === undefined ? undefined : String(recordId);
+    return {
+      rowKey,
+      recordId,
+      summary: (key && $recordSummaries.get(key)) || key || '?',
+    };
+  });
+
+  function open(recordId: unknown) {
+    if (!modalRecordView || recordId === undefined) return;
+    const containingTable = $currentTablesMap.get(table.oid);
+    if (!containingTable) return;
+    modalRecordView.open(
+      new RecordStore({ table: containingTable, recordPk: String(recordId) }),
+    );
+  }
+
+  async function addRecord() {
+    await recordsData.addEmptyRecord();
+    // Opened as soon as it is there, a form being the way to fill a record in on a phone. The
+    // new record is the last of them, the page's records coming before the ones just added.
+    const keys = [...get(recordsData.selectableRowsMap).keys()];
+    const newest = keys[keys.length - 1];
+    if (newest) open($tabularData.getRecordIdFromRowId(newest));
+  }
+</script>
+
+<div class="record-summary-list">
+  {#if $isLoading && entries.length === 0}
+    <div class="loading"><Spinner /></div>
+  {:else if entries.length === 0}
+    <p class="nothing">{$_('no_records_found')}</p>
+  {:else}
+    <ul>
+      {#each entries as entry (entry.rowKey)}
+        <li>
+          <button type="button" on:click={() => open(entry.recordId)}>
+            <Icon {...iconRecord} />
+            <span class="summary">{entry.summary}</span>
+          </button>
+        </li>
+      {/each}
+    </ul>
+  {/if}
+
+  {#if $canInsertRecords}
+    <div class="add">
+      <Button
+        appearance="primary"
+        aria-label={$_('new_record')}
+        on:click={addRecord}
+      >
+        <Icon {...iconAddNew} />
+      </Button>
+    </div>
+  {/if}
+</div>
+
+<style lang="scss">
+  .record-summary-list {
+    position: relative;
+    height: 100%;
+    overflow-y: auto;
+    /* Nothing here is wider than the screen, and a summary that would be is cut short. */
+    overflow-x: hidden;
+    background: var(--color-bg-base);
+  }
+
+  ul {
+    list-style: none;
+    margin: 0;
+    /* Room at the bottom for the button that floats over it. */
+    padding: 0 0 5rem 0;
+  }
+
+  li + li {
+    border-top: 1px solid var(--card-border-color);
+  }
+
+  button {
+    display: flex;
+    align-items: center;
+    gap: var(--sm2);
+    width: 100%;
+    /* Big enough to hit with a thumb. */
+    min-height: 3rem;
+    padding: var(--sm2) var(--sm1);
+    border: none;
+    background: transparent;
+    text-align: left;
+    font-size: 1rem;
+    color: var(--color-fg-base);
+    cursor: pointer;
+  }
+
+  button:active {
+    background: var(--color-bg-base-active, var(--card-background));
+  }
+
+  .summary {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .add {
+    position: sticky;
+    bottom: var(--lg1);
+    display: flex;
+    justify-content: flex-end;
+    padding-right: var(--lg1);
+    /* Nothing of its own to sit on, so that the list shows through beside it. */
+    pointer-events: none;
+  }
+
+  .add > :global(*) {
+    pointer-events: auto;
+    border-radius: 50%;
+    width: 3.5rem;
+    height: 3.5rem;
+    box-shadow: var(--card-hover-box-shadow);
+  }
+
+  .loading,
+  .nothing {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: var(--lg4);
+    color: var(--color-fg-base-muted);
+  }
+</style>

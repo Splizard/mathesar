@@ -24,6 +24,7 @@
   import { tableInspectorTab } from '@mathesar/stores/tableInspector';
   import { currentTablesMap } from '@mathesar/stores/tables';
   import { toast } from '@mathesar/stores/toast';
+  import type { TableLayout } from '@mathesar/stores/viewport';
   import CanvasView from '@mathesar/systems/canvas-view/CanvasView.svelte';
   import { shapesOnCanvas } from '@mathesar/systems/canvas-view/canvasViewMode';
   import {
@@ -39,6 +40,7 @@
   import Header from './header/Header.svelte';
   import { importModalContext } from './import/ImportController';
   import ImportModal from './import/ImportModal.svelte';
+  import RecordSummaryList from './RecordSummaryList.svelte';
   import StatusPane from './StatusPane.svelte';
   import WithTableInspector from './table-inspector/WithTableInspector.svelte';
   import { getCustomizedColumnWidths } from './tableViewUtils';
@@ -55,6 +57,10 @@
   export let context: Context = 'page';
   export let table: Table;
   export let sheetElement: HTMLElement | undefined = undefined;
+  /** How much room there is, and so which of the three layouts the table has */
+  export let layout: TableLayout = 'sheet';
+  /** Whether the panes above and below the table are showing, which the corner button turns on */
+  export let showPanes = false;
 
   $: ({ currentRoleOwns } = table.currentAccess);
   $: usesVirtualList = context !== 'widget';
@@ -107,7 +113,9 @@
    * to more easily displaying the Table Inspector even if DDL operations are
    * not supported.
    */
-  $: supportsTableInspector = context === 'page';
+  // On a screen with no room for the panes there is no room for the inspector either: it would
+  // take half of what is left, and what is left is the table.
+  $: supportsTableInspector = context === 'page' && layout === 'sheet';
   $: sheetColumns = (() => {
     const columns: Array<{ column: { id: string; name: string } }> = [
       { column: { id: ID_ROW_CONTROL_COLUMN, name: 'ROW_CONTROL' } },
@@ -201,7 +209,11 @@
     bind:activeTabId={$tableInspectorTab}
   >
     <div class="sheet-area">
-      {#if isDrawing}
+      {#if layout === 'recordList'}
+        <!-- Too narrow for a spreadsheet to be read, so the records are listed to pick one
+        from, and picking one opens it. -->
+        <RecordSummaryList {table} />
+      {:else if isDrawing}
         <CanvasView shapes={drawnShapes} onRecordClick={openRecord} />
       {:else if $processedColumns.size}
         <Sheet
@@ -244,7 +256,13 @@
           restrictWidthToRowWidth={!usesVirtualList}
           bind:sheetElement
         >
-          <Header {hasNewColumnButton} {columnOrder} {table} />
+          <Header
+            {hasNewColumnButton}
+            {columnOrder}
+            {table}
+            hasPaneToggle={layout === 'compactSheet'}
+            bind:showPanes
+          />
           <Body {usesVirtualList} />
         </Sheet>
       {:else if $isLoading}
@@ -254,7 +272,9 @@
       {/if}
     </div>
   </WithTableInspector>
-  <StatusPane {context} />
+  {#if layout === 'sheet' || showPanes}
+    <StatusPane {context} />
+  {/if}
 </div>
 
 <ImportModal
