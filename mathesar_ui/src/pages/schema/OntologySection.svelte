@@ -205,8 +205,10 @@
                 {/if}
                 {#if type.default}
                   <li>
+                    <!-- The value itself when that is all the default is, and
+                    the expression Postgres wrote down when it is more. -->
                     {$_('ontology_default', {
-                      values: { value: type.default },
+                      values: { value: type.default_value ?? type.default },
                     })}
                   </li>
                 {/if}

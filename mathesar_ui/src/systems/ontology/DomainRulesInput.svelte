@@ -1,5 +1,4 @@
 <script lang="ts">
-  import { tick } from 'svelte';
   import { _ } from 'svelte-i18n';
 
   import { iconAddNew, iconDeleteMajor } from '@mathesar/icons';
@@ -28,9 +27,6 @@
   export let subject: RuleSubject | undefined = undefined;
   export let disabled = false;
 
-  /** The inputs, so that a rule just added can be typed into straight away */
-  const inputs: Record<number, HTMLInputElement | undefined> = {};
-
   $: kinds = getRuleKindsFor(subject);
   $: error = getRuleEntriesError(entries);
 
@@ -38,11 +34,8 @@
     return !!domainRuleKinds.find((kind) => kind.rule === rule)?.takes;
   }
 
-  async function add(rule: string) {
+  function add(rule: string) {
     entries = withRule(entries, rule);
-    const { key } = entries[entries.length - 1];
-    await tick();
-    inputs[key]?.focus();
   }
 </script>
 
@@ -58,7 +51,6 @@
         <span class="name">{$_(`domain_rule_${entry.rule}`)}</span>
         {#if takesAValue(entry.rule)}
           <TextInput
-            bind:element={inputs[entry.key]}
             value={entry.value}
             onValueChange={(value) => {
               entries = withRuleValue(entries, entry.key, value);
