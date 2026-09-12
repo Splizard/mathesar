@@ -35,11 +35,8 @@
   $: typesFetch = schema.constructTypesStore();
   $: void typesFetch.runConservatively();
   $: types = $typesFetch.resolvedValue ?? [];
-  // Making a type needs CREATE on the schema, and changing or dropping one needs
-  // to own the type, which isn't ours to know. Somebody who can add to the
-  // schema is offered all of it, and the database has the last word on the rest.
-  $: ({ currentRolePrivileges } = schema.currentAccess);
-  $: canEdit = $currentRolePrivileges.has('CREATE');
+  $: ({ canBeAddedTo } = schema);
+  $: canEdit = $canBeAddedTo;
 
   const enumModal = modal.spawnModalController();
   const domainModal = modal.spawnModalController();

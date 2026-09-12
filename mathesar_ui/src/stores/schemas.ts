@@ -20,6 +20,18 @@ import {
 } from '@mathesar-component-library';
 
 import { databasesStore } from './databases';
+import LocalStorageStore from './LocalStorageStore';
+
+/**
+ * Whether to show the schemas the database and Mathesar keep for themselves.
+ *
+ * They are worth looking at now and then and never worth changing, so they are kept out of the
+ * way until asked for, and the asking is remembered.
+ */
+export const showInternalSchemas = new LocalStorageStore<boolean>({
+  key: 'showInternalSchemas',
+  defaultValue: false,
+});
 
 const commonData = preloadCommonData();
 const isInAuthenticatedContext = commonData.routing_context !== 'anonymous';
@@ -111,7 +123,12 @@ export async function fetchSchemasForCurrentDatabase() {
   });
 
   try {
-    request = api.schemas.list({ database_id: $currentDatabase.id }).run();
+    request = api.schemas
+      .list({
+        database_id: $currentDatabase.id,
+        include_internal: get(showInternalSchemas),
+      })
+      .run();
     const rawSchemas = await request;
     setSchemasInStore($currentDatabase, rawSchemas);
   } catch (err) {
@@ -168,7 +185,10 @@ export const schemas = collapse(
       if (
         preload &&
         isInAuthenticatedContext &&
-        commonData.current_database === $currentDatabase?.id
+        commonData.current_database === $currentDatabase?.id &&
+        // What the page came with is the list without the internal schemas, the server having no
+        // way to know that they had been asked for. Asking for them means asking it again.
+        !get(showInternalSchemas)
       ) {
         if (commonData.schemas.state === 'success') {
           setSchemasInStore($currentDatabase, commonData.schemas.data);
@@ -194,7 +214,14 @@ export const schemas = collapse(
 );
 
 function sortSchemas(_schemas: Iterable<Schema>): Schema[] {
-  return [..._schemas].sort((a, b) => get(a.name).localeCompare(get(b.name)));
+  // The user's own schemas first, then the ones the database and Mathesar keep for themselves:
+  // asking to see those is asking for a place to look rather than for them to be mixed in among
+  // the schemas the user works in.
+  return [..._schemas].sort(
+    (a, b) =>
+      Number(a.isInternal) - Number(b.isInternal) ||
+      get(a.name).localeCompare(get(b.name)),
+  );
 }
 
 export const schemaNames = collapse(

@@ -13,7 +13,7 @@
   export let schema: Schema;
   export let onCreateEmptyTable: () => void;
 
-  $: ({ currentRolePrivileges } = schema.currentAccess);
+  $: ({ canBeAddedTo } = schema);
 </script>
 
 <DropdownMenu
@@ -21,7 +21,7 @@
   triggerAppearance="primary"
   closeOnInnerClick={true}
   label={$_('new_table')}
-  disabled={!$currentRolePrivileges.has('CREATE')}
+  disabled={!$canBeAddedTo}
 >
   <div slot="trigger">
     <Icon {...iconAddNew} />

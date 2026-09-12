@@ -252,7 +252,7 @@ def get(*, table_oid: int, database_id: int, **kwargs) -> TableInfo:
     return TableInfo(raw_table_info)
 
 
-@mathesar_rpc_method(name="tables.add", auth="login")
+@mathesar_rpc_method(name="tables.add", auth="login", writes=True)
 def add(
     *,
     schema_oid: int,
@@ -306,7 +306,7 @@ def add(
     return AddedTableInfo.from_dict(created_table_info)
 
 
-@mathesar_rpc_method(name="tables.delete", auth="login")
+@mathesar_rpc_method(name="tables.delete", auth="login", writes=True)
 def delete(
     *, table_oid: int, database_id: int, cascade: bool = False, **kwargs
 ) -> str:
@@ -326,7 +326,7 @@ def delete(
         return drop_table_from_database(table_oid, conn, cascade)
 
 
-@mathesar_rpc_method(name="tables.patch", auth="login")
+@mathesar_rpc_method(name="tables.patch", auth="login", writes=True)
 def patch(
     *, table_oid: str, table_data_dict: SettableTableInfo, database_id: int, **kwargs
 ) -> str:
@@ -346,7 +346,7 @@ def patch(
         return alter_table_on_database(table_oid, table_data_dict, conn)
 
 
-@mathesar_rpc_method(name="tables.import", auth="login")
+@mathesar_rpc_method(name="tables.import", auth="login", writes=True)
 def import_(
     *,
     data_file_id: int,

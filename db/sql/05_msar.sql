@@ -1768,10 +1768,13 @@ FROM (
 $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 
-CREATE OR REPLACE FUNCTION msar.list_schemas() RETURNS jsonb AS $$/*
-Return a json array of objects describing the user-defined schemas in the database.
+CREATE OR REPLACE FUNCTION msar.list_schemas(include_system boolean DEFAULT false)
+  RETURNS jsonb AS $$/*
+Return a json array of objects describing the schemas in the database.
 
-PostgreSQL system schemas are ignored.
+PostgreSQL system schemas -- information_schema and the pg_ ones, which hold the catalogue the
+database keeps about itself -- are ignored unless asked for. They are worth looking at and never
+worth changing, so a caller asking for them is asking to read.
 
 Internal Mathesar-specifc schemas are INCLUDED. These should be filtered out by the caller. This
 behavior is to avoid tight coupling between this function and other SQL files that might need to
@@ -1787,11 +1790,14 @@ Each returned JSON object in the array will have the form:
     "current_role_owns": <bool>,
     "table_count": <int>
   }
+
+Args:
+  include_system: Whether to describe the PostgreSQL system schemas too.
 */
 SELECT jsonb_agg(schema_data)
 FROM msar.schema_info_table() AS schema_data
-WHERE schema_data.name <> 'information_schema'
-AND schema_data.name NOT LIKE 'pg_%';
+WHERE include_system
+  OR (schema_data.name <> 'information_schema' AND schema_data.name NOT LIKE 'pg_%');
 $$ LANGUAGE SQL STABLE;
 
 

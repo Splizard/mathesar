@@ -2,8 +2,16 @@ import json
 from db import connection as db_conn
 
 
-def list_schemas(conn):
-    return db_conn.exec_msar_func(conn, 'list_schemas').fetchone()[0]
+def list_schemas(conn, include_system=False):
+    """
+    List the schemas in the database.
+
+    Args:
+        conn: a psycopg connection
+        include_system: Whether to describe the PostgreSQL system schemas too, which are worth
+            reading and never worth changing.
+    """
+    return db_conn.exec_msar_func(conn, 'list_schemas', include_system).fetchone()[0]
 
 
 def get_schema(schema_oid, conn):

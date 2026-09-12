@@ -192,7 +192,7 @@ def list_(*, database_id: int, **kwargs) -> list[TableMetaDataRecord]:
     ]
 
 
-@mathesar_rpc_method(name="tables.metadata.set", auth="login")
+@mathesar_rpc_method(name="tables.metadata.set", auth="login", writes=True)
 def set_(
     *, table_oid: int, metadata: TableMetaDataBlob, database_id: int, **kwargs
 ) -> None:

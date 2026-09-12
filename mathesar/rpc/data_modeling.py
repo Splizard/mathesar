@@ -10,7 +10,7 @@ from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.rpc.utils import connect
 
 
-@mathesar_rpc_method(name="data_modeling.add_foreign_key_column", auth="login")
+@mathesar_rpc_method(name="data_modeling.add_foreign_key_column", auth="login", writes=True)
 def add_foreign_key_column(
         *,
         column_name: str,
@@ -50,7 +50,7 @@ class MappingColumn(TypedDict):
     referent_table_oid: int
 
 
-@mathesar_rpc_method(name="data_modeling.add_mapping_table", auth="login")
+@mathesar_rpc_method(name="data_modeling.add_mapping_table", auth="login", writes=True)
 def add_mapping_table(
         *,
         table_name: str,
@@ -114,7 +114,7 @@ class SplitTableInfo(TypedDict):
     new_fkey_attnum: int
 
 
-@mathesar_rpc_method(name="data_modeling.split_table", auth="login")
+@mathesar_rpc_method(name="data_modeling.split_table", auth="login", writes=True)
 def split_table(
     *,
     table_oid: int,
@@ -148,7 +148,7 @@ def split_table(
         )
 
 
-@mathesar_rpc_method(name="data_modeling.move_columns", auth="login")
+@mathesar_rpc_method(name="data_modeling.move_columns", auth="login", writes=True)
 def move_columns(
     *,
     source_table_oid: int,
@@ -176,7 +176,7 @@ def move_columns(
         )
 
 
-@mathesar_rpc_method(name="data_modeling.change_primary_key_column", auth="login")
+@mathesar_rpc_method(name="data_modeling.change_primary_key_column", auth="login", writes=True)
 def change_primary_key_column(
         *,
         column_attnum: int,

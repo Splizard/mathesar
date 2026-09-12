@@ -5,7 +5,7 @@ from typing import Literal, Optional, TypedDict
 
 from modernrpc.core import REQUEST_KEY
 
-from db.constants import INTERNAL_SCHEMAS
+from db.constants import schema_is_internal
 from db.schemas import (
     create_schema,
     drop_schemas,
@@ -32,6 +32,8 @@ class SchemaInfo(TypedDict):
         current_role_owns: Whether the current role is the owner of the
             schema (even indirectly).
         table_count: The number of tables in the schema
+        internal: Whether it is a schema the database or Mathesar keeps for
+            itself, which can be read but never written to.
     """
     oid: int
     name: str
@@ -40,6 +42,7 @@ class SchemaInfo(TypedDict):
     current_role_priv: list[Literal['USAGE', 'CREATE']]
     current_role_owns: bool
     table_count: int
+    internal: bool
 
 
 class TypeField(TypedDict):
@@ -160,21 +163,33 @@ def add(
 
 
 @mathesar_rpc_method(name="schemas.list", auth="login")
-def list_(*, database_id: int, **kwargs) -> list[SchemaInfo]:
+def list_(
+        *, database_id: int, include_internal: bool = False, **kwargs
+) -> list[SchemaInfo]:
     """
     List information about schemas in a database. Exposed as `list`.
 
+    The schemas the database and Mathesar keep for themselves -- pg_catalog, information_schema,
+    and the ones Mathesar installs to do its work -- are left out unless asked for. They describe
+    the user's tables rather than being among them, so they are worth reading and never worth
+    changing: each comes back marked `internal`, and writing to one is refused.
+
     Args:
         database_id: The Django id of the database containing the schemas.
+        include_internal: Whether to include those schemas.
 
     Returns:
         A list of SchemaInfo objects.
     """
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
-        schemas = list_schemas(conn)
+        schemas = list_schemas(conn, include_system=include_internal)
 
-    return [s for s in schemas if s['name'] not in INTERNAL_SCHEMAS]
+    return [
+        s | {"internal": schema_is_internal(s['name'])}
+        for s in schemas
+        if include_internal or not schema_is_internal(s['name'])
+    ]
 
 
 @mathesar_rpc_method(name="schemas.get", auth="login")
@@ -192,7 +207,7 @@ def get(*, schema_oid: int, database_id: int, **kwargs) -> SchemaInfo:
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         schema_info = get_schema(schema_oid, conn)
-    return schema_info
+    return schema_info | {"internal": schema_is_internal(schema_info['name'])}
 
 
 @mathesar_rpc_method(name="schemas.list_types", auth="login")
@@ -215,7 +230,7 @@ def list_types(*, schema_oid: int, database_id: int, **kwargs) -> list[TypeInfo]
         return list_schema_types(schema_oid, conn)
 
 
-@mathesar_rpc_method(name="schemas.delete", auth="login")
+@mathesar_rpc_method(name="schemas.delete", auth="login", writes=True)
 def delete(*, schema_oids: list[int], database_id: int, **kwargs) -> None:
     """
     Safely drop all objects in each schema, then the schemas themselves.
@@ -234,7 +249,7 @@ def delete(*, schema_oids: list[int], database_id: int, **kwargs) -> None:
         drop_schemas(conn, schema_oids)
 
 
-@mathesar_rpc_method(name="schemas.patch", auth="login")
+@mathesar_rpc_method(name="schemas.patch", auth="login", writes=True)
 def patch(*, schema_oid: int, database_id: int, patch: SchemaPatch, **kwargs) -> SchemaInfo:
     """
     Patch a schema, given its OID.

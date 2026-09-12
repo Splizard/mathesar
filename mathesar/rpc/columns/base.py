@@ -246,7 +246,7 @@ def list_(*, table_oid: int, database_id: int, **kwargs) -> list[ColumnInfo]:
     return [ColumnInfo.from_dict(col) for col in raw_column_info]
 
 
-@mathesar_rpc_method(name="columns.add_primary_key_column", auth="login")
+@mathesar_rpc_method(name="columns.add_primary_key_column", auth="login", writes=True)
 def add_primary_key_column(
         *,
         pkey_type: Literal["IDENTITY", "UUIDv4"],
@@ -296,7 +296,7 @@ def add_primary_key_column(
     )
 
 
-@mathesar_rpc_method(name="columns.add", auth="login")
+@mathesar_rpc_method(name="columns.add", auth="login", writes=True)
 def add(
         *,
         column_data_list: list[CreatableColumnInfo],
@@ -324,7 +324,7 @@ def add(
         return add_columns_to_table(table_oid, column_data_list, conn)
 
 
-@mathesar_rpc_method(name="columns.patch", auth="login")
+@mathesar_rpc_method(name="columns.patch", auth="login", writes=True)
 def patch(
         *,
         column_data_list: list[SettableColumnInfo],
@@ -350,7 +350,7 @@ def patch(
         return alter_columns_in_table(table_oid, column_data_list, conn)
 
 
-@mathesar_rpc_method(name="columns.delete", auth="login")
+@mathesar_rpc_method(name="columns.delete", auth="login", writes=True)
 def delete(
         *, column_attnums: list[int], table_oid: int, database_id: int, **kwargs
 ) -> int:

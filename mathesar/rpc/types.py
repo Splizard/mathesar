@@ -52,7 +52,7 @@ class EnumPatch(TypedDict):
     values: Optional[list[Union[EnumValue, str]]]
 
 
-@mathesar_rpc_method(name="types.add_enum", auth="login")
+@mathesar_rpc_method(name="types.add_enum", auth="login", writes=True)
 def add_enum(
     *,
     schema_oid: int,
@@ -80,7 +80,7 @@ def add_enum(
         return create_enum_type(conn, schema_oid, name, values, description)
 
 
-@mathesar_rpc_method(name="types.patch_enum", auth="login")
+@mathesar_rpc_method(name="types.patch_enum", auth="login", writes=True)
 def patch_enum(
     *, type_oid: int, patch: EnumPatch, database_id: int, **kwargs
 ) -> int:
@@ -182,7 +182,7 @@ class DomainPatch(TypedDict):
     rules: Optional[list[DomainRule]]
 
 
-@mathesar_rpc_method(name="types.add_domain", auth="login")
+@mathesar_rpc_method(name="types.add_domain", auth="login", writes=True)
 def add_domain(
     *,
     schema_oid: int,
@@ -208,7 +208,7 @@ def add_domain(
         return create_domain_type(conn, schema_oid, name, spec)
 
 
-@mathesar_rpc_method(name="types.patch_domain", auth="login")
+@mathesar_rpc_method(name="types.patch_domain", auth="login", writes=True)
 def patch_domain(
     *, type_oid: int, patch: DomainPatch, database_id: int, **kwargs
 ) -> int:
@@ -272,7 +272,7 @@ class CompositePatch(TypedDict):
     fields: Optional[list[CompositeField]]
 
 
-@mathesar_rpc_method(name="types.add_composite", auth="login")
+@mathesar_rpc_method(name="types.add_composite", auth="login", writes=True)
 def add_composite(
     *,
     schema_oid: int,
@@ -300,7 +300,7 @@ def add_composite(
         return create_composite_type(conn, schema_oid, name, fields, description)
 
 
-@mathesar_rpc_method(name="types.patch_composite", auth="login")
+@mathesar_rpc_method(name="types.patch_composite", auth="login", writes=True)
 def patch_composite(
     *, type_oid: int, patch: CompositePatch, database_id: int, **kwargs
 ) -> int:
@@ -323,7 +323,7 @@ def patch_composite(
         return alter_composite_type(conn, type_oid, patch)
 
 
-@mathesar_rpc_method(name="types.delete", auth="login")
+@mathesar_rpc_method(name="types.delete", auth="login", writes=True)
 def delete(
     *, type_oid: int, cascade: bool = False, database_id: int, **kwargs
 ) -> str:

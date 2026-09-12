@@ -426,7 +426,7 @@ def get(
     return RecordList.from_dict(record_info)
 
 
-@mathesar_rpc_method(name="records.add", auth="login")
+@mathesar_rpc_method(name="records.add", auth="login", writes=True)
 def add(
         *,
         record_def: dict,
@@ -479,7 +479,7 @@ def add(
     return RecordAdded.from_dict(record_info)
 
 
-@mathesar_rpc_method(name="records.patch", auth="login")
+@mathesar_rpc_method(name="records.patch", auth="login", writes=True)
 def patch(
         *,
         record_def: dict,
@@ -534,7 +534,7 @@ def patch(
     return RecordAdded.from_dict(record_info)
 
 
-@mathesar_rpc_method(name="records.delete", auth="login")
+@mathesar_rpc_method(name="records.delete", auth="login", writes=True)
 def delete(
         *, record_ids: list[Any], table_oid: int, database_id: int, **kwargs
 ) -> list[Any]:

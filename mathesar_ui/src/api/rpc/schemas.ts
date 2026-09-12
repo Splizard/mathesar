@@ -14,6 +14,12 @@ export interface RawSchema {
   owner_oid: RawRole['oid'];
   current_role_priv: SchemaPrivilege[];
   current_role_owns: boolean;
+  /**
+   * Whether it is a schema the database or Mathesar keeps for itself, which
+   * describes the user's tables rather than being among them. Those can be
+   * read but never written to.
+   */
+  internal: boolean;
 }
 
 /** A column holding values of a type */
@@ -62,6 +68,9 @@ export const schemas = {
   list: rpcMethodTypeContainer<
     {
       database_id: number;
+      /** Whether to include the schemas the database and Mathesar keep for
+       * themselves, which are left out unless asked for */
+      include_internal?: boolean;
     },
     RawSchema[]
   >(),

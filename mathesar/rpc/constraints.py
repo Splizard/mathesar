@@ -212,7 +212,7 @@ def _checked_constraint_defs(constraint_def_list):
     return constraint_def_list
 
 
-@mathesar_rpc_method(name="constraints.add", auth="login")
+@mathesar_rpc_method(name="constraints.add", auth="login", writes=True)
 def add(
     *,
     table_oid: int,
@@ -235,7 +235,7 @@ def add(
         return create_constraint(table_oid, _checked_constraint_defs(constraint_def_list), conn)
 
 
-@mathesar_rpc_method(name="constraints.delete", auth="login")
+@mathesar_rpc_method(name="constraints.delete", auth="login", writes=True)
 def delete(*, table_oid: int, constraint_oid: int, database_id: int, **kwargs) -> str:
     """
     Delete a constraint from a table.
@@ -297,7 +297,7 @@ def list_check_pattern_violations(
         return check_pattern_violations(table_oid, column_attnum, pattern, conn)
 
 
-@mathesar_rpc_method(name="constraints.repair_check_pattern", auth="login")
+@mathesar_rpc_method(name="constraints.repair_check_pattern", auth="login", writes=True)
 def repair(
     *,
     table_oid: int,

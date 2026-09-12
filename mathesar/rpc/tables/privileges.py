@@ -48,7 +48,7 @@ def list_direct(
     return [TablePrivileges.from_dict(i) for i in raw_priv]
 
 
-@mathesar_rpc_method(name="tables.privileges.replace_for_roles", auth="login")
+@mathesar_rpc_method(name="tables.privileges.replace_for_roles", auth="login", writes=True)
 def replace_for_roles(
     *,
     privileges: list[TablePrivileges], table_oid: int, database_id: int,
@@ -82,7 +82,7 @@ def replace_for_roles(
     return [TablePrivileges.from_dict(i) for i in raw_priv]
 
 
-@mathesar_rpc_method(name="tables.privileges.transfer_ownership", auth="login")
+@mathesar_rpc_method(name="tables.privileges.transfer_ownership", auth="login", writes=True)
 def transfer_ownership(*, table_oid: int, new_owner_oid: int, database_id: int, **kwargs) -> TableInfo:
     """
     Transfers ownership of a given table to a new owner.

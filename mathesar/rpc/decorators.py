@@ -9,16 +9,18 @@ from modernrpc.auth.basic import (
     http_basic_auth_login_required,
     http_basic_auth_superuser_required,
 )
+from db.constants import schema_is_internal
 from mathesar.analytics import wire_analytics
 from mathesar.models import base as models, exceptions
 from mathesar.rpc.exceptions.handlers import handle_rpc_exceptions
+from mathesar.rpc.utils import connect
 from mathesar.utils.download_links import maintain_download_links
 
 MAINTENANCE_DONE = "maintenance_done"
 CACHE_TIMEOUT = 1800
 
 
-def mathesar_rpc_method(*, name, auth="superuser"):
+def mathesar_rpc_method(*, name, auth="superuser", writes=False):
     """
     Construct a decorator to add RPC functionality to functions.
 
@@ -28,6 +30,9 @@ def mathesar_rpc_method(*, name, auth="superuser"):
             - "superuser" (default): only superusers can call it.
             - "login": any logged in user can call it.
             - "anonymous": any user can call it, no login required.
+        writes: whether calling it changes the schema it is about, in which case it is refused
+            for the schemas the database and Mathesar keep for themselves. Those are explorable
+            but never writable; see refuse_internal_schemas.
     """
     authorization_wrap = lambda x: x # noqa
     if auth == "login":
@@ -49,11 +54,61 @@ def mathesar_rpc_method(*, name, auth="superuser"):
     else:
         raise Exception("`auth` must be 'superuser', 'login' or 'anonymous'")
 
+    writes_wrap = refuse_internal_schemas if writes else lambda x: x # noqa
+
     def combo_decorator(f):
         return rpc_method(name=name)(
-            auth_wrap(maintain_models(wire_analytics(handle_rpc_exceptions(authorization_wrap(f)))))
+            auth_wrap(maintain_models(wire_analytics(handle_rpc_exceptions(
+                authorization_wrap(writes_wrap(f))
+            ))))
         )
     return combo_decorator
+
+
+# How to ask the database which schema each kind of thing a call can be about belongs to. A call
+# names at most one of these, which is the thing it is about.
+SCHEMA_OF_TARGET = {
+    'schema_oid': "SELECT %s::oid::regnamespace::text",
+    'schema_oids': "SELECT unnest(%s::oid[])::regnamespace::text",
+    'table_oid': (
+        "SELECT relnamespace::regnamespace::text FROM pg_catalog.pg_class WHERE oid = %s"
+    ),
+    'type_oid': (
+        "SELECT typnamespace::regnamespace::text FROM pg_catalog.pg_type WHERE oid = %s"
+    ),
+}
+
+
+def refuse_internal_schemas(f):
+    """
+    Refuse a call that would write to a schema the database or Mathesar keeps for itself.
+
+    Those schemas describe the user's tables rather than being among them, so Mathesar shows them
+    to be read and never to be changed. Hiding the controls would be enough for the pages, but the
+    RPC is reachable on its own, so the refusal belongs here where every caller meets it.
+
+    Which schema a call is about has to be asked of the database, an OID saying nothing by itself,
+    which costs a query on top of the write it is guarding. That is cheap against a statement that
+    changes a table, and these are not the calls anything does in a hurry.
+    """
+    @wraps(f)
+    def wrapper(*args, **kwargs):
+        for key, sql in SCHEMA_OF_TARGET.items():
+            target = kwargs.get(key)
+            if target is None:
+                continue
+            user = kwargs.get(REQUEST_KEY).user
+            with connect(kwargs['database_id'], user) as conn:
+                names = [row[0] for row in conn.execute(sql, (target,))]
+            internal = sorted({n for n in names if n is not None and schema_is_internal(n)})
+            if internal:
+                raise exceptions.SchemaIsInternal(
+                    f"{', '.join(internal)} belongs to the database rather than to you, and can"
+                    " be read but not changed."
+                )
+            break
+        return f(*args, **kwargs)
+    return wrapper
 
 
 def maintain_models(f):

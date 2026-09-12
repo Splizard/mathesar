@@ -228,11 +228,21 @@ export class TabularData {
       (tableCurrentRolePrivileges) => tableCurrentRolePrivileges.has('SELECT'),
     );
 
+    /**
+     * A table in a schema the database or Mathesar keeps for itself is shown to be read, and the
+     * server refuses to write to one however it is asked. Most of them have no primary key and so
+     * would be read-only anyway, but the ones Mathesar installs do have one, and the user may
+     * even own them.
+     */
+    const isWritableSchema = !this.table.schema.isInternal;
+
     // TODO: We should be able to insert without a primary key column
     this.canInsertRecords = derived(
       [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
       ([hasPrimaryKey, tableCurrentRolePrivileges]) =>
-        hasPrimaryKey && tableCurrentRolePrivileges.has('INSERT'),
+        isWritableSchema &&
+        hasPrimaryKey &&
+        tableCurrentRolePrivileges.has('INSERT'),
     );
 
     this.canUpdateRecords = derived(
@@ -242,6 +252,7 @@ export class TabularData {
         this.processedColumns,
       ],
       ([hasPrimaryKey, tableCurrentRolePrivileges, processedColumns]) =>
+        isWritableSchema &&
         hasPrimaryKey &&
         (tableCurrentRolePrivileges.has('UPDATE') ||
           [...processedColumns.values()].some((col) =>
@@ -252,7 +263,9 @@ export class TabularData {
     this.canDeleteRecords = derived(
       [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
       ([hasPrimaryKey, tableCurrentRolePrivileges]) =>
-        hasPrimaryKey && tableCurrentRolePrivileges.has('DELETE'),
+        isWritableSchema &&
+        hasPrimaryKey &&
+        tableCurrentRolePrivileges.has('DELETE'),
     );
 
     this.joinableTables = new AsyncRpcApiStore(api.tables.list_joinable, {

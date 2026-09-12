@@ -15,3 +15,22 @@ INTERNAL_SCHEMAS = {
     MSAR_PRIVATE_SCHEMA,
     PRESENTATION_SCHEMA,
 }
+
+
+def schema_is_internal(name):
+    """
+    Whether a schema is one the database or Mathesar keeps for itself.
+
+    These describe the user's tables rather than being among them: PostgreSQL's own catalogue in
+    pg_catalog and information_schema, and the schemas Mathesar installs to do its work. They are
+    worth reading and never worth changing, so they are hidden unless asked for, and refused when
+    something asks to write to one.
+
+    Args:
+        name: The name of the schema.
+    """
+    return (
+        name in INTERNAL_SCHEMAS
+        or name == 'information_schema'
+        or name.startswith('pg_')
+    )

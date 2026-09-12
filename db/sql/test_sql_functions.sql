@@ -4109,6 +4109,42 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_list_schemas_including_the_system_ones() RETURNS SETOF TEXT AS $$/*
+The schemas the database keeps its own account of itself in, which are worth reading and never
+worth changing, and so are described only when asked for.
+*/
+BEGIN
+  RETURN NEXT ok(
+    NOT jsonb_path_exists(msar.list_schemas(), '$[*] ? (@.name == "pg_catalog")'),
+    'the database''s own schemas are left out of what the user has'
+  );
+  RETURN NEXT ok(
+    NOT jsonb_path_exists(msar.list_schemas(), '$[*] ? (@.name == "information_schema")'),
+    'information_schema among them'
+  );
+  RETURN NEXT ok(
+    jsonb_path_exists(msar.list_schemas(true), '$[*] ? (@.name == "pg_catalog")'),
+    'and described when they are asked for'
+  );
+  RETURN NEXT ok(
+    jsonb_path_exists(msar.list_schemas(true), '$[*] ? (@.name == "information_schema")'),
+    'information_schema too'
+  );
+  RETURN NEXT ok(
+    jsonb_path_exists(msar.list_schemas(true), '$[*] ? (@.name == "public")'),
+    'along with the ones the user has, asking for more not being asking for fewer'
+  );
+  RETURN NEXT is(
+    (jsonb_path_query_first(
+      msar.list_schemas(true), '$[*] ? (@.name == "pg_catalog")'
+    ) -> 'table_count')::int > 0,
+    true,
+    'and pg_catalog counts the tables it holds, there being something in it to look at'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_list_schema_privileges_basic() RETURNS SETOF TEXT AS $$
 BEGIN
 CREATE SCHEMA restricted;

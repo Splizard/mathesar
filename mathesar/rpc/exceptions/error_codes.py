@@ -544,6 +544,10 @@ mathesar_error_map = frozendict({
     "UnsupportedConstraintAPIException": -28035,
     "UnsupportedInstallationDatabase": -28036,
     "ValueAPIException": -28037,
+    # Added since the codes above were generated, and so out of the alphabetical order they are
+    # in: a code is part of what callers are told, and renumbering the rest to make room would
+    # change what every one of them means.
+    "SchemaIsInternal": -28038,
 })
 
 dblib_error_map = frozendict({

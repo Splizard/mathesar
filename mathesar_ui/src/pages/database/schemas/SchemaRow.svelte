@@ -13,7 +13,7 @@
   import type { Database } from '@mathesar/models/Database';
   import type { Schema } from '@mathesar/models/Schema';
   import { getSchemaPageUrl } from '@mathesar/routes/urls';
-  import { ButtonMenuItem, Icon } from '@mathesar-component-library';
+  import { Badge, ButtonMenuItem, Icon } from '@mathesar-component-library';
 
   import SchemaConstituentCounts from './SchemaConstituentCounts.svelte';
 
@@ -24,6 +24,9 @@
 
   $: ({ name, description, currentAccess } = schema);
   $: ({ currentRoleOwns } = currentAccess);
+  // A schema the database or Mathesar keeps for itself is there to be looked at, so it opens like
+  // any other and offers none of the things that would change it.
+  $: canEdit = $currentRoleOwns && !schema.isInternal;
 
   let isHovered = false;
   let isFocused = false;
@@ -38,6 +41,9 @@
         <Icon {...iconSchema} size="1rem" />
       </div>
       <div class="name">{$name}</div>
+      {#if schema.isInternal}
+        <Badge>{$_('read_only')}</Badge>
+      {/if}
       <div class="table-count">
         <Icon {...iconTable} size="1rem" />
         <SchemaConstituentCounts {schema} />
@@ -52,7 +58,7 @@
           <ButtonMenuItem
             on:click={() => dispatch('edit')}
             icon={iconEdit}
-            disabled={!$currentRoleOwns}
+            disabled={!canEdit}
           >
             {$_('rename_schema')}
           </ButtonMenuItem>
@@ -60,7 +66,7 @@
             danger
             on:click={() => dispatch('delete')}
             icon={iconDeleteMajor}
-            disabled={!$currentRoleOwns}
+            disabled={!canEdit}
           >
             {$_('delete_schema')}
           </ButtonMenuItem>

@@ -51,7 +51,7 @@ def list_direct(
     return [SchemaPrivileges.from_dict(i) for i in raw_priv]
 
 
-@mathesar_rpc_method(name="schemas.privileges.replace_for_roles", auth="login")
+@mathesar_rpc_method(name="schemas.privileges.replace_for_roles", auth="login", writes=True)
 def replace_for_roles(
         *,
         privileges: list[SchemaPrivileges], schema_oid: int, database_id: int,
@@ -85,7 +85,7 @@ def replace_for_roles(
     return [SchemaPrivileges.from_dict(i) for i in raw_priv]
 
 
-@mathesar_rpc_method(name="schemas.privileges.transfer_ownership", auth="login")
+@mathesar_rpc_method(name="schemas.privileges.transfer_ownership", auth="login", writes=True)
 def transfer_ownership(*, schema_oid: int, new_owner_oid: int, database_id: int, **kwargs) -> SchemaInfo:
     """
     Transfers ownership of a given schema to a new owner.

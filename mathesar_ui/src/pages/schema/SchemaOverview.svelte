@@ -43,9 +43,8 @@
 
   $: hasTables = tablesMap.size > 0;
   $: hasExplorations = explorationsMap.size > 0;
-  $: ({ currentRolePrivileges } = schema.currentAccess);
-  $: showTableCreationTutorial =
-    !hasTables && $currentRolePrivileges.has('CREATE');
+  $: ({ canBeAddedTo } = schema);
+  $: showTableCreationTutorial = !hasTables && $canBeAddedTo;
   $: isExplorationsLoading = explorationsRequestStatus.state === 'processing';
   $: ({ tableCount } = schema);
   $: dataExplorerPageUrl = getDataExplorerPageUrl(

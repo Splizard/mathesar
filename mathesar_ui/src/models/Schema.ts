@@ -39,6 +39,23 @@ export class Schema {
 
   readonly isPublicSchema;
 
+  /**
+   * Whether it is one the database or Mathesar keeps for itself. Those are shown so that they can
+   * be looked at and never so that they can be changed, so nothing offers to change one -- and
+   * the server refuses anything that asks to.
+   */
+  readonly isInternal: boolean;
+
+  /**
+   * Whether things can be added to the schema: the privilege to do it, on a schema that is the
+   * user's to change rather than one the database or Mathesar keeps for itself.
+   *
+   * Changing or dropping what is already in it needs to own that thing, which isn't ours to know,
+   * so somebody who can add to the schema is offered all of it and the database has the last word
+   * on the rest.
+   */
+  readonly canBeAddedTo: Readable<boolean>;
+
   readonly database: Database;
 
   constructor(props: { database: Database; rawSchema: RawSchema }) {
@@ -47,7 +64,12 @@ export class Schema {
     this.isPublicSchema = derived(this._name, ($name) => $name === 'public');
     this._description = writable(props.rawSchema.description);
     this._tableCount = writable(props.rawSchema.table_count);
+    this.isInternal = props.rawSchema.internal;
     this.currentAccess = new ObjectCurrentAccess(props.rawSchema);
+    this.canBeAddedTo = derived(
+      this.currentAccess.currentRolePrivileges,
+      ($privileges) => $privileges.has('CREATE') && !this.isInternal,
+    );
     this.database = props.database;
   }
 

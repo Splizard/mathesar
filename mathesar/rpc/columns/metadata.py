@@ -163,7 +163,7 @@ def list_(*, table_oid: int, database_id: int, **kwargs) -> list[ColumnMetaDataR
     ]
 
 
-@mathesar_rpc_method(name="columns.metadata.set", auth="login")
+@mathesar_rpc_method(name="columns.metadata.set", auth="login", writes=True)
 def set_(
     *,
     column_meta_data_list: list[ColumnMetaDataBlob],

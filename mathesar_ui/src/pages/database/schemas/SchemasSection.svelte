@@ -14,12 +14,17 @@
   import { modal } from '@mathesar/stores/modal';
   import {
     deleteSchema as deleteSchemaAPI,
+    fetchSchemasForCurrentDatabase,
     sortedSchemas as schemasStore,
+    showInternalSchemas,
   } from '@mathesar/stores/schemas';
   import AddEditSchemaModal from '@mathesar/systems/schemas/AddEditSchemaModal.svelte';
   import {
     Button,
+    Checkbox,
+    Help,
     Icon,
+    LabeledInput,
     filterViaTextQuery,
     isDefinedNonNullable,
   } from '@mathesar-component-library';
@@ -80,6 +85,16 @@
   function handleClearFilterQuery() {
     filterQuery = '';
   }
+
+  /**
+   * The internal schemas are asked of the server rather than filtered here, so turning them on
+   * means asking again. Done on the change rather than by watching the store, which would ask a
+   * second time on the way in.
+   */
+  async function toggleInternalSchemas() {
+    showInternalSchemas.set(!$showInternalSchemas);
+    await fetchSchemasForCurrentDatabase();
+  }
 </script>
 
 <div class="schema-list-wrapper">
@@ -89,6 +104,18 @@
     on:clear={handleClearFilterQuery}
   >
     <svelte:fragment slot="action">
+      <div class="internal-toggle">
+        <LabeledInput layout="inline-input-first">
+          <span slot="label">
+            {$_('show_internal_schemas')}
+            <Help>{$_('show_internal_schemas_help')}</Help>
+          </span>
+          <Checkbox
+            checked={$showInternalSchemas}
+            on:change={toggleInternalSchemas}
+          />
+        </LabeledInput>
+      </div>
       <Button
         on:click={addSchema}
         appearance="primary"
@@ -161,6 +188,12 @@
     display: flex;
     flex-direction: column;
     width: 100%;
+
+    .internal-toggle {
+      font-size: var(--sm1);
+      color: var(--color-fg-subtle-1);
+      white-space: nowrap;
+    }
 
     .schema-list {
       width: 100%;
