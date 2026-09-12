@@ -206,6 +206,14 @@ export class ProcessedColumn implements CellColumnFabric {
       if (!currRoleHasEditPrivileges) {
         return false;
       }
+      // A column worked out from a formula holds what Postgres worked out, and Postgres refuses
+      // any other value for it. Nothing about the privileges says so, so it is said here.
+      if (
+        this.column.formula_sql !== undefined &&
+        this.column.formula_sql !== null
+      ) {
+        return false;
+      }
       const hasDynamicDefault = !!this.column.default?.is_dynamic;
       const isPk = !!this.column.primary_key;
       if (isPk) {

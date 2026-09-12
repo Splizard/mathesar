@@ -7,6 +7,7 @@
     tableInspectorColumnDataTypeVisible,
     tableInspectorColumnDefaultValueVisible,
     tableInspectorColumnFormattingVisible,
+    tableInspectorColumnFormulaVisible,
     tableInspectorColumnPropertiesVisible,
     tableInspectorColumnRecordSummaryVisible,
   } from '@mathesar/stores/localStorage';
@@ -22,6 +23,7 @@
 
   import ColumnActions from './ColumnActions.svelte';
   import ColumnFormatting from './ColumnFormatting.svelte';
+  import ColumnFormula from './ColumnFormula.svelte';
   import ColumnNameAndDescription from './ColumnNameAndDescription.svelte';
   import ColumnOptions from './ColumnOptions.svelte';
   import ColumnType from './ColumnType.svelte';
@@ -138,6 +140,18 @@
       isDbLevelConfiguration
     >
       <ColumnType {column} />
+    </InspectorSection>
+  {/if}
+
+  {#if column && column.column.formula_sql !== undefined && column.column.formula_sql !== null}
+    <InspectorSection
+      title={$_('formula')}
+      bind:isOpen={$tableInspectorColumnFormulaVisible}
+      isDbLevelConfiguration
+    >
+      {#key column}
+        <ColumnFormula {column} />
+      {/key}
     </InspectorSection>
   {/if}
 

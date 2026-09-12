@@ -12,6 +12,7 @@ import type {
 import type { Database } from '@mathesar/models/Database';
 import type { Table } from '@mathesar/models/Table';
 import { batchRun } from '@mathesar/packages/json-rpc-client-builder';
+import type { Formula } from '@mathesar/systems/formulas/formula';
 import { getErrorMessage } from '@mathesar/utils/errors';
 import {
   type CancellablePromise,
@@ -28,7 +29,9 @@ import {
  * column, in the `linked_record_summaries` of the response. A width, a date format, a currency
  * symbol and the rest are the client's business entirely.
  */
-const METADATA_AFFECTING_RECORDS: (keyof ColumnMetadata)[] = ['user_display_field'];
+const METADATA_AFFECTING_RECORDS: (keyof ColumnMetadata)[] = [
+  'user_display_field',
+];
 
 export class ColumnsDataStore extends EventHandler<{
   columnRenamed: void;
@@ -101,6 +104,36 @@ export class ColumnsDataStore extends EventHandler<{
       .add({ ...this.apiContext, column_data_list: [columnDetails] })
       .run();
     await this.dispatch('columnAdded');
+    await this.fetch();
+  }
+
+  /**
+   * Add a column whose values Postgres works out from the rest of the record.
+   *
+   * The type is left to the formula unless one is given: there is no need to ask what kind of
+   * thing an amount times a rate is.
+   */
+  async addFormula(columnDetails: {
+    name: string;
+    formula: Formula;
+    description?: string | null;
+  }): Promise<void> {
+    await api.columns
+      .add_formula({ ...this.apiContext, ...columnDetails })
+      .run();
+    await this.dispatch('columnAdded');
+    await this.fetch();
+  }
+
+  /** Change the formula a column's values are worked out from, working every record out again */
+  async patchFormula(columnAttnum: number, formula: Formula): Promise<void> {
+    await api.columns
+      .patch_formula({
+        ...this.apiContext,
+        column_attnum: columnAttnum,
+        formula,
+      })
+      .run();
     await this.fetch();
   }
 

@@ -1,4 +1,5 @@
 import { rpcMethodTypeContainer } from '@mathesar/packages/json-rpc-client-builder';
+import type { Formula } from '@mathesar/systems/formulas/formula';
 
 import {
   type ColumnMetadata,
@@ -88,6 +89,17 @@ interface RawColumn {
   updated_at_trigger?: boolean;
   has_dependents: boolean;
   current_role_priv: ColumnPrivilege[];
+  /**
+   * The formula the column's values are worked out from, for a column that is
+   * worked out and that Mathesar made. Null for one made elsewhere, and absent
+   * altogether on a column holding values of its own.
+   */
+  formula?: Formula | null;
+  /**
+   * The expression Postgres works the values out from, for any column that is
+   * worked out, whoever made it.
+   */
+  formula_sql?: string | null;
 }
 
 /**
@@ -188,11 +200,44 @@ export const columns = {
     number[]
   >(),
 
+  /**
+   * Add a column whose values Postgres works out from the rest of the record.
+   *
+   * The formula goes over the wire as a tree and never as SQL; the server
+   * builds the expression from it. The type is worked out from the formula
+   * unless one is given.
+   */
+  add_formula: rpcMethodTypeContainer<
+    {
+      database_id: number;
+      table_oid: number;
+      name: string;
+      formula: Formula;
+      type_?: { name: string; options?: ColumnTypeOptions } | null;
+      description?: string | null;
+    },
+    number
+  >(),
+
   patch: rpcMethodTypeContainer<
     {
       database_id: number;
       table_oid: number;
       column_data_list: ColumnPatchSpec[];
+    },
+    void
+  >(),
+
+  /**
+   * Change the formula a column's values are worked out from, which works every
+   * record out again. Needs PostgreSQL 17 or later.
+   */
+  patch_formula: rpcMethodTypeContainer<
+    {
+      database_id: number;
+      table_oid: number;
+      column_attnum: number;
+      formula: Formula;
     },
     void
   >(),

@@ -22,6 +22,7 @@ export const LOCAL_STORAGE_KEYS = {
   tableInspectorColumnDataTypeVisible: 'table-inspector-column-data-type-visible',
   tableInspectorColumnDefaultValueVisible: 'table-inspector-column-default-value-visible',
   tableInspectorColumnFormattingVisible: 'table-inspector-column-formatting-visible',
+  tableInspectorColumnFormulaVisible: 'table-inspector-column-formula-visible',
   tableInspectorColumnRecordSummaryVisible: 'table-inspector-column-record-summary-visible',
   tableInspectorColumnActionsVisible: 'table-inspector-column-actions-visible',
 
@@ -91,6 +92,11 @@ export const tableInspectorColumnDefaultValueVisible = new LocalStorageStore({
 
 export const tableInspectorColumnFormattingVisible = new LocalStorageStore({
   key: LOCAL_STORAGE_KEYS.tableInspectorColumnFormattingVisible,
+  defaultValue: true,
+});
+
+export const tableInspectorColumnFormulaVisible = new LocalStorageStore({
+  key: LOCAL_STORAGE_KEYS.tableInspectorColumnFormulaVisible,
   defaultValue: true,
 });
 

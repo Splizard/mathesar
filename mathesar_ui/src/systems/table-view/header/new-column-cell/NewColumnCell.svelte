@@ -15,10 +15,15 @@
     guessTypeFromColumnName,
   } from '@mathesar/stores/abstract-types';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
+  import type { Formula } from '@mathesar/systems/formulas/formula';
+  import FormulaInput from '@mathesar/systems/formulas/FormulaInput.svelte';
   import { columnNameIsAvailable } from '@mathesar/utils/columnUtils';
   import {
+    Checkbox,
     Dropdown,
+    Help,
     Icon,
+    LabeledInput,
     Spinner,
     focusTrap,
   } from '@mathesar-component-library';
@@ -34,6 +39,13 @@
   $: ({ table, columnsDataStore } = $tabularData);
   $: ({ columns } = columnsDataStore);
   $: ({ name: schemaName } = table.schema);
+  /**
+   * The columns a formula can read: the ones holding values of their own. Postgres will not work
+   * one value out from another it is working out in the same record.
+   */
+  $: formulaColumns = $columns
+    .filter((c) => c.formula_sql === undefined || c.formula_sql === null)
+    .map((c) => ({ id: c.id, name: c.name }));
 
   $: columnName = requiredField('', [columnNameIsAvailable($columns)]);
 
@@ -51,6 +63,14 @@
   $: if (!hasChosenType) {
     columnType.set(guessTypeFromColumnName($columnName) ?? defaultType);
   }
+
+  /**
+   * Whether the column's values are to be worked out from the rest of the
+   * record rather than typed in. A formula settles the type, so the type is not
+   * asked for while there is one.
+   */
+  let isFormula = false;
+  let formula: Formula | undefined = undefined;
 
   /**
    * Which choice of values the column is to hold, while Choice is its type. A
@@ -77,11 +97,20 @@
   function reset() {
     hasChosenType = false;
     choice = undefined;
+    isFormula = false;
+    formula = undefined;
     form.reset();
   }
   $: ({ isSubmitting } = form);
 
   async function addColumn(closeDropdown: () => void) {
+    if (isFormula) {
+      // The formula is read before this can be reached, canProceed waiting on it.
+      if (!formula) return;
+      await columnsDataStore.addFormula({ name: $columnName, formula });
+      closeDropdown();
+      return;
+    }
     const spec = getColumnSaveSpec($columnType);
     const { typeOptions, ...dbOptions } = spec.dbOptions;
     await columnsDataStore.addWithMetadata(
@@ -112,18 +141,44 @@
       <Icon class="opt" {...iconAddNew} size="0.9em" />
     {/if}
   </svelte:fragment>
-  <div slot="content" class="new-column-dropdown" let:close use:focusTrap>
+  <div
+    slot="content"
+    class="new-column-dropdown"
+    class:wide={isFormula}
+    let:close
+    use:focusTrap
+  >
     <Field field={columnName} label={$_('column_name')} layout="stacked" />
-    <Field
-      field={columnType}
-      input={{ component: ColumnTypeSelector, props: typeSelectorProps }}
-      label={$_('select_type')}
-      layout="stacked"
-    />
+    <div class="formula-toggle">
+      <LabeledInput layout="inline-input-first">
+        <span slot="label">
+          {$_('worked_out_from_a_formula')}
+          <Help>{$_('worked_out_from_a_formula_help')}</Help>
+        </span>
+        <Checkbox
+          checked={isFormula}
+          on:change={() => {
+            isFormula = !isFormula;
+          }}
+        />
+      </LabeledInput>
+    </div>
+    {#if isFormula}
+      <FormulaInput columns={formulaColumns} bind:formula />
+    {:else}
+      <Field
+        field={columnType}
+        input={{ component: ColumnTypeSelector, props: typeSelectorProps }}
+        label={$_('select_type')}
+        layout="stacked"
+      />
+    {/if}
     <div class="submit">
       <FormSubmit
         {form}
-        canProceed={choiceError === undefined}
+        canProceed={isFormula
+          ? formula !== undefined
+          : choiceError === undefined}
         proceedButton={{ label: $_('add') }}
         onProceed={() => addColumn(close)}
         onCancel={close}
@@ -139,8 +194,20 @@
     overflow: hidden;
     width: 16em;
 
+    .formula-toggle {
+      margin-top: var(--sm3);
+      font-size: var(--sm1);
+      color: var(--color-fg-subtle-1);
+    }
+
     .submit {
       margin-top: 1em;
     }
+  }
+
+  /* A formula needs more room to read than a type does to be picked. */
+  .new-column-dropdown.wide {
+    width: 26em;
+    max-width: 90vw;
   }
 </style>
