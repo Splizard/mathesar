@@ -19,6 +19,11 @@
   const padding = 24;
 
   let canvas: HTMLCanvasElement | undefined;
+  /**
+   * How much room there is to draw in, which the shapes are fitted into. Used for the backing
+   * store and the arithmetic; the canvas element itself fills its box in CSS, so that it is
+   * never the wrong size on screen even for the moment before this catches up.
+   */
   let width = 0;
   let height = 0;
   /** The record under the pointer, drawn on top and in full */
@@ -201,8 +206,6 @@
   {:else}
     <canvas
       bind:this={canvas}
-      style:width="{width}px"
-      style:height="{height}px"
       on:mousemove={(e) => {
         hovered = recordNear(e.offsetX, e.offsetY);
       }}
@@ -228,6 +231,9 @@
 
   canvas {
     display: block;
+    /* Filled by CSS; the measured size is for the backing store and the drawing maths. */
+    width: 100%;
+    height: 100%;
   }
 
   .nothing {

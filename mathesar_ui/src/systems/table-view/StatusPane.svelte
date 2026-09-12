@@ -101,6 +101,7 @@
       <Button
         appearance="secondary"
         size="medium"
+        aria-label={$shapesOnCanvas ? $_('show_the_table') : $_('draw_shapes')}
         on:click={() => shapesOnCanvas.set(!$shapesOnCanvas)}
       >
         <Icon {...$shapesOnCanvas ? iconTable : iconUiTypeGeometry} />
