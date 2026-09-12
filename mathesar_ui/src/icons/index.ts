@@ -28,6 +28,7 @@ import {
   faCogs,
   faCommentAlt,
   faComments,
+  faCompress,
   faCopy,
   faCubes,
   faDatabase,
@@ -187,6 +188,8 @@ export const iconImportData: IconProps = { data: faUpload };
 export const iconInferColumnType: IconProps = { data: faMicroscope };
 export const iconMoreActions: IconProps = { data: faEllipsisV };
 export const iconTableActions: IconProps = { data: faBars };
+export const iconShowOnlyTheTable: IconProps = { data: faExpand };
+export const iconShowTheRestAgain: IconProps = { data: faCompress };
 export const iconMoveColumnsToNewLinkedTable = { data: faLink };
 export const iconMoveColumnsToExistingLinkedTable = { data: faLink };
 export const iconManageAccess = { data: faUser };

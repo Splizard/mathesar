@@ -10,6 +10,8 @@
 
   export let fitViewport = false;
   export let restrictWidth = false;
+  /** Whether to leave the header off, for a page that has asked for the whole window */
+  export let hideHeader = false;
   export let cssVariables: CssVariablesObj | undefined = undefined;
 
   $: style = cssVariables
@@ -18,7 +20,7 @@
 </script>
 
 <div class="app-layout" class:fit-viewport={fitViewport} {style}>
-  {#if showHeader}
+  {#if showHeader && !hideHeader}
     <div class="app-layout-header">
       <AppHeader />
     </div>

@@ -43,6 +43,7 @@
 
   import Body from './Body.svelte';
   import { openTableCellContextMenu } from './context-menu/contextMenu';
+  import { tableIsFullScreen } from './fullScreen';
   import Header from './header/Header.svelte';
   import { importModalContext } from './import/ImportController';
   import ImportModal from './import/ImportModal.svelte';
@@ -141,6 +142,17 @@
    * while it is open and gives it back when it is closed.
    */
   $: inspectorIsOverlay = effectiveLayout !== 'sheet';
+  /**
+   * Whether the corner of the sheet offers to show the table on its own.
+   *
+   * Offered on a screen too small for the panes, and kept while the table is already being shown
+   * that way however big the screen has become -- going full screen makes the window bigger, and
+   * a window that grows past the threshold while the button that shrank it is only offered below
+   * the threshold would take the way back out with it.
+   */
+  $: hasFullScreenToggle =
+    context === 'page' &&
+    (effectiveLayout === 'compactSheet' || $tableIsFullScreen);
   $: sheetColumns = (() => {
     const columns: Array<{ column: { id: string; name: string } }> = [
       { column: { id: ID_ROW_CONTROL_COLUMN, name: 'ROW_CONTROL' } },
@@ -281,7 +293,12 @@
           restrictWidthToRowWidth={!usesVirtualList}
           bind:sheetElement
         >
-          <Header {hasNewColumnButton} {columnOrder} {table} />
+          <Header
+            {hasNewColumnButton}
+            {columnOrder}
+            {table}
+            {hasFullScreenToggle}
+          />
           <Body {usesVirtualList} />
         </Sheet>
       {:else if $isLoading}
@@ -291,7 +308,7 @@
       {/if}
     </div>
   </WithTableInspector>
-  {#if effectiveLayout === 'sheet'}
+  {#if effectiveLayout === 'sheet' && !$tableIsFullScreen}
     <StatusPane {context} />
   {/if}
   {#if showTableInspector && inspectorIsOverlay}

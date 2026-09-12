@@ -2,7 +2,11 @@
   import { get } from 'svelte/store';
   import { _ } from 'svelte-i18n';
 
-  import { iconAddNew, iconRecord } from '@mathesar/icons';
+  import {
+    iconAddNew,
+    iconRecord,
+    iconShowTheRestAgain,
+  } from '@mathesar/icons';
   import type { Table } from '@mathesar/models/Table';
   import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
@@ -17,6 +21,8 @@
   import RecordStore from '@mathesar/systems/record-view/RecordStore';
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
   import { Button, Icon, Spinner } from '@mathesar-component-library';
+
+  import { showTheRestAgain, tableIsFullScreen } from './fullScreen';
 
   export let table: Table;
 
@@ -159,8 +165,19 @@
     </ul>
   {/if}
 
-  {#if $canInsertRecords}
-    <div class="add">
+  <div class="floating">
+    {#if $tableIsFullScreen}
+      <!-- Only reachable by turning the phone while the table was being shown on its own: the
+      way back out lives in the corner of a sheet, and there is no sheet here. -->
+      <Button
+        appearance="secondary"
+        aria-label={$_('show_the_rest_again')}
+        on:click={() => void showTheRestAgain()}
+      >
+        <Icon {...iconShowTheRestAgain} />
+      </Button>
+    {/if}
+    {#if $canInsertRecords}
       <Button
         appearance="primary"
         aria-label={$_('new_record')}
@@ -168,8 +185,8 @@
       >
         <Icon {...iconAddNew} />
       </Button>
-    </div>
-  {/if}
+    {/if}
+  </div>
 </div>
 
 <style lang="scss">
@@ -219,17 +236,18 @@
     white-space: nowrap;
   }
 
-  .add {
+  .floating {
     position: sticky;
     bottom: var(--lg1);
     display: flex;
     justify-content: flex-end;
+    gap: var(--sm2);
     padding-right: var(--lg1);
     /* Nothing of its own to sit on, so that the list shows through beside it. */
     pointer-events: none;
   }
 
-  .add > :global(*) {
+  .floating > :global(*) {
     pointer-events: auto;
     border-radius: 50%;
     width: 3.5rem;

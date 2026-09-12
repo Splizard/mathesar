@@ -18,6 +18,10 @@
   import WithModalRecordView from '@mathesar/systems/record-view-modal/WithModalRecordView.svelte';
   import ActionsPane from '@mathesar/systems/table-view/actions-pane/ActionsPane.svelte';
   import CompactToolbar from '@mathesar/systems/table-view/CompactToolbar.svelte';
+  import {
+    showTheRestAgain,
+    tableIsFullScreen,
+  } from '@mathesar/systems/table-view/fullScreen';
   import TableView from '@mathesar/systems/table-view/TableView.svelte';
 
   import {
@@ -106,6 +110,8 @@
   onDestroy(() => {
     stopWatching?.();
     if (askAgainSoon) clearTimeout(askAgainSoon);
+    // Leaving the table is leaving what was being shown on its own.
+    void showTheRestAgain();
   });
 
   function handleMetaSerializationChange(s: string) {
@@ -117,9 +123,19 @@
 
 <svelte:head><title>{makeSimplePageTitle(table.name)}</title></svelte:head>
 
-<LayoutWithHeader fitViewport restrictWidth={false}>
-  <div class="table-page" class:compact={$tableLayout !== 'sheet'}>
-    {#if $tableLayout === 'sheet'}
+<LayoutWithHeader
+  fitViewport
+  restrictWidth={false}
+  hideHeader={$tableIsFullScreen}
+>
+  <div
+    class="table-page"
+    class:compact={$tableLayout !== 'sheet' || $tableIsFullScreen}
+    class:only-table={$tableIsFullScreen}
+  >
+    {#if $tableIsFullScreen}
+      <!-- Only the table, which is what was asked for. -->
+    {:else if $tableLayout === 'sheet'}
       <ActionsPane />
     {:else}
       <!-- Everything the two panes offer, in the one row a small screen can spare. -->
@@ -150,6 +166,11 @@
   /* With the panes gone the table takes every pixel it can, right to the edges. */
   .table-page.compact :global(.table-view-area) {
     padding: 0;
+  }
+  /* Nothing above the table means one row, and the table is all of it. Without this the row is
+  the `auto` one, which sizes itself to a table that is sizing itself to the row. */
+  .table-page.only-table {
+    grid-template: 1fr / 1fr;
   }
   .warning {
     padding: 1rem;

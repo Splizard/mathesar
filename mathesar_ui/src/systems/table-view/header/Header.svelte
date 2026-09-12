@@ -1,5 +1,6 @@
 <script lang="ts">
   import { first } from 'iter-tools';
+  import { _ } from 'svelte-i18n';
 
   import {
     SheetCellResizer,
@@ -8,6 +9,7 @@
     SheetHeader,
   } from '@mathesar/components/sheet';
   import SheetOriginCell from '@mathesar/components/sheet/cells/SheetOriginCell.svelte';
+  import { iconShowOnlyTheTable, iconShowTheRestAgain } from '@mathesar/icons';
   import type { Table } from '@mathesar/models/Table';
   import {
     ID_ADD_NEW_COLUMN,
@@ -17,6 +19,13 @@
     isJoinedColumn,
   } from '@mathesar/stores/table-data';
   import { updateTable } from '@mathesar/stores/tables';
+  import { Icon } from '@mathesar-component-library';
+
+  import {
+    showOnlyTheTable,
+    showTheRestAgain,
+    tableIsFullScreen,
+  } from '../fullScreen';
 
   import { Draggable, Droppable } from './drag-and-drop';
   import HeaderCell from './header-cell/HeaderCell.svelte';
@@ -27,6 +36,8 @@
   export let hasNewColumnButton = false;
   export let columnOrder: string[];
   export let table: Table;
+  /** Whether the corner of the sheet is where the table is put on the screen by itself */
+  export let hasFullScreenToggle = false;
 
   $: columnOrder = columnOrder ?? [];
   $: ({ selection, processedColumns, displayedColumns } = $tabularData);
@@ -107,6 +118,25 @@
       locationOfFirstDraggedColumn={0}
       columnLocation={-1}
     />
+    {#if hasFullScreenToggle}
+      <!-- The corner of the sheet is otherwise empty, and on a screen with nothing to spare it is
+      where the table is put on the screen by itself. Over the droppable, which is for dragging a
+      column to the front and has nothing to drop onto it on a screen this size. -->
+      <button
+        type="button"
+        class="full-screen-toggle"
+        aria-label={$tableIsFullScreen
+          ? $_('show_the_rest_again')
+          : $_('show_only_the_table')}
+        aria-pressed={$tableIsFullScreen}
+        on:click={() =>
+          void ($tableIsFullScreen ? showTheRestAgain() : showOnlyTheTable())}
+      >
+        <Icon
+          {...$tableIsFullScreen ? iconShowTheRestAgain : iconShowOnlyTheTable}
+        />
+      </button>
+    {/if}
   </SheetOriginCell>
 
   {#each [...$displayedColumns] as [columnId, columnFabric] (columnId)}
@@ -145,3 +175,23 @@
     </SheetColumnCreationCell>
   {/if}
 </SheetHeader>
+
+<style lang="scss">
+  .full-screen-toggle {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    background: transparent;
+    color: var(--color-fg-subtle-1);
+    cursor: pointer;
+    /* Over the droppable, which has nothing to drop onto it on a screen this size. */
+    z-index: 1;
+  }
+
+  .full-screen-toggle[aria-pressed='true'] {
+    color: var(--color-fg-base);
+  }
+</style>
