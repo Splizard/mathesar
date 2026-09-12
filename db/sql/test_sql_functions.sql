@@ -9759,3 +9759,78 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_table_column_order_round_trip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  RETURN NEXT is(
+    msar.table_column_order('pres'::regclass::oid),
+    NULL,
+    'a table nobody has ordered has no order, rather than the one the catalog happens to give'
+  );
+  PERFORM msar.set_table_column_order('pres'::regclass::oid, '[4, 1, 3]'::jsonb);
+  RETURN NEXT is(
+    msar.table_column_order('pres'::regclass::oid),
+    '[4, 1, 3]'::jsonb,
+    'the order comes back as it was given'
+  );
+  RETURN NEXT is(
+    msar.table_column_orders() -> ('pres'::regclass::oid::bigint::text),
+    '[4, 1, 3]'::jsonb,
+    'and the whole database can be asked at once'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_table_column_order_tolerates_a_stale_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  -- The client is allowed to name a column that has gone; it says so in its own code. Refusing the
+  -- whole ordering over one stale id would lose the arrangement someone made.
+  PERFORM msar.set_table_column_order('pres'::regclass::oid, '[4, 99, 1]'::jsonb);
+  RETURN NEXT is(
+    msar.table_column_order('pres'::regclass::oid),
+    '[4, 1]'::jsonb,
+    'a column that is not there is passed over, and the rest keep their places'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_table_column_order_is_cleared_by_null() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  PERFORM msar.set_table_column_order('pres'::regclass::oid, '[4, 1, 3]'::jsonb);
+  PERFORM msar.set_table_column_order('pres'::regclass::oid, NULL);
+  RETURN NEXT is(
+    msar.table_column_order('pres'::regclass::oid), NULL, 'null says nothing about the order again'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM presentation_schema.columns WHERE "table" = 'pres'::regclass),
+    2,
+    'the rows that only ever held a place go with it, and the two with options stay'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_table_column_order_reads_through_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  PERFORM msar.set_table_column_order('pres'::regclass::oid, '[4, 1, 3]'::jsonb);
+  CREATE TABLE pres_restored (id integer, amount numeric, paid boolean);
+  UPDATE presentation_schema.columns
+  SET "table" = 'pres_restored'::regclass
+  WHERE "table" = 'pres'::regclass;
+  -- paid 4 -> 3, amount 3 -> 2. Keeping the order as a list of attnums on the table could not have
+  -- survived this; keeping it a column at a time means it is carried by the same identity as
+  -- everything else here.
+  RETURN NEXT is(
+    msar.table_column_order('pres_restored'::regclass::oid),
+    '[3, 1, 2]'::jsonb,
+    'the columns come back in the order they were put in, at their new attnums'
+  );
+END;
+$f$ LANGUAGE plpgsql;

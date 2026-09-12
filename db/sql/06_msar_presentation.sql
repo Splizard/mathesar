@@ -69,6 +69,14 @@ CREATE TABLE IF NOT EXISTS presentation_schema.columns (
     CHECK (user_display_field IN ('full_name', 'email', 'username')),
   array_delimiter character(1),
 
+  -- Where the column sits when the table is shown, lowest first. Null means nobody has said, and
+  -- such a column is left out of the order for the client to put wherever it likes.
+  --
+  -- This is the table's column order, kept a column at a time rather than as a list on the table,
+  -- so that it is carried by the same three identifiers as everything else here: a reordered table
+  -- comes through a rename and a restore already knowing where its columns go.
+  display_position smallint,
+
   CONSTRAINT frac_digits_in_order
     CHECK (num_min_frac_digits <= num_max_frac_digits),
 
@@ -76,6 +84,14 @@ CREATE TABLE IF NOT EXISTS presentation_schema.columns (
   -- the slot one row is vacating may be the slot another is moving into.
   CONSTRAINT columns_pkey PRIMARY KEY ("table", attnum) DEFERRABLE INITIALLY IMMEDIATE
 );
+
+
+-- Options added after the table was first created.
+--
+-- A database that already has the table gets them here; one that doesn't already had them from the
+-- CREATE above, and these do nothing. Adding an option to Mathesar means a line in the table and a
+-- line here, and nothing else: the option list is read off the table itself.
+ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS display_position smallint;
 
 
 CREATE OR REPLACE FUNCTION
@@ -90,7 +106,7 @@ FROM pg_catalog.pg_attribute
 WHERE attrelid = 'presentation_schema.columns'::regclass
   AND attnum > 0
   AND NOT attisdropped
-  AND attname NOT IN ('table', 'attnum', 'column_name', 'written_against');
+  AND attname NOT IN ('table', 'attnum', 'column_name', 'written_against', 'display_position');
 $$ LANGUAGE SQL STABLE;
 
 
@@ -154,6 +170,33 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION
+msar.presentation_attnum(
+  tab_id oid, stored_attnum smallint, col_name name, written_against oid
+) RETURNS smallint AS $$/*
+Return where a stored presentation row's column is now, or null if it is gone.
+
+The whole of the identity question in one place: while the OID the row was written against is still
+the table's, the attnum is what binds; once it isn't, a restore has been through and the name is all
+there is to go on.
+
+Args:
+  tab_id: The OID of the table the row belongs to.
+  stored_attnum: The attnum recorded on the row.
+  col_name: The column name recorded on the row.
+  written_against: The OID the row was last written against.
+*/
+SELECT CASE WHEN written_against = tab_id THEN (
+  SELECT a.attnum FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid = tab_id AND a.attnum = stored_attnum AND NOT a.attisdropped
+) ELSE (
+  SELECT a.attnum FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid = tab_id AND a.attname = col_name
+    AND a.attnum > 0 AND NOT a.attisdropped
+) END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
 msar.column_presentation(tab_id oid) RETURNS jsonb AS $$/*
 Return a table's presentation options, as an object keyed by the column's current attnum.
 
@@ -167,22 +210,45 @@ Args:
 SELECT COALESCE(jsonb_object_agg(live_attnum::text, options), '{}'::jsonb)
 FROM (
   SELECT
-    CASE WHEN p.written_against = tab_id THEN p.attnum ELSE (
-      SELECT a.attnum FROM pg_catalog.pg_attribute a
-      WHERE a.attrelid = tab_id AND a.attname = p.column_name
-        AND a.attnum > 0 AND NOT a.attisdropped
-    ) END AS live_attnum,
-    to_jsonb(p) - 'table' - 'attnum' - 'column_name' - 'written_against' AS options
+    msar.presentation_attnum(tab_id, p.attnum, p.column_name, p.written_against) AS live_attnum,
+    to_jsonb(p) - 'table' - 'attnum' - 'column_name' - 'written_against' - 'display_position'
+      AS options
   FROM presentation_schema.columns p
   WHERE p."table" = tab_id::regclass
 ) AS resolved
-WHERE live_attnum IS NOT NULL
-  AND EXISTS (
-    SELECT 1 FROM pg_catalog.pg_attribute a
-    WHERE a.attrelid = tab_id AND a.attnum = resolved.live_attnum
-      AND NOT a.attisdropped
-  );
+WHERE live_attnum IS NOT NULL;
 $$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.ensure_column_presentation(tab_id oid, col_id integer) RETURNS boolean AS $$/*
+Make sure a column has a presentation row, and say whether the column is there at all.
+
+Args:
+  tab_id: The OID of the table containing the column.
+  col_id: The attnum of the column.
+*/
+DECLARE
+  col_name name;
+BEGIN
+  SELECT a.attname INTO col_name
+  FROM pg_catalog.pg_attribute a
+  WHERE a.attrelid = tab_id AND a.attnum = col_id AND a.attnum > 0 AND NOT a.attisdropped;
+
+  IF col_name IS NULL THEN
+    RETURN false;
+  END IF;
+
+  IF NOT EXISTS (
+    SELECT 1 FROM presentation_schema.columns
+    WHERE "table" = tab_id::regclass AND attnum = col_id
+  ) THEN
+    INSERT INTO presentation_schema.columns ("table", attnum, column_name, written_against)
+    VALUES (tab_id::regclass, col_id, col_name, tab_id);
+  END IF;
+  RETURN true;
+END;
+$$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION
@@ -222,13 +288,7 @@ BEGIN
 
   PERFORM msar.heal_column_presentation(tab_id);
 
-  IF NOT EXISTS (
-    SELECT 1 FROM presentation_schema.columns
-    WHERE "table" = tab_id::regclass AND attnum = col_id
-  ) THEN
-    INSERT INTO presentation_schema.columns ("table", attnum, column_name, written_against)
-    VALUES (tab_id::regclass, col_id, col_name, tab_id);
-  END IF;
+  PERFORM msar.ensure_column_presentation(tab_id, col_id);
 
   SELECT string_agg(format('%I = %L', key, value), ', ') INTO assignments
   FROM jsonb_each_text(options);
@@ -253,3 +313,91 @@ Args:
 DELETE FROM presentation_schema.columns
 WHERE "table" = tab_id::regclass AND attnum = col_id;
 $$ LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_column_order(tab_id oid) RETURNS jsonb AS $$/*
+Return the attnums of a table's columns in the order they should be shown, or null if nobody has
+said what that order is.
+
+A column nobody has placed is left out rather than put at one end, which is what lets a column added
+after the ordering was set be shown wherever the client thinks best.
+
+Args:
+  tab_id: The OID of the table.
+*/
+SELECT jsonb_agg(attnum ORDER BY display_position, attnum)
+FROM (
+  SELECT
+    msar.presentation_attnum(tab_id, p.attnum, p.column_name, p.written_against) AS attnum,
+    p.display_position
+  FROM presentation_schema.columns p
+  WHERE p."table" = tab_id::regclass AND p.display_position IS NOT NULL
+) AS placed
+WHERE attnum IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_column_orders() RETURNS jsonb AS $$/*
+Return every table's column order in the database, keyed by table OID.
+
+For listing a schema's tables, where asking table by table would be a query apiece.
+*/
+SELECT COALESCE(jsonb_object_agg(tab_id, ordering), '{}'::jsonb)
+FROM (
+  SELECT
+    p."table"::oid::bigint::text AS tab_id,
+    msar.table_column_order(p."table"::oid) AS ordering
+  FROM presentation_schema.columns p
+  WHERE p.display_position IS NOT NULL
+  GROUP BY p."table"
+) AS ordered
+WHERE ordering IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_table_column_order(tab_id oid, col_ids jsonb) RETURNS void AS $$/*
+Say what order a table's columns should be shown in.
+
+A column left out of `col_ids` is unplaced, and one named in it that no longer exists is passed
+over: the order is a record of what someone dragged where, and a client is expected to cope with it
+naming a column that has since gone.
+
+Args:
+  tab_id: The OID of the table.
+  col_ids: An array of attnums, in the order the columns should be shown, or null to say nothing.
+*/
+DECLARE
+  placement record;
+BEGIN
+  PERFORM msar.heal_column_presentation(tab_id);
+
+  UPDATE presentation_schema.columns
+  SET display_position = NULL
+  WHERE "table" = tab_id::regclass AND display_position IS NOT NULL;
+
+  IF col_ids IS NOT NULL AND jsonb_typeof(col_ids) = 'array' THEN
+    FOR placement IN
+      SELECT value::integer AS col_id, ordinality AS position
+      FROM jsonb_array_elements_text(col_ids) WITH ORDINALITY
+    LOOP
+      IF msar.ensure_column_presentation(tab_id, placement.col_id) THEN
+        UPDATE presentation_schema.columns
+        SET display_position = placement.position
+        WHERE "table" = tab_id::regclass AND attnum = placement.col_id;
+      END IF;
+    END LOOP;
+  END IF;
+
+  -- A row that exists only to hold a placement that has since been cleared is just clutter.
+  DELETE FROM presentation_schema.columns p
+  WHERE p."table" = tab_id::regclass
+    AND p.display_position IS NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM jsonb_each(to_jsonb(p)) AS o(key, value)
+      WHERE o.key IN (SELECT msar.column_presentation_options()) AND o.value <> 'null'::jsonb
+    );
+END;
+$$ LANGUAGE plpgsql;

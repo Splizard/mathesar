@@ -52,3 +52,47 @@ def drop_column_presentation(conn, table_oid, attnum):
         attnum: The attnum of the column.
     """
     db_conn.exec_msar_func(conn, 'drop_column_presentation', table_oid, attnum)
+
+
+def get_table_column_order(conn, table_oid):
+    """
+    Return the attnums of a table's columns in the order they should be shown, or None if nobody
+    has said what that order is.
+
+    A column nobody has placed is left out, for the client to show where it thinks best.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'table_column_order', table_oid
+    ).fetchone()[0]
+
+
+def get_table_column_orders(conn):
+    """
+    Return the column order of every table that has one, keyed by table OID.
+
+    For listing a schema's tables, where asking table by table would be a query apiece.
+
+    Args:
+        conn: a psycopg connection to the user's database
+    """
+    orders = db_conn.exec_msar_func(conn, 'table_column_orders').fetchone()[0]
+    return {int(table_oid): order for table_oid, order in orders.items()}
+
+
+def set_table_column_order(conn, table_oid, column_order):
+    """
+    Say what order a table's columns should be shown in.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+        column_order: A list of attnums in display order, or None to say nothing about it.
+    """
+    db_conn.exec_msar_func(
+        conn, 'set_table_column_order', table_oid,
+        json.dumps(column_order) if column_order is not None else None
+    )

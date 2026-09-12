@@ -3,7 +3,11 @@ Classes and functions exposed to the RPC endpoint for managing table metadata.
 """
 from typing import Optional, TypedDict, Union
 
+from modernrpc.core import REQUEST_KEY
+
+from db.presentation import get_table_column_orders, set_table_column_order
 from mathesar.rpc.decorators import mathesar_rpc_method
+from mathesar.rpc.utils import connect
 from mathesar.utils.tables import list_tables_meta_data, set_table_meta_data
 
 
@@ -37,17 +41,37 @@ class TableMetaDataRecord(TypedDict):
     user_tracking_attnum: Optional[int]
 
     @classmethod
-    def from_model(cls, model):
+    def from_model(cls, model, column_order=None):
         return cls(
             id=model.id,
             database_id=model.database.id,
             table_oid=model.table_oid,
             data_file_id=model.data_file_id,
             import_verified=model.import_verified,
-            column_order=model.column_order,
+            column_order=column_order,
             record_summary_template=model.record_summary_template,
             mathesar_added_pkey_attnum=model.mathesar_added_pkey_attnum,
             user_tracking_attnum=model.user_tracking_attnum,
+        )
+
+    @classmethod
+    def from_column_order(cls, database_id, table_oid, column_order):
+        """
+        Build a record for a table whose only metadata is the order of its columns.
+
+        Mathesar has nothing of its own to say about a table it didn't make, but someone may
+        still have arranged its columns, and that arrangement lives in the user's database.
+        """
+        return cls(
+            id=None,
+            database_id=database_id,
+            table_oid=table_oid,
+            data_file_id=None,
+            import_verified=None,
+            column_order=column_order,
+            record_summary_template=None,
+            mathesar_added_pkey_attnum=None,
+            user_tracking_attnum=None,
         )
 
 
@@ -71,14 +95,31 @@ class TableMetaDataBlob(TypedDict):
     user_tracking_attnum: Optional[int]
 
     @classmethod
-    def from_model(cls, model):
+    def from_model(cls, model, column_order=None):
         return cls(
             data_file_id=model.data_file_id,
             import_verified=model.import_verified,
-            column_order=model.column_order,
+            column_order=column_order,
             record_summary_template=model.record_summary_template,
             mathesar_added_pkey_attnum=model.mathesar_added_pkey_attnum,
             user_tracking_attnum=model.user_tracking_attnum,
+        )
+
+    @classmethod
+    def from_column_order(cls, column_order):
+        """
+        Build a blob for a table whose only metadata is the order of its columns.
+
+        Mathesar has nothing of its own to say about a table it didn't make, but someone may
+        still have arranged its columns, and that arrangement lives in the user's database.
+        """
+        return cls(
+            data_file_id=None,
+            import_verified=None,
+            column_order=column_order,
+            record_summary_template=None,
+            mathesar_added_pkey_attnum=None,
+            user_tracking_attnum=None,
         )
 
 
@@ -93,9 +134,17 @@ def list_(*, database_id: int, **kwargs) -> list[TableMetaDataRecord]:
     Returns:
         A list of metadata objects for tables in the database.
     """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        column_orders = get_table_column_orders(conn)
     table_meta_data = list_tables_meta_data(database_id)
-    return [
-        TableMetaDataRecord.from_model(model) for model in table_meta_data
+    records = [
+        TableMetaDataRecord.from_model(model, column_orders.pop(model.table_oid, None))
+        for model in table_meta_data
+    ]
+    return records + [
+        TableMetaDataRecord.from_column_order(database_id, table_oid, column_order)
+        for table_oid, column_order in column_orders.items()
     ]
 
 
@@ -111,4 +160,12 @@ def set_(
         metadata: A TableMetaDataBlob object describing desired table metadata to set.
         database_id: The Django id of the database containing the table.
     """
-    set_table_meta_data(table_oid, metadata, database_id)
+    metadata = dict(metadata)
+    # The order lives with the columns it orders, in the user's database; the rest is Mathesar's
+    # own bookkeeping and stays here.
+    if "column_order" in metadata:
+        user = kwargs.get(REQUEST_KEY).user
+        with connect(database_id, user) as conn:
+            set_table_column_order(conn, table_oid, metadata.pop("column_order"))
+    if metadata:
+        set_table_meta_data(table_oid, metadata, database_id)
