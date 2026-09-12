@@ -232,3 +232,135 @@ def test_add_primary_key_column(rf, monkeypatch, mocked_exec_msar_func):
     assert call_args[3] == "IDENTITY"
     assert call_args[4] is True
     assert call_args[5] == 'Identity'
+
+
+def test_columns_add_formula(rf, monkeypatch, mocked_exec_msar_func):
+    """
+    A formula goes to the database as the tree it was given, for the database to build the
+    expression from: nothing the caller wrote is passed along as SQL.
+    """
+    request = rf.post('/api/rpc/v0/', data={})
+    request.user = User(username='alice', password='pass1234')
+    table_oid = 23457
+    database_id = 2
+    formula = {
+        'op': '*',
+        'of': [{'column': 3}, {'column': 4}],
+    }
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        if _database_id == database_id and user.username == 'alice':
+            yield True
+        else:
+            raise AssertionError('incorrect parameters passed')
+
+    monkeypatch.setattr(columns.base, 'connect', mock_connect)
+    mocked_exec_msar_func.fetchone.return_value = [5]
+    actual_result = columns.add_formula(
+        table_oid=table_oid,
+        name='total',
+        formula=formula,
+        database_id=database_id,
+        request=request
+    )
+    call_args = mocked_exec_msar_func.call_args_list[0][0]
+    assert actual_result == 5
+    assert call_args[1] == 'add_formula_column'
+    assert call_args[2] == table_oid
+    assert call_args[3] == 'total'
+    assert call_args[4] == json.dumps(formula)
+    assert call_args[5] is None
+    assert call_args[6] is None
+
+
+def test_columns_add_formula_with_a_type_and_a_description(
+    rf, monkeypatch, mocked_exec_msar_func
+):
+    request = rf.post('/api/rpc/v0/', data={})
+    request.user = User(username='alice', password='pass1234')
+    formula = {'fn': 'upper', 'of': [{'column': 2}]}
+    type_ = {'name': 'character varying', 'options': {'length': 20}}
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(columns.base, 'connect', mock_connect)
+    mocked_exec_msar_func.fetchone.return_value = [6]
+    columns.add_formula(
+        table_oid=23457,
+        name='shouted',
+        formula=formula,
+        type_=type_,
+        description='The item, shouted',
+        database_id=2,
+        request=request
+    )
+    call_args = mocked_exec_msar_func.call_args_list[0][0]
+    assert call_args[4] == json.dumps(formula)
+    assert call_args[5] == json.dumps(type_)
+    assert call_args[6] == 'The item, shouted'
+
+
+def test_columns_patch_formula(rf, monkeypatch, mocked_exec_msar_func):
+    request = rf.post('/api/rpc/v0/', data={})
+    request.user = User(username='alice', password='pass1234')
+    formula = {'op': '+', 'of': [{'column': 3}, {'value': 1}]}
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(columns.base, 'connect', mock_connect)
+    actual_result = columns.patch_formula(
+        table_oid=23457,
+        column_attnum=5,
+        formula=formula,
+        database_id=2,
+        request=request
+    )
+    call_args = mocked_exec_msar_func.call_args_list[0][0]
+    assert actual_result is None
+    assert call_args[1] == 'set_column_formula'
+    assert call_args[2] == 23457
+    assert call_args[3] == 5
+    assert call_args[4] == json.dumps(formula)
+
+
+def test_columns_list_tells_which_columns_are_worked_out(
+    rf, monkeypatch, mocked_exec_msar_func
+):
+    """
+    A column worked out from a formula says so, and one holding values of its own says nothing
+    about formulas at all rather than saying there is none.
+    """
+    request = rf.post('/api/rpc/v0/', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(columns.base, 'connect', mock_connect)
+    common = {
+        'default': None, 'nullable': True, 'description': None, 'primary_key': False,
+        'type_options': None, 'has_dependents': False, 'updated_at_trigger': False,
+        'current_role_priv': ['SELECT'],
+    }
+    monkeypatch.setattr(
+        columns.base, 'get_column_info_for_table',
+        lambda table_oid, conn: [
+            dict(common, id=1, name='price', type='numeric'),
+            dict(
+                common, id=2, name='total', type='numeric',
+                formula={'op': '*', 'of': [{'column': 1}, {'value': 2}]},
+                formula_sql='(price * 2)',
+            ),
+        ]
+    )
+    listed = columns.list_(table_oid=23457, database_id=2, request=request)
+    assert 'formula' not in listed[0]
+    assert 'formula_sql' not in listed[0]
+    assert listed[1]['formula'] == {'op': '*', 'of': [{'column': 1}, {'value': 2}]}
+    assert listed[1]['formula_sql'] == '(price * 2)'

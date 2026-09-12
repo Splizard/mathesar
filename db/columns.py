@@ -36,16 +36,64 @@ def get_column_info_for_table(table, conn):
             "default": {"value": <str>, "is_dynamic": <bool>},
             "has_dependents": <bool>,
             "current_role_priv": [<str>, <str>, ...],
-            "description": <str>
+            "description": <str>,
+            "formula": <obj>,
+            "formula_sql": <str>
         }
 
     The fields of the "type_options" dictionary are all optional,
     depending on the "type" value.
 
+    A column whose values Postgres works out from the rest of the record carries "formula", the
+    formula it was asked for as, and "formula_sql", the expression Postgres works them out from.
+    A column holding values of its own carries neither; see msar.column_formula_info.
+
     Args:
         table: The table for which we want column info.
     """
     return db_conn.exec_msar_func(conn, 'get_column_info', table).fetchone()[0]
+
+
+def add_formula_column_to_table(
+        table_oid, name, formula, conn, type_=None, description=None
+):
+    """
+    Add a column to a table whose values Postgres works out from the rest of the record.
+
+    Args:
+        table_oid: The OID of the table to add the column to.
+        name: The name to give the column.
+        formula: The formula its values are worked out from; see msar.build_formula_sql.
+        conn: a psycopg connection
+        type_: The type to hold the values as, as a column's type is given, or None to work it
+            out from the formula.
+        description: A comment to put on the column.
+
+    Returns:
+        The attnum of the new column.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'add_formula_column', table_oid, name, json.dumps(formula),
+        json.dumps(type_) if type_ is not None else None, description
+    ).fetchone()[0]
+
+
+def set_formula_for_column(table_oid, column_attnum, formula, conn):
+    """
+    Change the formula a column's values are worked out from.
+
+    Every record is worked out again, so this rewrites the table. It needs PostgreSQL 17, which is
+    where changing a generation expression arrived.
+
+    Args:
+        table_oid: The OID of the table containing the column.
+        column_attnum: The attnum of the column.
+        formula: The formula its values are to be worked out from.
+        conn: a psycopg connection
+    """
+    db_conn.exec_msar_func(
+        conn, 'set_column_formula', table_oid, column_attnum, json.dumps(formula)
+    )
 
 
 def alter_columns_in_table(table_oid, column_data_list, conn):

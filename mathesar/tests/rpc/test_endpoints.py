@@ -77,6 +77,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        columns.add_formula,
+        "columns.add_formula",
+        [user_is_authenticated]
+    ),
+    (
         columns.add_primary_key_column,
         "columns.add_primary_key_column",
         [user_is_authenticated]
@@ -99,6 +104,11 @@ METHODS = [
     (
         columns.patch,
         "columns.patch",
+        [user_is_authenticated]
+    ),
+    (
+        columns.patch_formula,
+        "columns.patch_formula",
         [user_is_authenticated]
     ),
 

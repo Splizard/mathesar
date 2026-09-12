@@ -30,8 +30,10 @@
       members:
       - list_
       - add
+      - add_formula
       - add_primary_key_column
       - patch
+      - patch_formula
       - delete
       - list_with_metadata
       - ColumnInfo

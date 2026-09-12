@@ -7,10 +7,12 @@ from modernrpc.core import REQUEST_KEY
 
 from db.columns import (
     add_columns_to_table,
+    add_formula_column_to_table,
     add_pkey_column_to_table,
     alter_columns_in_table,
     drop_columns_from_table,
-    get_column_info_for_table
+    get_column_info_for_table,
+    set_formula_for_column
 )
 from mathesar.rpc.columns.metadata import ColumnMetaDataBlob
 from mathesar.rpc.decorators import mathesar_rpc_method
@@ -198,6 +200,10 @@ class ColumnInfo(TypedDict):
         has_dependents: Whether the column has dependent objects.
         description: The description of the column.
         current_role_priv: The privileges available to the user for the column.
+        formula: The formula the column's values are worked out from, for a column that is worked
+            out and that Mathesar made. Null for one made elsewhere.
+        formula_sql: The expression Postgres works the values out from, for any column that is
+            worked out, whoever made it.
     """
     id: int
     name: str
@@ -210,10 +216,12 @@ class ColumnInfo(TypedDict):
     has_dependents: bool
     description: str
     current_role_priv: list[Literal['SELECT', 'INSERT', 'UPDATE', 'REFERENCES']]
+    formula: Optional[dict]
+    formula_sql: Optional[str]
 
     @classmethod
     def from_dict(cls, col_info):
-        return cls(
+        info = cls(
             id=col_info["id"],
             name=col_info["name"],
             type=col_info["type"],
@@ -226,6 +234,12 @@ class ColumnInfo(TypedDict):
             description=col_info.get("description"),
             current_role_priv=col_info["current_role_priv"]
         )
+        # A column holding values of its own has no formula question to answer, so it says nothing
+        # rather than saying twice over that there is nothing to say.
+        if "formula_sql" in col_info:
+            info["formula"] = col_info.get("formula")
+            info["formula_sql"] = col_info.get("formula_sql")
+        return info
 
 
 @mathesar_rpc_method(name="columns.list", auth="login")
@@ -322,6 +336,81 @@ def add(
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         return add_columns_to_table(table_oid, column_data_list, conn)
+
+
+@mathesar_rpc_method(name="columns.add_formula", auth="login", writes=True)
+def add_formula(
+        *,
+        table_oid: int,
+        name: str,
+        formula: dict,
+        type_: Optional[TypeOptions] = None,
+        description: Optional[str] = None,
+        database_id: int,
+        **kwargs
+) -> int:
+    """
+    Add a column whose values Postgres works out from the rest of the record.
+
+    The formula is a tree and never SQL, so that nothing a caller writes reaches the statement as
+    they wrote it. A formula is an object saying one of:
+
+    - `{"column": <attnum>}`: a column of this table.
+    - `{"value": <value>}`: a number, a string, a boolean, or null.
+    - `{"op": <operator>, "of": [<formula>, ...]}`: an operator applied to formulas.
+    - `{"fn": <function>, "of": [<formula>, ...]}`: a function applied to formulas.
+    - `{"if": <formula>, "then": <formula>, "else": <formula>}`: a choice between two formulas.
+
+    The operators and functions that can be named are fixed lists; see `msar.formula_operators`,
+    `msar.formula_functions` and `msar.formula_forms`. Text is joined with `||` rather than with
+    `concat`, which reads how the session is set up and so cannot work a stored value out at all.
+
+    Postgres stores the values, so it only works them out from an expression it can be sure of:
+    immutable functions, this record's own columns, and no subqueries.
+
+    Args:
+        table_oid: The OID of the table to add the column to.
+        name: The name to give the column.
+        formula: The formula its values are worked out from.
+        type_: The type to hold the values as, or null to work it out from the formula.
+        description: The description of the column.
+        database_id: The Django id of the database containing the table.
+
+    Returns:
+        The attnum of the new column.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return add_formula_column_to_table(
+            table_oid, name, formula, conn, type_=type_, description=description
+        )
+
+
+@mathesar_rpc_method(name="columns.patch_formula", auth="login", writes=True)
+def patch_formula(
+        *,
+        table_oid: int,
+        column_attnum: int,
+        formula: dict,
+        database_id: int,
+        **kwargs
+) -> None:
+    """
+    Change the formula a column's values are worked out from.
+
+    Every record is worked out again, the values being stored, so this rewrites the table. It
+    needs PostgreSQL 17, which is where changing a generation expression arrived; before that the
+    column has to be dropped and added again, which is refused rather than done quietly.
+
+    Args:
+        table_oid: The OID of the table containing the column.
+        column_attnum: The attnum of the column.
+        formula: The formula its values are to be worked out from; see `columns.add_formula`.
+        database_id: The Django id of the database containing the table.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        set_formula_for_column(table_oid, column_attnum, formula, conn)
 
 
 @mathesar_rpc_method(name="columns.patch", auth="login", writes=True)

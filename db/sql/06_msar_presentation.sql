@@ -116,6 +116,16 @@ ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS num_unix_time t
 
 ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS time_checkbox boolean;
 
+-- The formula a column's values are worked out from, as it was asked for: a tree whose column
+-- references are attnums. See 08_msar_formula.sql. Not one of the options above -- it says what
+-- the column holds rather than how it is shown -- but this is where Mathesar keeps what it knows
+-- about a column of the user's database, and a formula has to be kept somewhere to be shown back
+-- and changed as it was written.
+ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS formula jsonb;
+
+-- The same references written as column names, which is what survives a restore.
+ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS formula_names jsonb;
+
 
 CREATE OR REPLACE FUNCTION
 msar.column_presentation_options() RETURNS SETOF name AS $$/*
@@ -129,7 +139,14 @@ FROM pg_catalog.pg_attribute
 WHERE attrelid = 'presentation_schema.columns'::regclass
   AND attnum > 0
   AND NOT attisdropped
-  AND attname NOT IN ('table', 'attnum', 'column_name', 'written_against', 'display_position');
+  AND attname NOT IN (
+    'table', 'attnum', 'column_name', 'written_against', 'display_position',
+    -- A formula is not how a column is shown but what it holds, and it is only ever set through
+    -- msar.set_column_formula, which builds the expression Postgres generates the column from out
+    -- of it. Letting it be set here would be letting a caller write one straight into the row,
+    -- where nothing would ever check it.
+    'formula', 'formula_names'
+  );
 $$ LANGUAGE SQL STABLE;
 
 
@@ -234,8 +251,13 @@ SELECT COALESCE(jsonb_object_agg(live_attnum::text, options), '{}'::jsonb)
 FROM (
   SELECT
     msar.presentation_attnum(tab_id, p.attnum, p.column_name, p.written_against) AS live_attnum,
-    to_jsonb(p) - 'table' - 'attnum' - 'column_name' - 'written_against' - 'display_position'
-      AS options
+    -- The options and nothing else, asked of the same list that says which they are, so that a
+    -- column of the table that is not one of them stays out of this by saying so once.
+    (
+      SELECT COALESCE(jsonb_object_agg(o.key, o.value), '{}'::jsonb)
+      FROM jsonb_each(to_jsonb(p)) AS o(key, value)
+      WHERE o.key IN (SELECT msar.column_presentation_options())
+    ) AS options
   FROM presentation_schema.columns p
   WHERE p."table" = tab_id::regclass
 ) AS resolved
