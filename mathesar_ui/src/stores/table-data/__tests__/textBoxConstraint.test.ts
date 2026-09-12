@@ -8,6 +8,7 @@ import type {
 import TextAreaCell from '@mathesar/components/cell-fabric/data-types/components/textarea/TextAreaCell.svelte';
 import TextBoxCell from '@mathesar/components/cell-fabric/data-types/components/textbox/TextBoxCell.svelte';
 
+import { canTakeTextBoxPattern } from '../constraintsUtils';
 import { ProcessedColumn } from '../processedColumns';
 
 vi.mock('svelte-i18n', () => {
@@ -91,5 +92,42 @@ describe('the text box check pattern decides the cell', () => {
 
   test('character is single-line from its type, with no constraint needed', () => {
     expect(cellOf('character', [])).toBe(TextBoxCell);
+  });
+});
+
+describe('which columns can be restricted to a single line', () => {
+  const abstractTypeOf = (type: string, itemType?: string) =>
+    new ProcessedColumn({
+      tableOid: 1,
+      column: {
+        ...column(type),
+        type_options: itemType ? { item_type: itemType } : null,
+      },
+      columnIndex: 0,
+      constraints: [],
+    });
+
+  const canTake = (type: string, itemType?: string) => {
+    const pc = abstractTypeOf(type, itemType);
+    return canTakeTextBoxPattern(pc.column, pc.abstractType);
+  };
+
+  test.each([
+    ['text', undefined, true],
+    ['character varying', undefined, true],
+    // Already single-line by blank-padding, so a trim check could never fire.
+    ['character', undefined, false],
+    // Shown as a string, but jsonb underneath, which btrim has nothing to say about.
+    ['mathesar_types.mathesar_json_array', undefined, false],
+    ['mathesar_types.mathesar_json_object', undefined, false],
+    ['boolean', undefined, false],
+    ['integer', undefined, false],
+    // An array is judged by what it holds.
+    ['_array', 'text', true],
+    ['_array', 'character varying', true],
+    ['_array', 'character', false],
+    ['_array', 'integer', false],
+  ])('%s%s -> %s', (type, itemType, expected) => {
+    expect(canTake(type, itemType)).toBe(expected);
   });
 });

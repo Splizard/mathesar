@@ -673,28 +673,60 @@ BEGIN
     RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  RETURN __msar.build_check_expression_for(pattern, col);
+  RETURN __msar.build_check_expression_for(pattern, col, __msar.column_is_array(tab_id, col));
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
+CREATE OR REPLACE FUNCTION __msar.column_is_array(tab_id oid, col text) RETURNS boolean AS $$/*
+Whether the named column of the given table holds an array.
+
+Args:
+  tab_id: The OID of the table.
+  col: The column's name, quoted as msar.get_column_names returns it.
+*/
+SELECT EXISTS (
+  SELECT 1
+  FROM pg_catalog.pg_attribute a JOIN pg_catalog.pg_type t ON t.oid = a.atttypid
+  WHERE a.attrelid = tab_id AND quote_ident(a.attname) = col AND t.typcategory = 'A'
+);
+$$ LANGUAGE SQL STABLE;
+
+
 CREATE OR REPLACE FUNCTION
-__msar.build_check_expression_for(pattern text, val text) RETURNS text AS $$/*
+__msar.build_check_expression_for(pattern text, val text, is_array boolean) RETURNS text AS $$/*
 The check patterns themselves, written against an arbitrary value expression.
 
 Taking the value as an expression rather than a column name lets the same definition serve both the
 constraint on a column and the question of whether a repaired value would satisfy it, so the two
 can't disagree about what the pattern means.
 
+An array is tested element by element, which a CHECK constraint can hold neither a subquery nor a
+set-returning function to do. Joining the elements and matching the join against an anchored
+pattern does it with nothing but built-ins. That relies on the separator not appearing inside an
+element, which for a text box is the very thing being forbidden, so the elements are also
+concatenated with no separator at all and that checked for line breaks: joining alone would read a
+single element holding a break as two blameless ones.
+
+Elements that are null are skipped by array_to_string, and so pass, as a null value does.
+
 Args:
   pattern: The name of the pattern.
   val: A SQL expression for the value to test, already quoted or parenthesized as needed.
+  is_array: Whether the value is an array of the pattern's type rather than one of them.
 */
 DECLARE
+  -- One element: no space at either end, and nothing of a line break within.
+  text_box_element constant text := '([^[:space:]]([^\n\r]*[^[:space:]])?)?';
   expression text;
 BEGIN
-  expression := CASE pattern
-    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', val)
+  expression := CASE
+    WHEN pattern = 'text_box' AND is_array THEN format(
+      'array_to_string(%1$s, '''') !~ ''[\r\n]'''
+      ' AND array_to_string(%1$s, chr(10)) ~ ''^(%2$s(\n%2$s)*)?$''',
+      val, text_box_element
+    )
+    WHEN pattern = 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', val)
   END;
   IF expression IS NULL THEN
     RAISE EXCEPTION 'Unknown check constraint pattern: %', pattern
@@ -706,19 +738,28 @@ $$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
-msar.build_check_repair(pattern text, val text) RETURNS text AS $$/*
+msar.build_check_repair(pattern text, val text, is_array boolean) RETURNS text AS $$/*
 An expression for the nearest value that satisfies the pattern, where there is one worth having.
 
 Only changes that keep the meaning of the value belong here. Trimming a text box's surroundings
 does; deleting the line breaks that also disqualify it does not, so a value with one is left for
 someone to decide about rather than silently rewritten. Null where a pattern has no such repair.
 
+Unlike the constraint, this is never evaluated inside a CHECK, so an array can be taken apart and
+put back together with a subquery. The ordinality keeps the elements in the order they were in.
+
 Args:
   pattern: The name of the pattern.
   val: A SQL expression for the value to repair.
+  is_array: Whether the value is an array of the pattern's type rather than one of them.
 */
-SELECT CASE pattern
-  WHEN 'text_box' THEN format('btrim(%s)', val)
+SELECT CASE
+  WHEN pattern = 'text_box' AND is_array THEN format(
+    '(SELECT array_agg(btrim(msar_e) ORDER BY msar_o)'
+    ' FROM unnest(%s) WITH ORDINALITY AS msar_u(msar_e, msar_o))',
+    val
+  )
+  WHEN pattern = 'text_box' THEN format('btrim(%s)', val)
 END;
 $$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
 
@@ -740,6 +781,7 @@ Args:
 */
 DECLARE
   col text;
+  is_array boolean;
   expression text;
   repair text;
   repaired_expression text;
@@ -750,11 +792,12 @@ BEGIN
     RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  expression := __msar.build_check_expression_for(pattern, col);
-  repair := msar.build_check_repair(pattern, col);
+  is_array := __msar.column_is_array(tab_id, col);
+  expression := __msar.build_check_expression_for(pattern, col, is_array);
+  repair := msar.build_check_repair(pattern, col, is_array);
   repaired_expression := CASE
     WHEN repair IS NULL THEN 'false'
-    ELSE __msar.build_check_expression_for(pattern, format('(%s)', repair))
+    ELSE __msar.build_check_expression_for(pattern, format('(%s)', repair), is_array)
   END;
   EXECUTE format(
     $q$SELECT jsonb_build_object(
@@ -782,6 +825,7 @@ Args:
 */
 DECLARE
   col text;
+  is_array boolean;
   expression text;
   repair text;
   repaired_expression text;
@@ -792,12 +836,15 @@ BEGIN
     RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
-  expression := __msar.build_check_expression_for(pattern, col);
-  repair := msar.build_check_repair(pattern, col);
+  is_array := __msar.column_is_array(tab_id, col);
+  expression := __msar.build_check_expression_for(pattern, col, is_array);
+  repair := msar.build_check_repair(pattern, col, is_array);
   IF repair IS NULL THEN
     RETURN 0;
   END IF;
-  repaired_expression := __msar.build_check_expression_for(pattern, format('(%s)', repair));
+  repaired_expression := __msar.build_check_expression_for(
+    pattern, format('(%s)', repair), is_array
+  );
   EXECUTE format(
     'UPDATE %1$s SET %2$s = %3$s WHERE NOT (%4$s) AND (%5$s)',
     __msar.get_qualified_relation_name(tab_id), col, repair, expression, repaired_expression

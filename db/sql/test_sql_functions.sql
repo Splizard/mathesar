@@ -1414,6 +1414,95 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION  test_text_box_array_constraint() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE tb_arr (c text[]);
+  PERFORM msar.add_constraints(
+    'tb_arr'::regclass::oid,
+    $j$[{"name": "k", "type": "c", "pattern": "text_box", "columns": [1]}]$j$
+  );
+  RETURN NEXT lives_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['one', 'two words', 'three'])$i$, 'clean elements'
+  );
+  RETURN NEXT lives_ok($i$INSERT INTO tb_arr VALUES (ARRAY[]::text[])$i$, 'an empty array');
+  RETURN NEXT lives_ok($i$INSERT INTO tb_arr VALUES (ARRAY['a', '', 'b'])$i$, 'an empty element');
+  RETURN NEXT lives_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['a', NULL])$i$, 'a null element, as a null value passes'
+  );
+  RETURN NEXT lives_ok($i$INSERT INTO tb_arr VALUES (NULL)$i$, 'a null array');
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['a', ' leading'])$i$, '23514', NULL, 'a leading space'
+  );
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['a', 'trailing '])$i$, '23514', NULL, 'a trailing space'
+  );
+  -- The one the joining trick gets wrong on its own: joined on a line break, a single element
+  -- holding one looks exactly like two elements that are perfectly fine.
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['a' || chr(10) || 'b'])$i$,
+    '23514', NULL, 'a line break inside one element'
+  );
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO tb_arr VALUES (ARRAY['a' || chr(13) || 'b'])$i$,
+    '23514', NULL, 'a carriage return inside one element'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_text_box_array_is_recognised() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE tb_arr_match (c text[]);
+  PERFORM msar.add_constraints(
+    'tb_arr_match'::regclass::oid,
+    $j$[{"name": "k", "type": "c", "pattern": "text_box", "columns": [1]}]$j$
+  );
+  RETURN NEXT is(
+    (SELECT pattern FROM msar.get_constraints_for_table('tb_arr_match'::regclass::oid)
+     WHERE name = 'k'),
+    'text_box',
+    'an array column reads back as the pattern it was given'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_text_box_array_repair() RETURNS SETOF TEXT AS $f$
+DECLARE
+  changed integer;
+BEGIN
+  CREATE TABLE tb_arr_fix (id serial primary key, c text[]);
+  INSERT INTO tb_arr_fix (c) VALUES
+    (ARRAY['clean', 'also clean']),
+    (ARRAY['  padded  ', 'fine']),
+    (ARRAY['a' || chr(10) || 'b']),        -- a break: not ours to remove
+    (ARRAY[]::text[]),
+    (NULL);
+  RETURN NEXT is(
+    msar.check_pattern_violations('tb_arr_fix'::regclass::oid, '[2]'::jsonb, 'text_box'),
+    '{"violations": 2, "repairable": 1}'::jsonb,
+    'the padded one can be repaired, the one with a break cannot'
+  );
+  changed := msar.repair_check_pattern('tb_arr_fix'::regclass::oid, '[2]'::jsonb, 'text_box');
+  RETURN NEXT is(changed, 1, 'only the repairable row is touched');
+  RETURN NEXT is(
+    (SELECT c FROM tb_arr_fix WHERE id = 2),
+    ARRAY['padded', 'fine'],
+    'every element is trimmed, and they keep their order'
+  );
+  RETURN NEXT is(
+    (SELECT c FROM tb_arr_fix WHERE id = 3),
+    ARRAY['a' || chr(10) || 'b'],
+    'the one with a break is left exactly as it was'
+  );
+  RETURN NEXT is(
+    (SELECT c FROM tb_arr_fix WHERE id = 4), ARRAY[]::text[], 'an empty array stays empty'
+  );
+  RETURN NEXT is((SELECT c FROM tb_arr_fix WHERE id = 5), NULL, 'a null array stays null');
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_add_constraint_duplicate_name() RETURNS SETOF TEXT AS $f$
 DECLARE
   con_create_arr jsonb := '[{"name": "myuniqcons", "type": "u", "columns": [2]}]';

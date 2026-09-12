@@ -4,6 +4,9 @@ import type {
   FkConstraint,
   RawConstraint,
 } from '@mathesar/api/rpc/constraints';
+import { getAbstractTypeForDbType } from '@mathesar/stores/abstract-types';
+import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
+import type { AbstractType } from '@mathesar/stores/abstract-types/types';
 
 export function constraintIsFk(c: RawConstraint): c is FkConstraint {
   return c.type === 'foreignkey';
@@ -48,4 +51,32 @@ export function hasCheckPattern(
       c.columns.length === 1 &&
       c.columns.includes(columnId),
   );
+}
+
+/** The kinds whose values are text a `text_box` constraint could speak about. */
+const singleLineKinds = new Set(['text', 'email', 'uri']);
+
+function dbTypeCanBeSingleLine(dbType: string): boolean {
+  // `character` blank-pads to its length, so it is single-line already and a
+  // trim check on it could never fire: there is nothing to offer.
+  if (dbType === DB_TYPES.CHARACTER) return false;
+  return singleLineKinds.has(getAbstractTypeForDbType(dbType, null).identifier);
+}
+
+/**
+ * Whether a column could be restricted to a single line, i.e. take the
+ * `text_box` check pattern, either directly or over each of its elements.
+ *
+ * Being shown as a string isn't enough to qualify: a JSON column is one of
+ * those too, and is jsonb underneath, which btrim has nothing to say about.
+ */
+export function canTakeTextBoxPattern(
+  column: RawColumnWithMetadata,
+  abstractType: AbstractType,
+): boolean {
+  if (abstractType.cellInfo?.type === 'array') {
+    const itemType = column.type_options?.item_type;
+    return typeof itemType === 'string' && dbTypeCanBeSingleLine(itemType);
+  }
+  return dbTypeCanBeSingleLine(column.type);
 }

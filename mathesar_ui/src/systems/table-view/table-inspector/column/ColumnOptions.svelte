@@ -3,13 +3,13 @@
   import { _ } from 'svelte-i18n';
 
   import { RichText } from '@mathesar/components/rich-text';
-  import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
   import { confirm } from '@mathesar/stores/confirmation';
   import type {
     ColumnsDataStore,
     ConstraintsDataStore,
     ProcessedColumn,
   } from '@mathesar/stores/table-data';
+  import { canTakeTextBoxPattern } from '@mathesar/stores/table-data/constraintsUtils';
   import { toast } from '@mathesar/stores/toast';
   import { getErrorMessage } from '@mathesar/utils/errors';
   import {
@@ -36,11 +36,10 @@
   $: allowsDuplicates = !(
     column.column.primary_key || $uniqueColumns.has(column.column.id)
   );
-  // `character` blank-pads to its length, so it is single-line already and a
-  // trim check on it would never fire: there is nothing to offer.
-  $: isSingleLineApplicable =
-    column.abstractType.cellInfo?.type === 'string' &&
-    column.column.type !== DB_TYPES.CHARACTER;
+  $: isSingleLineApplicable = canTakeTextBoxPattern(
+    column.column,
+    column.abstractType,
+  );
   $: isSingleLine = $constraintsDataStore.constraints.some(
     (c) =>
       c.type === 'check' &&
