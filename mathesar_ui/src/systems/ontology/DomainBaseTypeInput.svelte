@@ -7,7 +7,7 @@
     AbstractTypeName,
     TypeModifiers,
   } from '@mathesar/components/abstract-type-control';
-  import { constructDbForm } from '@mathesar/components/abstract-type-control/utils';
+  import { getFormValueStore } from '@mathesar/components/abstract-type-control/utils';
   import {
     type FamilyOption,
     type KindOption,
@@ -28,6 +28,7 @@
     FormBuilder,
     LabeledInput,
     Select,
+    makeForm,
   } from '@mathesar-component-library';
   import type { FormValues } from '@mathesar-component-library/types';
 
@@ -37,6 +38,8 @@
   export let over: { name: string; options: ColumnTypeOptions };
   /** What rules the type can be given, which is the caller's reason to ask */
   export let subject: RuleSubject | undefined = undefined;
+  /** Whether what has been picked is a type that could be asked for */
+  export let isValid = true;
   export let disabled = false;
 
   let value: TypeChoice = getDefaultTypeChoice();
@@ -61,19 +64,16 @@
   // The length, the precision and the like, which a domain has to be given here
   // because there is no altering them afterwards: Postgres cannot change the
   // type a domain is over, and a column of the domain would have nowhere to go.
-  $: ({ dbOptionsConfig, dbForm, dbFormValues } = constructDbForm(
-    value.abstractType,
-    spec.dbOptions.type,
-    // Not a column, but what the form of options needs to know of one: the type
-    // picked, with nothing already set, since a domain being made has nothing.
-    {
-      id: 0,
-      type: spec.dbOptions.type,
-      type_options: null,
-      metadata: null,
-      abstractType: value.abstractType,
-    },
-  ));
+  //
+  // The form is built on its own variables' defaults rather than on a column's
+  // settings, there being no column and nothing set: a domain over text is over
+  // text until somebody asks for a length.
+  $: dbOptionsConfig = value.abstractType.getDbConfig?.(spec.dbOptions.type);
+  $: dbForm = dbOptionsConfig ? makeForm(dbOptionsConfig.form, {}) : undefined;
+  $: dbFormValues = getFormValueStore(dbForm);
+  // Mentioning the values is what makes this run again when one is typed, the
+  // answer itself being the form's to give.
+  $: isValid = ($dbFormValues, dbForm?.getValidationResult().isValid ?? true);
 
   // The options are taken as arguments rather than read from the enclosing
   // scope so that a length or a precision being typed is a change this sees:

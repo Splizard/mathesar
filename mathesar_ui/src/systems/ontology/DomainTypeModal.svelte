@@ -55,6 +55,8 @@
   };
   /** What rules the type it is over can be given */
   let subject: RuleSubject | undefined = undefined;
+  /** Whether the type picked for a domain being made could be asked for */
+  let overIsValid = true;
 
   function reset(_type: RawSchemaType | undefined) {
     // The whole form, so that what the database said about the last attempt goes
@@ -143,7 +145,11 @@
         <p class="over">{type.over}</p>
         <p class="help">{$_('domain_over_is_fixed')}</p>
       {:else}
-        <DomainBaseTypeInput bind:over bind:subject />
+        <DomainBaseTypeInput
+          bind:over
+          bind:subject
+          bind:isValid={overIsValid}
+        />
       {/if}
     </FieldLayout>
     <FieldLayout>
@@ -179,7 +185,7 @@
     <FormSubmit
       {form}
       catchErrors
-      canProceed={getRuleEntriesError(rules) === undefined}
+      canProceed={getRuleEntriesError(rules) === undefined && overIsValid}
       onCancel={() => {
         reset(type);
         controller.close();
