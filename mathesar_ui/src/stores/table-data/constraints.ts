@@ -13,6 +13,7 @@ import { States } from '@mathesar/api/rest/utils/requestUtils';
 import { api } from '@mathesar/api/rpc';
 import type { RawColumnWithMetadata } from '@mathesar/api/rpc/columns';
 import type {
+  CheckPattern,
   ConstraintRecipe,
   RawConstraint,
 } from '@mathesar/api/rpc/constraints';
@@ -194,6 +195,44 @@ export class ConstraintsDataStore
     ).filter((c) => c.type === 'unique');
     await Promise.all(
       uniqueConstraintsForColumn.map((c) =>
+        api.constraints
+          .delete({ ...this.apiContext, constraint_oid: c.oid })
+          .run(),
+      ),
+    );
+    await this.fetch();
+  }
+
+  /**
+   * Add or drop one of Mathesar's check patterns on a column.
+   *
+   * Adding one fails if any existing row breaks it, which is the point: the
+   * constraint is what the column's kind is read from, so it has to be true of
+   * every row rather than only of the ones written from here on.
+   */
+  async setCheckPatternOfColumn(
+    column: RawColumnWithMetadata,
+    pattern: CheckPattern,
+    shouldApply: boolean,
+  ): Promise<void> {
+    const matching = getStoreValue(this.store).constraints.filter(
+      (c) =>
+        c.type === 'check' &&
+        c.pattern === pattern &&
+        c.columns.length === 1 &&
+        c.columns.includes(column.id),
+    );
+    if (shouldApply === matching.length > 0) {
+      return;
+    }
+    if (shouldApply) {
+      await this.add({ type: 'c', pattern, columns: [column.id] });
+      return;
+    }
+    // As with unique constraints, the same pattern can be on a column more than
+    // once under different names, so drop all of them.
+    await Promise.all(
+      matching.map((c) =>
         api.constraints
           .delete({ ...this.apiContext, constraint_oid: c.oid })
           .run(),

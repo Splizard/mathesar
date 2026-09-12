@@ -3,6 +3,7 @@
   import { _ } from 'svelte-i18n';
 
   import { RichText } from '@mathesar/components/rich-text';
+  import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
   import type {
     ColumnsDataStore,
     ConstraintsDataStore,
@@ -25,6 +26,7 @@
 
   let isRequestingToggleAllowNull = false;
   let isRequestingToggleAllowDuplicates = false;
+  let isRequestingToggleSingleLine = false;
 
   const dispatch = createEventDispatcher();
 
@@ -33,6 +35,57 @@
   $: allowsDuplicates = !(
     column.column.primary_key || $uniqueColumns.has(column.column.id)
   );
+  // `character` blank-pads to its length, so it is single-line already and a
+  // trim check on it would never fire: there is nothing to offer.
+  $: isSingleLineApplicable =
+    column.abstractType.cellInfo?.type === 'string' &&
+    column.column.type !== DB_TYPES.CHARACTER;
+  $: isSingleLine = $constraintsDataStore.constraints.some(
+    (c) =>
+      c.type === 'check' &&
+      c.pattern === 'text_box' &&
+      c.columns.length === 1 &&
+      c.columns.includes(column.column.id),
+  );
+
+  async function toggleSingleLine() {
+    isRequestingToggleSingleLine = true;
+    try {
+      const newIsSingleLine = !isSingleLine;
+      await constraintsDataStore.setCheckPatternOfColumn(
+        column.column,
+        'text_box',
+        newIsSingleLine,
+      );
+      toast.success(
+        newIsSingleLine
+          ? $_('column_will_be_single_line', {
+              values: { columnName: column.column.name },
+            })
+          : $_('column_will_not_be_single_line', {
+              values: { columnName: column.column.name },
+            }),
+      );
+      dispatch('close');
+    } catch (error) {
+      // A check violation here means the column already holds values the
+      // constraint forbids, which is worth saying plainly rather than passing
+      // the database's own wording along.
+      const message = getErrorMessage(error);
+      const isViolation = /check constraint|23514/i.test(message);
+      toast.error(
+        isViolation
+          ? $_('single_line_existing_values_dont_fit', {
+              values: { columnName: column.column.name },
+            })
+          : `${$_('unable_to_update_single_line_column', {
+              values: { columnName: column.column.name },
+            })} ${message}.`,
+      );
+    } finally {
+      isRequestingToggleSingleLine = false;
+    }
+  }
 
   async function toggleAllowNull() {
     isRequestingToggleAllowNull = true;
@@ -120,6 +173,27 @@
       />
     {/if}
   </LabeledInput>
+
+  {#if isSingleLineApplicable}
+    <LabeledInput layout="inline-input-first">
+      <span slot="label">
+        {$_('restrict_to_single_line')}
+        <Help>
+          {$_('restrict_to_single_line_help')}
+        </Help>
+      </span>
+
+      {#if isRequestingToggleSingleLine}
+        <Icon class="opt" {...iconLoading} />
+      {:else}
+        <Checkbox
+          disabled={isRequestingToggleSingleLine || !currentRoleOwnsTable}
+          checked={isSingleLine}
+          on:change={toggleSingleLine}
+        />
+      {/if}
+    </LabeledInput>
+  {/if}
 
   <LabeledInput layout="inline-input-first">
     <span slot="label">
