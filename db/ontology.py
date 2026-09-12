@@ -38,6 +38,41 @@ def alter_enum_type(conn, type_oid, patch):
     ).fetchone()[0]
 
 
+def create_domain_type(conn, schema_oid, name, spec):
+    """
+    Create a domain: a type with rules of its own on top of another type.
+
+    Args:
+        conn: a psycopg connection
+        schema_oid: The OID of the schema to create the type in.
+        name: The name to give it.
+        spec: What it is over, and the rules it holds its values to; see msar.create_domain_type.
+
+    Returns:
+        The OID of the new type.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'create_domain_type', schema_oid, name, json.dumps(spec)
+    ).fetchone()[0]
+
+
+def alter_domain_type(conn, type_oid, patch):
+    """
+    Change a domain's name, its description, its default, its nullability, or its rules.
+
+    Args:
+        conn: a psycopg connection
+        type_oid: The OID of the domain.
+        patch: A dict of the fields to change; see msar.alter_domain_type.
+
+    Returns:
+        The OID of the domain.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'alter_domain_type', type_oid, json.dumps(patch)
+    ).fetchone()[0]
+
+
 def drop_type(conn, type_oid, cascade=False):
     """
     Drop a type the database defines for itself, returning its qualified name.

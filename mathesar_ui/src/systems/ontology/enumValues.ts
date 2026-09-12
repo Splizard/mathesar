@@ -20,10 +20,15 @@ export function getEntries(values: string[] | undefined): EnumValueEntry[] {
 
 /** A key no entry in the list has, for one about to join it */
 export function getNextKey(entries: EnumValueEntry[]): number {
-  return entries.reduce((highest, entry) => Math.max(highest, entry.key), -1) + 1;
+  return (
+    entries.reduce((highest, entry) => Math.max(highest, entry.key), -1) + 1
+  );
 }
 
-export function withEntry(entries: EnumValueEntry[], value = ''): EnumValueEntry[] {
+export function withEntry(
+  entries: EnumValueEntry[],
+  value = '',
+): EnumValueEntry[] {
   return [...entries, { key: getNextKey(entries), value }];
 }
 
@@ -39,7 +44,9 @@ export function withEntryValue(
   key: number,
   value: string,
 ): EnumValueEntry[] {
-  return entries.map((entry) => (entry.key === key ? { ...entry, value } : entry));
+  return entries.map((entry) =>
+    entry.key === key ? { ...entry, value } : entry,
+  );
 }
 
 /**
@@ -69,7 +76,11 @@ export function getApiValues(entries: EnumValueEntry[]): EnumValue[] {
  */
 export function getEntriesError(
   entries: EnumValueEntry[],
-): 'choice_needs_a_value' | 'choice_value_is_empty' | 'choice_value_repeated' | undefined {
+):
+  | 'choice_needs_a_value'
+  | 'choice_value_is_empty'
+  | 'choice_value_repeated'
+  | undefined {
   const values = entries.map((entry) => entry.value.trim());
   if (values.length === 0) return 'choice_needs_a_value';
   if (values.some((value) => value === '')) return 'choice_value_is_empty';

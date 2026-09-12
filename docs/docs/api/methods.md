@@ -222,6 +222,7 @@
       - TypeInfo
       - TypeField
       - TypeConstraint
+      - TypeUser
 
 ## Schema Privileges
 
@@ -285,6 +286,22 @@
       - replace_for_roles
       - transfer_ownership
       - TablePrivileges
+
+## Types
+
+::: types
+    options:
+      members:
+      - add_enum
+      - patch_enum
+      - add_domain
+      - patch_domain
+      - delete
+      - EnumValue
+      - EnumPatch
+      - DomainSpec
+      - DomainPatch
+      - DomainRule
 
 ## Users
 

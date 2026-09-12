@@ -9389,8 +9389,9 @@ BEGIN
   COMMENT ON DOMAIN onto.phone IS 'A phone number';
   CREATE TABLE onto.not_a_type (id integer);
   RETURN NEXT is(
-    -- Who holds the values is test_schema_types_say_who_uses_them's business, not this one's.
-    (SELECT jsonb_agg(t - 'oid' - 'used_by')
+    -- Who holds the values is test_schema_types_say_who_uses_them's business, not this one's, and
+    -- what a default is as a value is test_default_as_value_reads_only_values'.
+    (SELECT jsonb_agg(t - 'oid' - 'used_by' - 'default_value')
      FROM jsonb_array_elements(msar.list_schema_types('onto')) AS t),
     $j$[
       {"name": "address", "kind": "composite", "description": null,
@@ -10714,6 +10715,215 @@ BEGIN
      WHERE typnamespace = 'public'::regnamespace AND typtype = 'e'),
     1,
     'which makes no type of its own'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_domain_editing() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM msar.create_domain_type('public'::regnamespace, 'dom_email', $j$ {
+    "over": {"name": "text"},
+    "not_null": true,
+    "default": "nobody@example.com",
+    "rules": [{"rule": "matches", "value": "@"}, {"rule": "max_length", "value": "200"}],
+    "description": "An address to write to"
+  } $j$::jsonb);
+  CREATE TABLE domain_people (id integer PRIMARY KEY, mail dom_email);
+  INSERT INTO domain_people VALUES (1, 'a@b.com'), (2, 'somebody@example.com');
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __domain_info(nam text) RETURNS jsonb AS $$
+SELECT type_info
+FROM jsonb_array_elements(msar.list_schema_types('public'::regnamespace)) AS x(type_info)
+WHERE type_info ->> 'name' = nam;
+$$ LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_created_with_its_rules() RETURNS SETOF TEXT AS $f$
+DECLARE
+  info jsonb;
+BEGIN
+  PERFORM __setup_domain_editing();
+  info := __domain_info('dom_email');
+  RETURN NEXT is(info ->> 'kind', 'domain', 'a domain can be made');
+  RETURN NEXT is(info ->> 'over', 'text', 'over the type it was asked to be over');
+  RETURN NEXT is(info ->> 'description', 'An address to write to', 'with its description');
+  RETURN NEXT is((info ->> 'not_null')::boolean, true, 'holding to whether it can be empty');
+  RETURN NEXT is(info ->> 'default_value', 'nobody@example.com', 'and to its default');
+  RETURN NEXT is(
+    (SELECT jsonb_agg(rule_obj ORDER BY rule_obj ->> 'name')
+     FROM jsonb_array_elements(info -> 'constraints') AS x(rule_obj)),
+    $j$[
+      {"name": "matches", "definition": "CHECK ((VALUE ~ '@'::text))"},
+      {"name": "max_length", "definition": "CHECK ((length(VALUE) <= 200))"}
+    ]$j$::jsonb,
+    'each rule being a constraint, named for the rule it came from'
+  );
+  RETURN NEXT throws_like(
+    $q$INSERT INTO domain_people VALUES (3, 'no-at-sign')$q$,
+    '%dom_email%matches%',
+    'and the rules are the database''s to keep, not ours'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_rules_kept_added_and_dropped() RETURNS SETOF TEXT AS $f$
+DECLARE
+  typ_id oid;
+BEGIN
+  PERFORM __setup_domain_editing();
+  typ_id := 'dom_email'::regtype::oid;
+  RETURN NEXT is(
+    msar.alter_domain_type(typ_id, $j$ {"rules": [
+      {"name": "matches"}, {"rule": "not_blank"}, {"rule": "max_length", "value": "50"}
+    ]} $j$::jsonb),
+    typ_id,
+    'changing a domain leaves it where it is'
+  );
+  RETURN NEXT is(
+    (SELECT jsonb_agg(rule_obj ->> 'name' ORDER BY rule_obj ->> 'name')
+     FROM jsonb_array_elements(__domain_info('dom_email') -> 'constraints') AS x(rule_obj)),
+    '["matches", "max_length", "not_blank"]'::jsonb,
+    'a rule named is kept, one left out is dropped, and a new one is added'
+  );
+  RETURN NEXT is(
+    (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+     WHERE contypid = typ_id AND conname = 'max_length'),
+    'CHECK ((length(VALUE) <= 50))',
+    'and the name a dropped rule leaves is free for the new one to take'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_rule_of_the_same_kind_twice() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_domain_editing();
+  PERFORM msar.alter_domain_type('dom_email'::regtype::oid, $j$ {"rules": [
+    {"name": "max_length"}, {"rule": "max_length", "value": "50"}
+  ]} $j$::jsonb);
+  RETURN NEXT is(
+    (SELECT jsonb_agg(rule_obj ->> 'definition' ORDER BY rule_obj ->> 'name')
+     FROM jsonb_array_elements(__domain_info('dom_email') -> 'constraints') AS x(rule_obj)),
+    '["CHECK ((length(VALUE) <= 200))", "CHECK ((length(VALUE) <= 50))"]'::jsonb,
+    'a rule can be given twice over, each time about its own value'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_rules_are_checked() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_domain_editing();
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_domain_type('dom_email'::regtype::oid,
+      '{"rules": [{"rule": "max_length", "value": "3"}]}'::jsonb)$q$,
+    '%"mail" of table "domain_people"%',
+    'a rule a record already breaks is refused, and the record''s column named'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_domain_type('dom_email'::regtype::oid,
+      '{"rules": [{"rule": "positive"}]}'::jsonb)$q$,
+    '%rule positive cannot be given to a domain over text%',
+    'a rule about a number means nothing over text'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_domain_type('dom_email'::regtype::oid,
+      '{"rules": [{"name": "nonesuch"}]}'::jsonb)$q$,
+    '%''nonesuch'' is not one of%',
+    'and a rule can only be kept if the domain has it'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_constraint
+     WHERE contypid = 'dom_email'::regtype::oid AND contype = 'c'),
+    2,
+    'a refusal leaving the rules it was about as they were'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_emptiness_and_default_changed() RETURNS SETOF TEXT AS $f$
+DECLARE
+  info jsonb;
+BEGIN
+  PERFORM __setup_domain_editing();
+  PERFORM msar.alter_domain_type('dom_email'::regtype::oid, $j$ {
+    "name": "dom_address", "description": null, "not_null": false, "default": null
+  } $j$::jsonb);
+  info := __domain_info('dom_address');
+  RETURN NEXT isnt(info, NULL, 'a domain can be renamed');
+  RETURN NEXT is(info ->> 'description', NULL, 'have its description taken off');
+  RETURN NEXT is((info ->> 'not_null')::boolean, false, 'be let hold nothing');
+  RETURN NEXT is(info ->> 'default', NULL, 'and have its default taken off');
+  RETURN NEXT lives_ok(
+    $q$INSERT INTO domain_people VALUES (3, NULL)$q$,
+    'which the column of it holds to'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_not_null_needs_every_record() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_domain_editing();
+  PERFORM msar.alter_domain_type('dom_email'::regtype::oid, '{"not_null": false}'::jsonb);
+  INSERT INTO domain_people VALUES (3, NULL);
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_domain_type('dom_email'::regtype::oid, '{"not_null": true}'::jsonb)$q$,
+    '%"mail" of table "domain_people" contains null values%',
+    'a domain cannot be told to hold something while a record of it holds nothing'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_domain_over_a_type_with_options() RETURNS SETOF TEXT AS $f$
+DECLARE
+  info jsonb;
+BEGIN
+  PERFORM msar.create_domain_type('public'::regnamespace, 'dom_score', $j$ {
+    "over": {"name": "numeric", "options": {"precision": 5, "scale": 2}},
+    "default": "0",
+    "rules": [{"rule": "at_least", "value": "0"}, {"rule": "at_most", "value": "100"}]
+  } $j$::jsonb);
+  info := __domain_info('dom_score');
+  RETURN NEXT is(info ->> 'over', 'numeric(5,2)', 'a domain can be over a type with options');
+  RETURN NEXT is(info ->> 'default_value', '0', 'keeping a default Postgres writes down bare');
+  RETURN NEXT is(
+    (SELECT jsonb_agg(rule_obj ->> 'definition' ORDER BY rule_obj ->> 'name')
+     FROM jsonb_array_elements(info -> 'constraints') AS x(rule_obj)),
+    $j$["CHECK ((VALUE >= '0'::numeric))", "CHECK ((VALUE <= '100'::numeric))"]$j$::jsonb,
+    'and taking the rules a number can be held to'
+  );
+  RETURN NEXT is(msar.drop_type('dom_score'::regtype::oid), 'dom_score', 'and it drops by name');
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_default_as_value_reads_only_values() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(msar.default_as_value($q$'draft'::text$q$), 'draft', 'text loses its quoting');
+  RETURN NEXT is(
+    msar.default_as_value($q$'it''s'::text$q$), 'it''s', 'and a quote inside it comes back whole'
+  );
+  RETURN NEXT is(
+    msar.default_as_value($q$'hi'::character varying$q$), 'hi', 'a cast can be two words'
+  );
+  RETURN NEXT is(msar.default_as_value($q$'{}'::text[]$q$), '{}', 'or an array of one');
+  RETURN NEXT is(msar.default_as_value('1.50'), '1.50', 'a number is written bare and read bare');
+  RETURN NEXT is(msar.default_as_value('true'), 'true', 'and so is a boolean');
+  RETURN NEXT is(msar.default_as_value('now()'), NULL, 'while a call is not a value');
+  RETURN NEXT is(
+    msar.default_as_value($q$('a'::text || 'b'::text)$q$), NULL, 'nor is a sum of them'
+  );
+  RETURN NEXT is(
+    msar.default_as_value($q$'a::text'::text$q$), 'a::text',
+    'and a value that reads like a cast keeps all of itself'
   );
 END;
 $f$ LANGUAGE plpgsql;

@@ -44,6 +44,11 @@ export interface RawSchemaType {
   not_null?: boolean;
   /** Domains: their default, as SQL */
   default?: string | null;
+  /**
+   * Domains: their default as a value, when the default is nothing but one. A
+   * default which is an expression has none.
+   */
+  default_value?: string | null;
   /** Domains: their CHECK constraints */
   constraints?: { name: string; definition: string }[];
 }

@@ -559,6 +559,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        types.add_domain,
+        "types.add_domain",
+        [user_is_authenticated]
+    ),
+    (
         types.add_enum,
         "types.add_enum",
         [user_is_authenticated]
@@ -566,6 +571,11 @@ METHODS = [
     (
         types.delete,
         "types.delete",
+        [user_is_authenticated]
+    ),
+    (
+        types.patch_domain,
+        "types.patch_domain",
         [user_is_authenticated]
     ),
     (

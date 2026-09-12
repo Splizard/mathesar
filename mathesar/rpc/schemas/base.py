@@ -99,6 +99,8 @@ class TypeInfo(TypedDict):
             may be another domain.
         not_null: For domains, whether they disallow NULL.
         default: For domains, their default, as SQL.
+        default_value: For domains, their default as a value, when the default is nothing but
+            one. A default which is an expression has none.
         constraints: For domains, their CHECK constraints.
     """
     oid: int
@@ -112,6 +114,7 @@ class TypeInfo(TypedDict):
     over: Optional[str]
     not_null: Optional[bool]
     default: Optional[str]
+    default_value: Optional[str]
     constraints: Optional[list[TypeConstraint]]
 
 

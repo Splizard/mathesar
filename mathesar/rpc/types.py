@@ -8,7 +8,13 @@ from typing import Optional, TypedDict, Union
 
 from modernrpc.core import REQUEST_KEY
 
-from db.ontology import alter_enum_type, create_enum_type, drop_type
+from db.ontology import (
+    alter_domain_type,
+    alter_enum_type,
+    create_domain_type,
+    create_enum_type,
+    drop_type,
+)
 from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.rpc.utils import connect
 
@@ -95,6 +101,129 @@ def patch_enum(
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         return alter_enum_type(conn, type_oid, patch)
+
+
+class DomainRule(TypedDict):
+    """
+    A rule a domain holds its values to, or one it already holds them to.
+
+    A rule is a CHECK constraint, which is what Postgres has written down, so a rule already on the
+    domain is given by the constraint's name and left exactly as it is -- including one somebody
+    else wrote, which can be taken off but never edited. A rule being added names which rule it is
+    and the value it is about, and is never SQL.
+
+    The rules, and what each takes a value of:
+        `not_blank`: there is something other than whitespace in it. No value.
+        `min_length`: it is at least this many characters long. A whole number.
+        `max_length`: it is at most this many characters long. A whole number.
+        `matches`: it matches this regular expression. A pattern.
+        `at_least`: it is this value or more. A number, a date, or a time.
+        `at_most`: it is this value or less. A number, a date, or a time.
+        `positive`: it is more than zero. No value.
+        `not_negative`: it is zero or more. No value.
+
+    Which of them a domain can be given follows from the type it is over: text has a length, a
+    number has a size, and neither has the other's.
+
+    Attributes:
+        name: The name of a rule the domain already has, which is to stay as it is.
+        rule: Which rule to add.
+        value: The value that rule is about, or null for the rules that take none.
+    """
+    name: Optional[str]
+    rule: Optional[str]
+    value: Optional[str]
+
+
+class DomainSpec(TypedDict):
+    """
+    What a domain is: another type, and the rules its values are held to.
+
+    Attributes:
+        over: The type it is defined over, as a column's type is given: an object with a `name` and
+            the `options` that go with it, such as a length or a precision.
+        not_null: Whether it disallows NULL.
+        default: The value a column of it takes when nothing is given, or null for none. A value,
+            never an expression.
+        rules: The rules it holds its values to.
+        description: A description of the type.
+    """
+    over: dict
+    not_null: Optional[bool]
+    default: Optional[str]
+    rules: Optional[list[DomainRule]]
+    description: Optional[str]
+
+
+class DomainPatch(TypedDict):
+    """
+    The parts of a domain which can be changed.
+
+    The type it is defined over is not among them: Postgres cannot change it, and a column of the
+    domain would have to be moved to a type that doesn't exist yet. A domain over a different type
+    is a new domain, which a column can be moved onto by being given it.
+
+    Attributes:
+        name: A new name for the type.
+        description: A new description, or null to take the description off.
+        not_null: Whether it disallows NULL. Turning it on needs every record in a column of the
+            domain to have a value.
+        default: A new default value, or null to take the default off.
+        rules: The rules it is to hold its values to: the ones it keeps, named, along with the ones
+            it is being given. Any rule left out is taken off. Adding a rule needs every record
+            already in a column of the domain to satisfy it.
+    """
+    name: Optional[str]
+    description: Optional[str]
+    not_null: Optional[bool]
+    default: Optional[str]
+    rules: Optional[list[DomainRule]]
+
+
+@mathesar_rpc_method(name="types.add_domain", auth="login")
+def add_domain(
+    *,
+    schema_oid: int,
+    name: str,
+    spec: DomainSpec,
+    database_id: int,
+    **kwargs,
+) -> int:
+    """
+    Add a domain to a schema: a type with rules of its own on top of another type.
+
+    Args:
+        schema_oid: The OID of the schema to add it to.
+        name: The name to give it, which no other type in the schema may have.
+        spec: The type it is over, and the rules it holds its values to.
+        database_id: The Django id of the database containing the schema.
+
+    Returns:
+        The OID of the new type.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return create_domain_type(conn, schema_oid, name, spec)
+
+
+@mathesar_rpc_method(name="types.patch_domain", auth="login")
+def patch_domain(
+    *, type_oid: int, patch: DomainPatch, database_id: int, **kwargs
+) -> int:
+    """
+    Change a domain's name, its description, its default, whether it can be empty, or its rules.
+
+    Args:
+        type_oid: The OID of the domain.
+        patch: The parts of it to change.
+        database_id: The Django id of the database containing the type.
+
+    Returns:
+        The OID of the domain, which changing it never replaces.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return alter_domain_type(conn, type_oid, patch)
 
 
 @mathesar_rpc_method(name="types.delete", auth="login")

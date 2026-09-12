@@ -1651,6 +1651,41 @@ ORDER BY s.nspname;
 $$ LANGUAGE SQL STABLE;
 
 
+CREATE OR REPLACE FUNCTION msar.default_as_value(expr text) RETURNS text AS $$/*
+Return a default expression's value, when the expression is nothing but a value.
+
+Postgres stores a default as an expression, rendered back from its parse tree: text comes out as
+'draft'::text, a number as 7 or 1.50, and anything that isn't a constant -- now(), a function call,
+a sum -- comes out as itself. A value is the only kind of default that can be asked for as a value
+and shown in a box to be edited, so this says which of them one is, and null for the rest.
+
+Note that the cast is dropped rather than read, so what comes back is the value as it was written
+and not as the type would print it.
+
+Args:
+  expr: The default expression, as Postgres renders it.
+*/
+WITH bare_cte AS (
+  -- The cast Postgres spells out, which is the type of the default and so tells us nothing new. A
+  -- literal's own quotes stop the pattern reaching inside it, so 'a::text' keeps all of itself.
+  SELECT btrim(regexp_replace(expr, '::[a-z][a-z0-9_ ]*(\(\d+(,\d+)?\))?(\[\])?$', '')) AS bare
+), unquoted_cte AS (
+  SELECT bare, CASE WHEN length(bare) >= 2 THEN replace(
+    substring(bare FROM 2 FOR length(bare) - 2), repeat(chr(39), 2), chr(39)
+  ) END AS unquoted
+  FROM bare_cte
+)
+-- Quoting the value back up and asking whether that is what was there is the whole test for
+-- whether it was a literal: anything else -- a call, a sum, a column -- comes out as something
+-- else. Numbers and booleans Postgres renders bare, and they are values too.
+SELECT CASE
+  WHEN quote_literal(unquoted) = bare THEN unquoted
+  WHEN bare ~ '^-?\d+(\.\d+)?$' OR bare IN ('true', 'false') THEN bare
+END
+FROM unquoted_cte;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+
+
 CREATE OR REPLACE FUNCTION msar.list_schema_types(sch_id regnamespace) RETURNS jsonb AS $$/*
 Return the enums, composite types, and domains defined in a schema, ordered by name.
 
@@ -1669,6 +1704,7 @@ Each is described by a JSON object of the form:
     "over": <str>,  -- domains: the type they're directly defined over (maybe another domain)
     "not_null": <bool>,  -- domains: whether they disallow NULL
     "default": <str or null>,  -- domains: their default, as an SQL expression
+    "default_value": <str or null>,  -- domains: their default as a value, when it's nothing but one
     "constraints": [{"name": <str>, "definition": <str>}, ...]  -- domains: their CHECK constraints
   }
 leaving out the keys that don't apply to the kind. The row types of tables, views, etc. aren't
@@ -1719,7 +1755,9 @@ FROM (
   ))
   -- jsonb_strip_nulls would drop a NULL description or default, which do apply
   || jsonb_build_object('description', obj_description(t.oid, 'pg_type'))
-  || CASE WHEN t.typtype = 'd' THEN jsonb_build_object('default', t.typdefault) ELSE '{}' END
+  || CASE WHEN t.typtype = 'd' THEN jsonb_build_object(
+      'default', t.typdefault, 'default_value', msar.default_as_value(t.typdefault)
+    ) ELSE '{}' END
   AS type_info
   FROM pg_catalog.pg_type t
   LEFT JOIN pg_catalog.pg_class c ON c.oid = t.typrelid

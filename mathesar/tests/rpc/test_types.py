@@ -97,3 +97,46 @@ def test_types_delete(rf, monkeypatch):
     assert call == {'conn': 'conn', 'type_oid': 4242, 'cascade': False}
     types.delete(type_oid=4242, cascade=True, database_id=11, request=_request(rf))
     assert call['cascade'] is True
+
+
+def test_types_add_domain(rf, monkeypatch):
+    call = {}
+    spec = {
+        'over': {'name': 'text'},
+        'not_null': True,
+        'default': 'nobody@example.com',
+        'rules': [{'rule': 'matches', 'value': '^[^@]+@[^@]+$'}],
+        'description': 'An address to write to',
+    }
+
+    def mock_create_domain_type(conn, schema_oid, name, _spec):
+        call.update(conn=conn, schema_oid=schema_oid, name=name, spec=_spec)
+        return 4242
+
+    monkeypatch.setattr(types, 'connect', _mock_connect)
+    monkeypatch.setattr(types, 'create_domain_type', mock_create_domain_type)
+    assert types.add_domain(
+        schema_oid=2200, name='Email', spec=spec, database_id=11, request=_request(rf)
+    ) == 4242
+    assert call == {'conn': 'conn', 'schema_oid': 2200, 'name': 'Email', 'spec': spec}
+
+
+def test_types_patch_domain(rf, monkeypatch):
+    call = {}
+    patch = {
+        'name': 'Address',
+        'default': None,
+        'rules': [{'name': 'matches'}, {'rule': 'max_length', 'value': '200'}],
+    }
+
+    def mock_alter_domain_type(conn, type_oid, _patch):
+        call.update(conn=conn, type_oid=type_oid, patch=_patch)
+        # Changing a domain never replaces it, so the OID is the one asked about.
+        return 4242
+
+    monkeypatch.setattr(types, 'connect', _mock_connect)
+    monkeypatch.setattr(types, 'alter_domain_type', mock_alter_domain_type)
+    assert types.patch_domain(
+        type_oid=4242, patch=patch, database_id=11, request=_request(rf)
+    ) == 4242
+    assert call == {'conn': 'conn', 'type_oid': 4242, 'patch': patch}

@@ -656,3 +656,283 @@ BEGIN
   RETURN new_type;
 END;
 $$ LANGUAGE plpgsql STRICT;
+
+
+----------------------------------------------------------------------------------------------------
+-- DOMAINS
+----------------------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION
+msar.domain_rule_expression(rule_ text, val text, over text) RETURNS text AS $$/*
+The rules a domain can be given, written against the value the domain is checking.
+
+A domain is a type with rules of its own on top of another type, and the rules are CHECK
+constraints: boolean expressions over the value. An expression is SQL, and SQL supplied by a caller
+is SQL run, so the caller names a rule and gives it a value instead, and this function is the whole
+set of rules there is. The value is a value -- a number, some text, a date -- and never an
+expression, so it goes in quoted as a literal.
+
+Which rules a type can be given follows from what the type is, since asking for the length of a
+number means nothing. The category Postgres files the type under says enough: text rules for the
+string types, comparisons for the ones with an order worth comparing.
+
+The rules:
+  'not_blank':    there is something other than whitespace in it
+  'min_length':   it is at least this many characters long
+  'max_length':   it is at most this many characters long
+  'matches':      it matches this regular expression
+  'at_least':     it is this value or more
+  'at_most':      it is this value or less
+  'positive':     it is more than zero
+  'not_negative': it is zero or more
+
+Args:
+  rule_: The name of the rule.
+  val: The value the rule is about, or null for the rules that take none.
+  over: The type the domain is defined over, as format_type renders it.
+*/
+DECLARE
+  -- S is the string types, N the numbers, D the dates and times, T the timespans.
+  category "char" := (SELECT typcategory FROM pg_catalog.pg_type WHERE oid = over::regtype);
+  expression text;
+BEGIN
+  expression := CASE
+    WHEN rule_ = 'not_blank' AND category = 'S' THEN
+      format('btrim(VALUE) <> %L', '')
+    WHEN rule_ = 'min_length' AND category = 'S' THEN
+      format('length(VALUE) >= %s', val::integer)
+    WHEN rule_ = 'max_length' AND category = 'S' THEN
+      format('length(VALUE) <= %s', val::integer)
+    WHEN rule_ = 'matches' AND category = 'S' THEN
+      format('VALUE ~ %L', val)
+    WHEN rule_ = 'at_least' AND category = ANY('{N,D,T}') THEN
+      format('VALUE >= %L', val)
+    WHEN rule_ = 'at_most' AND category = ANY('{N,D,T}') THEN
+      format('VALUE <= %L', val)
+    WHEN rule_ = 'positive' AND category = 'N' THEN
+      'VALUE > 0'
+    WHEN rule_ = 'not_negative' AND category = 'N' THEN
+      'VALUE >= 0'
+  END;
+  IF expression IS NULL THEN
+    RAISE EXCEPTION 'The rule % cannot be given to a domain over %.', rule_, over
+      USING ERRCODE = 'invalid_parameter_value',
+        HINT = 'A rule is about what the type is: the length of some text, the size of a number.';
+  END IF;
+  RETURN expression;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_unique_domain_rule_name(typ_id oid, base text, idx integer DEFAULT 0) RETURNS text AS
+$$/*
+Return a version of the given rule name that no rule of the domain has.
+
+The name itself is tried first, then the name with '_1', '_2' and so on after it.
+
+Args:
+  typ_id: The OID of the domain.
+  base: The name we would like to give the rule.
+  idx: The number to try as a suffix, 0 meaning the bare name.
+*/
+WITH candidate_cte AS (
+  SELECT CASE WHEN idx = 0 THEN left(base, 61) ELSE left(base, 61) || '_' || idx END AS candidate
+)
+SELECT CASE
+  WHEN NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint
+    WHERE contypid = typ_id AND conname = candidate_cte.candidate
+  ) THEN candidate_cte.candidate
+  ELSE msar.build_unique_domain_rule_name(typ_id, base, idx + 1)
+END
+FROM candidate_cte;
+$$ LANGUAGE SQL STABLE STRICT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.domain_rules_given(rules jsonb) RETURNS TABLE (kept text, rule_ text, val text) AS $$/*
+Take apart a list of a domain's rules into the ones it has and the ones it is being given.
+
+A rule already on the domain is named, since that is how Postgres knows it and since a rule Mathesar
+did not write has no name of ours to go by. A rule being added says which rule it is and what value
+it is about. Anything the list leaves out is a rule being taken off.
+
+Args:
+  rules: A JSONB array whose entries are either {"name": <str>} for a rule the domain already has,
+    or {"rule": <str>, "value": <str or null>} for one it is being given.
+*/
+SELECT
+  rule_obj ->> 'name',
+  rule_obj ->> 'rule',
+  rule_obj ->> 'value'
+FROM jsonb_array_elements(rules) AS rule_obj;
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.create_domain_type(sch_id regnamespace, typ_name text, spec jsonb) RETURNS oid AS $$/*
+Create a domain: a type with rules of its own on top of another type.
+
+The name is used as given. A name already taken is an error rather than something to work around,
+since somebody asking for a type by name wants that name.
+
+Args:
+  sch_id: The OID of the schema to create the type in.
+  typ_name: The name to give it.
+  spec: An object of the form
+    {
+      "over": <type>,
+      "not_null": <bool>,
+      "default": <str or null>,
+      "rules": [{"rule": <str>, "value": <str or null>}, ...],
+      "description": <str or null>
+    }
+  where "over" describes the type the domain is defined over as msar.build_type_text takes it, the
+  default is a value rather than an expression, and the rules are as in msar.domain_rule_expression.
+*/
+DECLARE
+  sch_name text := sch_id::regnamespace::text;
+  typ_id oid;
+BEGIN
+  EXECUTE format(
+    'CREATE DOMAIN %s.%I AS %s %s %s',
+    sch_name,
+    typ_name,
+    msar.build_type_text(spec -> 'over'),
+    CASE
+      WHEN spec ->> 'default' IS NOT NULL THEN format('DEFAULT %L', spec ->> 'default') ELSE ''
+    END,
+    CASE WHEN (spec ->> 'not_null')::boolean THEN 'NOT NULL' ELSE '' END
+  );
+  typ_id := (
+    SELECT oid FROM pg_catalog.pg_type WHERE typnamespace = sch_id AND typname = typ_name
+  );
+  -- Given to the domain rather than written into the statement that makes it, so that two rules of
+  -- the same kind get the two names msar.set_domain_rules would give them either way.
+  PERFORM msar.set_domain_rules(typ_id, COALESCE(spec -> 'rules', '[]'::jsonb));
+  IF spec ->> 'description' IS NOT NULL THEN
+    EXECUTE format(
+      'COMMENT ON DOMAIN %s.%I IS %L', sch_name, typ_name, spec ->> 'description'
+    );
+  END IF;
+  RETURN typ_id;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_domain_rules(typ_id oid, rules jsonb) RETURNS void AS $$/*
+Make the domain's rules the ones given: keep the named ones, add the new ones, drop the rest.
+
+Rules are added and dropped rather than changed, because a rule is a constraint and a constraint is
+what Postgres has written down; the definition it reports is the truth about the domain, including
+for a constraint somebody else wrote, which is offered here to be taken off but never to be edited.
+
+Adding a rule checks it against every record already held in a column of the domain, and Postgres
+refuses and names the column if one of them breaks it.
+
+Args:
+  typ_id: The OID of the domain.
+  rules: The rules it is to have, as described in msar.domain_rules_given.
+*/
+DECLARE
+  typ_name text := typ_id::regtype::text;
+  over text := (
+    SELECT format_type(typbasetype, typtypmod) FROM pg_catalog.pg_type WHERE oid = typ_id
+  );
+  unknown text;
+  given record;
+BEGIN
+  SELECT string_agg(quote_literal(kept), ', ') INTO unknown
+  FROM msar.domain_rules_given(rules)
+  WHERE kept IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint
+    WHERE contypid = typ_id AND contype = 'c' AND conname = kept
+  );
+  IF unknown IS NOT NULL THEN
+    RAISE EXCEPTION 'The rule % is not one of %''s rules.', unknown, typ_name
+      USING ERRCODE = 'undefined_object';
+  END IF;
+  FOR given IN
+    SELECT conname FROM pg_catalog.pg_constraint
+    WHERE contypid = typ_id AND contype = 'c'
+      AND conname NOT IN (SELECT kept FROM msar.domain_rules_given(rules) WHERE kept IS NOT NULL)
+  LOOP
+    EXECUTE format('ALTER DOMAIN %s DROP CONSTRAINT %I', typ_name, given.conname);
+  END LOOP;
+  FOR given IN SELECT rule_, val FROM msar.domain_rules_given(rules) WHERE rule_ IS NOT NULL LOOP
+    EXECUTE format(
+      'ALTER DOMAIN %s ADD CONSTRAINT %I CHECK (%s)',
+      typ_name,
+      msar.build_unique_domain_rule_name(typ_id, given.rule_),
+      msar.domain_rule_expression(given.rule_, given.val, over)
+    );
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql STRICT;
+
+
+CREATE OR REPLACE FUNCTION msar.alter_domain_type(typ_id oid, patch jsonb) RETURNS oid AS $$/*
+Change a domain's name, its description, its default, whether it can be empty, or its rules.
+
+The type the domain is defined over is not among them: Postgres has no way to change it, and a
+column of the domain would have to be moved to a type that doesn't exist yet. Somebody who needs a
+domain over a different type can make one and move their columns onto it, which the column's own
+Domain setting does, and then drop the one they were on.
+
+Args:
+  typ_id: The OID of the domain.
+  patch: An object of the form
+    {
+      "name": <str>,
+      "description": <str or null>,
+      "not_null": <bool>,
+      "default": <str or null>,
+      "rules": [<rule>, ...]
+    }
+  where every key is optional. A description or a default of null takes it off, and the rules are as
+  described in msar.domain_rules_given.
+
+Returns:
+  The OID of the domain, which changing it never replaces.
+*/
+DECLARE
+  typ_name text := typ_id::regtype::text;
+BEGIN
+  IF patch ? 'rules' THEN
+    PERFORM msar.set_domain_rules(typ_id, patch -> 'rules');
+  END IF;
+  IF patch ? 'default' THEN
+    EXECUTE format(
+      'ALTER DOMAIN %s %s',
+      typ_name,
+      CASE
+        WHEN patch ->> 'default' IS NULL THEN 'DROP DEFAULT'
+        ELSE format('SET DEFAULT %L', patch ->> 'default')
+      END
+    );
+  END IF;
+  IF patch ? 'not_null' THEN
+    EXECUTE format(
+      'ALTER DOMAIN %s %s NOT NULL',
+      typ_name,
+      CASE WHEN (patch ->> 'not_null')::boolean THEN 'SET' ELSE 'DROP' END
+    );
+  END IF;
+  IF patch ? 'description' THEN
+    EXECUTE format(
+      'COMMENT ON DOMAIN %s IS %s',
+      typ_name,
+      COALESCE(quote_literal(patch ->> 'description'), 'NULL')
+    );
+  END IF;
+  -- Last, so that everything above is done to the domain under the name it was asked about.
+  IF patch ->> 'name' IS NOT NULL AND patch ->> 'name' <> (
+    SELECT typname FROM pg_catalog.pg_type WHERE oid = typ_id
+  ) THEN
+    EXECUTE format('ALTER DOMAIN %s RENAME TO %I', typ_name, patch ->> 'name');
+  END IF;
+  RETURN typ_id;
+END;
+$$ LANGUAGE plpgsql STRICT;

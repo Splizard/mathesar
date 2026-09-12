@@ -16,8 +16,16 @@
   import { confirmDelete } from '@mathesar/stores/confirmation';
   import { modal } from '@mathesar/stores/modal';
   import { toast } from '@mathesar/stores/toast';
+  import DomainTypeModal from '@mathesar/systems/ontology/DomainTypeModal.svelte';
   import EnumTypeModal from '@mathesar/systems/ontology/EnumTypeModal.svelte';
-  import { Button, Help, Icon } from '@mathesar-component-library';
+  import {
+    Button,
+    ButtonMenuItem,
+    DropdownMenu,
+    Help,
+    Icon,
+    type ModalController,
+  } from '@mathesar-component-library';
 
   import SchemaOverviewSideSection from './SchemaOverviewSideSection.svelte';
 
@@ -33,7 +41,8 @@
   $: canEdit = $currentRolePrivileges.has('CREATE');
 
   const enumModal = modal.spawnModalController();
-  /** The choice the modal is open on, or undefined for one being made */
+  const domainModal = modal.spawnModalController();
+  /** The type the modal is open on, or undefined for one being made */
   let editing: RawSchemaType | undefined = undefined;
 
   const icons = {
@@ -48,9 +57,15 @@
     return $_('ontology_domain_of', { values: { type: type.over } });
   }
 
-  function edit(type: RawSchemaType | undefined) {
+  /** Which modal makes and changes a type of the kind, for the kinds that have one */
+  const modals: Partial<Record<RawSchemaType['kind'], ModalController>> = {
+    enum: enumModal,
+    domain: domainModal,
+  };
+
+  function edit(kind: RawSchemaType['kind'], type: RawSchemaType | undefined) {
     editing = type;
-    enumModal.open();
+    modals[kind]?.open();
   }
 
   function reload() {
@@ -59,7 +74,7 @@
 
   function remove(type: RawSchemaType) {
     void confirmDelete({
-      identifierType: $_('ontology_choice'),
+      identifierType: kindLabel(type),
       identifierName: type.name,
       body: [$_('are_you_sure_to_proceed')],
       onProceed: async () => {
@@ -87,14 +102,23 @@
     {$_('ontology')}
     <Help>{$_('ontology_help')}</Help>
     {#if canEdit}
-      <Button
-        appearance="plain"
+      <DropdownMenu
+        showArrow={false}
+        triggerAppearance="plain"
+        closeOnInnerClick={true}
+        label={$_('new_type')}
         size="small"
-        tooltip={$_('new_choice')}
-        on:click={() => edit(undefined)}
       >
-        <Icon {...iconAddNew} />
-      </Button>
+        <div slot="trigger">
+          <Icon {...iconAddNew} />
+        </div>
+        <ButtonMenuItem on:click={() => edit('enum', undefined)}>
+          {$_('new_choice')}
+        </ButtonMenuItem>
+        <ButtonMenuItem on:click={() => edit('domain', undefined)}>
+          {$_('new_domain')}
+        </ButtonMenuItem>
+      </DropdownMenu>
     {/if}
   </svelte:fragment>
   <svelte:fragment slot="errors">
@@ -110,23 +134,23 @@
             <div class="title">
               <NameWithIcon icon={icons[type.kind]}>{type.name}</NameWithIcon>
               <span class="kind">{kindLabel(type)}</span>
-              {#if canEdit && type.kind === 'enum'}
+              {#if canEdit && type.kind !== 'composite'}
                 <span class="actions">
                   <Button
                     appearance="plain"
                     size="small"
-                    tooltip={$_('edit_choice')}
-                    on:click={() => edit(type)}
+                    tooltip={$_('edit_type')}
+                    on:click={() => edit(type.kind, type)}
                   >
                     <Icon {...iconEdit} />
                   </Button>
-                  <!-- A choice a column holds cannot be dropped, and the card
+                  <!-- A type a column holds cannot be dropped, and the card
                   says which column holds it. -->
                   {#if type.used_by.length === 0}
                     <Button
                       appearance="plain"
                       size="small"
-                      tooltip={$_('delete_choice')}
+                      tooltip={$_('delete_type')}
                       on:click={() => remove(type)}
                     >
                       <Icon {...iconDeleteMajor} />
@@ -152,7 +176,7 @@
                 {/each}
               </ul>
             {/if}
-            {#if type.kind === 'enum'}
+            {#if type.kind !== 'composite'}
               <p class="description used-by">
                 {#if type.used_by.length === 0}
                   {$_('type_used_by_nothing')}
@@ -201,7 +225,14 @@
 <EnumTypeModal
   controller={enumModal}
   {schema}
-  type={editing}
+  type={editing?.kind === 'enum' ? editing : undefined}
+  onSaved={reload}
+/>
+
+<DomainTypeModal
+  controller={domainModal}
+  {schema}
+  type={editing?.kind === 'domain' ? editing : undefined}
   onSaved={reload}
 />
 
