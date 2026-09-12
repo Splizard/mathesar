@@ -131,3 +131,44 @@ describe('durations of months', () => {
     expect(formatter.parse('90:00').value).toBe('PT90M');
   });
 });
+
+describe('durations written out', () => {
+  const inWords = (max: 'd' | 'h' | 'm' | 's', min: 'd' | 'h' | 'm' | 's') =>
+    new DurationFormatter(
+      new DurationSpecification({ max, min, format: 'words' }),
+    );
+
+  test('are said in the units the column shows them in', () => {
+    expect(inWords('m', 's').format('P0Y0M0DT0H0M10S')).toBe('10 seconds');
+    expect(inWords('m', 's').format('P0Y0M0DT0H1M0S')).toBe('1 minute');
+    expect(inWords('m', 's').format('P0Y0M0DT1H30M0S')).toBe('90 minutes');
+    expect(inWords('h', 's').format('P0Y0M0DT1H30M0S')).toBe(
+      '1 hour 30 minutes',
+    );
+    expect(inWords('d', 's').format('P0Y0M3DT0H0M0S')).toBe('3 days');
+    expect(inWords('h', 'm').format('P0Y0M0DT0H0M0S')).toBe('0 minutes');
+    // Months are written out whichever units the column shows
+    expect(inWords('m', 's').format('P0Y3M0DT0H0M0S')).toBe('3 months');
+    expect(inWords('h', 'm').format('P1Y0M0DT2H0M0S')).toBe('1 year 2 hours');
+  });
+
+  test('are read back from the same words', () => {
+    const formatter = inWords('h', 's');
+    expect(formatter.parse('10 seconds').value).toBe('PT10S');
+    expect(formatter.parse('1 minute').value).toBe('PT60S');
+    expect(formatter.parse('1 hour 30 minutes').value).toBe('PT5400S');
+    expect(formatter.parse('3 months').value).toBe('P3M');
+    expect(formatter.parse('2 weeks').value).toBe('P14D');
+    // Half-written words are no duration yet, and no mistake either
+    expect(formatter.parse('10 sec').value).toBe(null);
+    expect(formatter.parse('').value).toBe(null);
+  });
+
+  test('leave a column shown as a clock as it was', () => {
+    const onAClock = new DurationFormatter(
+      new DurationSpecification({ max: 'm', min: 's' }),
+    );
+    expect(onAClock.format('P0Y0M0DT0H0M10S')).toBe('00:10');
+    expect(onAClock.parse('00:10').value).toBe('PT10S');
+  });
+});

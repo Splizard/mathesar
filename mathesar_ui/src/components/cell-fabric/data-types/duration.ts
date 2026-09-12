@@ -22,6 +22,7 @@ function getSpecification(column: RawColumnWithMetadata) {
   return new DurationSpecification({
     max: column.metadata?.duration_max ?? defaults.max,
     min: column.metadata?.duration_min ?? defaults.min,
+    format: column.metadata?.duration_format ?? defaults.format,
   });
 }
 

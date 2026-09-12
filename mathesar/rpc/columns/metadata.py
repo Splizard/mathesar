@@ -30,6 +30,8 @@ class ColumnMetaDataRecord(TypedDict):
         date_format: A string representing the format of date values.
         duration_min: The smallest unit for displaying durations.
         duration_max: The largest unit for displaying durations.
+        duration_format: Whether a duration is displayed as a time on a clock or written
+            out in words, e.g. "10 seconds".
         display_width: The pixel width of the column
         file_backend: The name of a backend for storing file attachments.
         user_display_field: Which user field to display for user columns (full_name, email, or username).
@@ -54,6 +56,7 @@ class ColumnMetaDataRecord(TypedDict):
     date_format: Optional[str]
     duration_min: Optional[str]
     duration_max: Optional[str]
+    duration_format: Optional[Literal["clock", "words"]]
     display_width: Optional[int]
     file_backend: Optional[str]
     user_display_field: Optional[Literal["full_name", "email", "username"]]
@@ -78,6 +81,7 @@ class ColumnMetaDataRecord(TypedDict):
             date_format=model.date_format,
             duration_min=model.duration_min,
             duration_max=model.duration_max,
+            duration_format=model.duration_format,
             display_width=model.display_width,
             file_backend=model.file_backend,
             user_display_field=model.user_display_field,
@@ -104,6 +108,8 @@ class ColumnMetaDataBlob(TypedDict):
         date_format: A string representing the format of date values.
         duration_min: The smallest unit for displaying durations.
         duration_max: The largest unit for displaying durations.
+        duration_format: Whether a duration is displayed as a time on a clock or written
+            out in words, e.g. "10 seconds".
         display_width: The pixel width of the column.
         file_backend: The name of a backend for storing file attachments.
         user_display_field: Which user field to display for user columns (full_name, email, or username).
@@ -126,6 +132,7 @@ class ColumnMetaDataBlob(TypedDict):
     date_format: Optional[str]
     duration_min: Optional[str]
     duration_max: Optional[str]
+    duration_format: Optional[Literal["clock", "words"]]
     display_width: Optional[int]
     file_backend: Optional[str]
     user_display_field: Optional[Literal["full_name", "email", "username"]]
@@ -148,6 +155,7 @@ class ColumnMetaDataBlob(TypedDict):
             date_format=model.date_format,
             duration_min=model.duration_min,
             duration_max=model.duration_max,
+            duration_format=model.duration_format,
             display_width=model.display_width,
             file_backend=model.file_backend,
             user_display_field=model.user_display_field,

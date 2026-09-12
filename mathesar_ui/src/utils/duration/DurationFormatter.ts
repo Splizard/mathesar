@@ -10,7 +10,11 @@ import type {
 } from '@mathesar-component-library/types';
 
 import type DurationSpecification from './DurationSpecification';
-import { parseIntervalParts } from './intervalParts';
+import {
+  type IntervalParts,
+  formatIntervalParts,
+  parseIntervalParts,
+} from './intervalParts';
 
 const FLOAT_REGEX = /^((\.?\d+)|(\d+(\.\d+)?))$/;
 
@@ -118,10 +122,10 @@ const unitConfig: Record<
 // DISCUSS: What's best for Mathesar?
 // Duration accuracy or user friendliness?
 // Should 1H80M80S be displayed as is, or transform to 2H21M20S?
-function shiftAndFormatISODurationString(
+function shiftIntoUnits(
   canonicalValue: string,
   specification: DurationSpecification,
-): string {
+): Partial<Record<DurationUnitType, number>> {
   const unitsWithValues: Partial<Record<DurationUnitType, number>> = {};
   const duration = dayjs.duration(canonicalValue);
 
@@ -158,9 +162,41 @@ function shiftAndFormatISODurationString(
     }
   }
 
+  return unitsWithValues;
+}
+
+function shiftAndFormatISODurationString(
+  canonicalValue: string,
+  specification: DurationSpecification,
+): string {
   return dayjs
-    .duration(unitsWithValues)
+    .duration(shiftIntoUnits(canonicalValue, specification))
     .format(specification.getFormattingString());
+}
+
+/** How each unit is written out, and what a duration of one comes to */
+const writtenUnits = [
+  { key: 'years_count', part: 'months', size: 12 },
+  { key: 'months_count', part: 'months', size: 1 },
+  { key: 'weeks_count', part: 'days', size: 7 },
+  { key: 'days_count', part: 'days', size: 1 },
+  { key: 'hours_count', part: 'milliseconds', size: 3600000 },
+  { key: 'minutes_count', part: 'milliseconds', size: 60000 },
+  { key: 'seconds_count', part: 'milliseconds', size: 1000 },
+  { key: 'milliseconds_count', part: 'milliseconds', size: 1 },
+] as const;
+
+const writtenUnitOfDurationUnit: Record<DurationUnit, string> = {
+  d: 'days_count',
+  h: 'hours_count',
+  m: 'minutes_count',
+  s: 'seconds_count',
+  ms: 'milliseconds_count',
+};
+
+/** A count of a unit as it's written out, such as "10 seconds" */
+function writeCount(key: string, count: number): string {
+  return get(_)(key, { values: { count } });
 }
 
 /**
@@ -168,51 +204,79 @@ function shiftAndFormatISODurationString(
  * so can't be shown on a clock: "1 year 2 months", with any days of its own.
  */
 function formatMonths(months: number, days: number): string {
-  const translate = get(_);
   const years = Math.trunc(months / 12);
   const wholeMonths = months - years * 12;
   return [
-    ...(years !== 0
-      ? [translate('years_count', { values: { count: years } })]
-      : []),
-    ...(wholeMonths !== 0
-      ? [translate('months_count', { values: { count: wholeMonths } })]
-      : []),
-    ...(days !== 0
-      ? [translate('days_count', { values: { count: days } })]
-      : []),
+    ...(years !== 0 ? [writeCount('years_count', years)] : []),
+    ...(wholeMonths !== 0 ? [writeCount('months_count', wholeMonths)] : []),
+    ...(days !== 0 ? [writeCount('days_count', days)] : []),
   ].join(' ');
 }
 
-/** The number of years, months and days written out, if that's what this is */
-function parseMonths(userInput: string): string | null | undefined {
+/**
+ * A duration written out in the units the column shows it in, leaving out
+ * those it holds none of: "10 seconds", "1 hour 30 minutes".
+ */
+function formatInWords(
+  canonicalValue: string,
+  specification: DurationSpecification,
+): string {
+  const parts = parseIntervalParts(canonicalValue);
+  const months = parts?.months ?? 0;
+  const unitsWithValues = shiftIntoUnits(
+    months === 0
+      ? canonicalValue
+      : // The months are written out on their own, being no number of days
+        `P${String(parts?.days ?? 0)}DT${String(
+          (parts?.milliseconds ?? 0) / 1000,
+        )}S`,
+    specification,
+  );
+  const written = specification
+    .getUnitsInRange()
+    .map((unit) => ({
+      key: writtenUnitOfDurationUnit[unit],
+      count: unitsWithValues[unitConfig[unit].unitName] ?? 0,
+    }))
+    .filter(({ count }) => count !== 0)
+    .map(({ key, count }) => writeCount(key, count));
+  if (months !== 0) {
+    written.unshift(formatMonths(months, 0));
+  }
+  // A duration of nothing is still of the smallest unit it's shown in
+  if (written.length === 0) {
+    const units = specification.getUnitsInRange();
+    return writeCount(writtenUnitOfDurationUnit[units[units.length - 1]], 0);
+  }
+  return written.join(' ');
+}
+
+/** The duration written out in that text, if that's what it is */
+function parseWrittenOut(userInput: string): string | undefined {
   const translate = get(_);
-  const counts: Record<string, number> = {};
   let rest = userInput.trim();
   if (rest === '') return undefined;
-  for (const [key, months] of [
-    ['years_count', 12],
-    ['months_count', 1],
-    ['days_count', 0],
-  ] as const) {
+  // The parts are kept apart, a day not being a number of hours to PostgreSQL
+  const parts: IntervalParts = { months: 0, days: 0, milliseconds: 0 };
+  let found = false;
+  for (const unit of writtenUnits) {
     for (const count of [1, 2]) {
       // The written form of one and of many, to read back what we wrote
-      const written = translate(key, { values: { count } });
-      const number = written.replace(String(count), '(-?[\\d.]+)');
-      const match = new RegExp(`(?:^|\\s)${number}(?:\\s|$)`).exec(rest);
+      const written = translate(unit.key, { values: { count } });
+      const number = written.replace(String(count), String.raw`(-?[\d.]+)`);
+      const match = new RegExp(String.raw`(?:^|\s)${number}(?:\s|$)`).exec(
+        rest,
+      );
       if (match) {
-        counts[key] = Number(match[1]) * (months || 1);
-        if (key === 'days_count') counts.days = Number(match[1]);
+        parts[unit.part] += Number(match[1]) * unit.size;
         rest = rest.replace(match[0], ' ').trim();
+        found = true;
         break;
       }
     }
   }
-  if (rest !== '' || Object.keys(counts).length === 0) return undefined;
-  const months = (counts.years_count ?? 0) + (counts.months_count ?? 0);
-  const days = counts.days ?? 0;
-  if (months === 0) return undefined;
-  return `P${String(months)}M${days === 0 ? '' : `${String(days)}D`}`;
+  if (rest !== '' || !found) return undefined;
+  return formatIntervalParts(parts);
 }
 
 export default class DurationFormatter implements InputFormatter<string> {
@@ -223,10 +287,15 @@ export default class DurationFormatter implements InputFormatter<string> {
   }
 
   parse(userInput: string): ParseResult<string> {
-    // A duration of months is written out, so can be typed back that way
-    const months = parseMonths(userInput);
-    if (months) {
-      return { value: months, intermediateDisplay: userInput };
+    // A duration written out, whether by the column's format or because it's
+    // of months, is read back from the same words
+    const writtenOut = parseWrittenOut(userInput);
+    if (writtenOut) {
+      return { value: writtenOut, intermediateDisplay: userInput };
+    }
+    if (this.specification.isWrittenOut()) {
+      // Half-written words aren't a duration yet, but aren't a mistake either
+      return { value: null, intermediateDisplay: userInput };
     }
     const value = parseRawDurationStringToISOString(
       this.specification,
@@ -239,6 +308,9 @@ export default class DurationFormatter implements InputFormatter<string> {
   }
 
   format(canonicalValue: string): string {
+    if (this.specification.isWrittenOut()) {
+      return formatInWords(canonicalValue, this.specification);
+    }
     const parts = parseIntervalParts(canonicalValue);
     // Months are as long as the month they're in, so no clock can show them
     if (parts && parts.months !== 0) {

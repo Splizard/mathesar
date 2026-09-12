@@ -1,5 +1,6 @@
 import type {
   ColumnMetadata,
+  DurationFormat,
   DurationUnit,
 } from '@mathesar/api/rpc/_common/columnDisplayOptions';
 import {
@@ -31,6 +32,7 @@ const displayForm: AbstractTypeConfigForm = {
       default: {
         duration_max: durationDefaults.max,
         duration_min: durationDefaults.min,
+        duration_format: durationDefaults.format,
       },
     },
   },
@@ -50,10 +52,12 @@ function determineDisplayOptions(formValues: FormValues): ColumnMetadata {
   const durationConfig = formValues.durationConfig as {
     max: DurationUnit;
     min: DurationUnit;
+    format?: DurationFormat;
   };
   const displayOptions: RawColumnWithMetadata['metadata'] = {
     duration_max: durationConfig.max,
     duration_min: durationConfig.min,
+    duration_format: durationConfig.format ?? durationDefaults.format,
   };
   return displayOptions;
 }
@@ -66,6 +70,7 @@ function constructDisplayFormValuesFromDisplayOptions(
     durationConfig: {
       max: getColumnMetadataValue(column, 'duration_max'),
       min: getColumnMetadataValue(column, 'duration_min'),
+      format: getColumnMetadataValue(column, 'duration_format'),
     },
   };
   return formValues;

@@ -36,6 +36,10 @@ export type CurrencyLocation = 'after-minus' | 'end-with-space';
 
 export const allDurationUnits = ['d', 'h', 'm', 's', 'ms'] as const;
 
+export const allDurationFormats = ['clock', 'words'] as const;
+
+export type DurationFormat = (typeof allDurationFormats)[number];
+
 export type DurationUnit = (typeof allDurationUnits)[number];
 
 export type DateFormat = 'none' | 'us' | 'eu' | 'friendly' | 'iso';
@@ -80,6 +84,9 @@ export interface RequiredColumnMetadata {
 
   duration_max: DurationUnit;
 
+  /** Whether a duration is shown as a time on a clock, or written out */
+  duration_format: DurationFormat;
+
   /** The pixel width of the column */
   display_width: number;
 
@@ -118,6 +125,7 @@ export const defaultColumnMetadata: RequiredColumnMetadata = {
   date_format: 'none',
   duration_min: 's',
   duration_max: 'm',
+  duration_format: 'clock',
   display_width: DEFAULT_COLUMN_WIDTH_PX,
   file_backend: null,
   user_display_field: null,

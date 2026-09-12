@@ -249,6 +249,11 @@ class ColumnMetaData(BaseModel):
     date_format = models.CharField(null=True)
     duration_min = models.CharField(max_length=255, null=True)
     duration_max = models.CharField(max_length=255, null=True)
+    duration_format = models.CharField(
+        choices=[("clock", "clock"), ("words", "words")],
+        max_length=10,
+        null=True
+    )
     display_width = models.PositiveIntegerField(null=True)
     file_backend = models.CharField(max_length=255, null=True)
     user_display_field = models.CharField(

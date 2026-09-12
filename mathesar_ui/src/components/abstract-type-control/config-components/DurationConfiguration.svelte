@@ -2,7 +2,11 @@
   import type { Writable } from 'svelte/store';
   import { _ } from 'svelte-i18n';
 
-  import type { DurationUnit } from '@mathesar/api/rpc/_common/columnDisplayOptions';
+  import {
+    type DurationFormat,
+    type DurationUnit,
+    allDurationFormats,
+  } from '@mathesar/api/rpc/_common/columnDisplayOptions';
   import { RichText } from '@mathesar/components/rich-text';
   import { DurationSpecification } from '@mathesar/utils/duration';
   import type { DurationConfig } from '@mathesar/utils/duration/types';
@@ -22,6 +26,19 @@
     ms: $_('milliseconds'),
   };
   const getLabel = (opt?: DurationUnit) => (opt && labels[opt]) ?? '';
+
+  const formats: DurationFormat[] = [...allDurationFormats];
+  const formatLabels: Record<DurationFormat, string> = {
+    clock: $_('duration_as_clock'),
+    words: $_('duration_as_words'),
+  };
+  const getFormatLabel = (opt?: DurationFormat) =>
+    (opt && formatLabels[opt]) ?? '';
+
+  function onFormatChange(_format?: DurationFormat) {
+    if (!_format) return;
+    $store = { ...$store, format: _format };
+  }
 
   $: format = new DurationSpecification($store).getFormattingString();
 
@@ -74,13 +91,26 @@
   </LabeledInput>
 </div>
 
-<div class="form-element format">
-  <RichText text={$_('format_displayer')} let:slotName>
-    {#if slotName === 'format'}
-      <span>{format}</span>
-    {/if}
-  </RichText>
+<div class="form-element form-input">
+  <LabeledInput label={$_('duration_display')} layout="stacked">
+    <Select
+      options={formats}
+      value={$store.format ?? 'clock'}
+      getLabel={getFormatLabel}
+      on:change={(e) => onFormatChange(e.detail)}
+    />
+  </LabeledInput>
 </div>
+
+{#if ($store.format ?? 'clock') === 'clock'}
+  <div class="form-element format">
+    <RichText text={$_('format_displayer')} let:slotName>
+      {#if slotName === 'format'}
+        <span>{format}</span>
+      {/if}
+    </RichText>
+  </div>
+{/if}
 
 <style lang="scss">
   .format {

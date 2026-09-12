@@ -81,7 +81,7 @@ Decimal, Integer, and Float columns have the same formatting: the number of deci
     PostgreSQL keeps a duration in three parts, since they aren't the same length as each other: months (which years are twelve of), days (which weeks are seven of, and which are 23 or 25 hours long where the clocks change), and the time of day. So a duration is read back as an amount of the largest unit of the one part it fills that it's a whole number of: a fortnight is 2 weeks, an hour and a half is 90 minutes where minutes are the smallest unit shown. One filling more than a single part, such as a month and 3 days, is no single amount, and the picker leaves it alone.
 
     A duration of months can't be shown on a clock, so it's written out instead — "1 year 2 months" — and can be typed back that way.
-    - Formatting: the largest and smallest unit a duration is shown in, which give the format of the displayed duration (e.g. `HH:mm:ss`).
+    - Formatting: the largest and smallest unit a duration is shown in, and whether it's shown as **a time on a clock** in the format those units give (e.g. `HH:mm:ss`, so `00:10`) or **written out** in those units (`10 seconds`, `1 hour 30 minutes`). A duration written out can be typed back the same way.
 - **Created At**: a Date & Time column whose default is the current time, so it records when each record was created. Its cells can't be edited.
 - **Updated At**: a Date & Time column kept at the time its record was last changed, by a trigger in the database. Its cells can't be edited.
 

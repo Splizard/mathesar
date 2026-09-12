@@ -1,4 +1,5 @@
 import {
+  type DurationFormat,
   type DurationUnit,
   allDurationUnits,
   defaultColumnMetadata,
@@ -7,11 +8,14 @@ import {
 export interface DurationConfig {
   max: DurationUnit;
   min: DurationUnit;
+  /** Whether a duration is shown as a time on a clock, or written out */
+  format?: DurationFormat;
 }
 
-const defaults: DurationConfig = {
+const defaults: Required<DurationConfig> = {
   max: defaultColumnMetadata.duration_max,
   min: defaultColumnMetadata.duration_min,
+  format: defaultColumnMetadata.duration_format,
 };
 
 const formattingTokens: Record<DurationUnit, string> = {
@@ -27,9 +31,16 @@ export default class DurationSpecification {
 
   readonly max: DurationUnit;
 
+  readonly format: DurationFormat;
+
   constructor(config?: Partial<DurationConfig>) {
     this.min = config?.min ?? defaults.min;
     this.max = config?.max ?? defaults.max;
+    this.format = config?.format ?? defaults.format;
+  }
+
+  isWrittenOut(): boolean {
+    return this.format === 'words';
   }
 
   getUnitsInRange(): DurationUnit[] {
@@ -70,7 +81,7 @@ export default class DurationSpecification {
     return [...allDurationUnits];
   }
 
-  static getDefaults(): DurationConfig {
+  static getDefaults(): Required<DurationConfig> {
     return defaults;
   }
 }
