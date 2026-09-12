@@ -4,11 +4,18 @@
   import { States } from '@mathesar/api/rest/utils/requestUtils';
   import { MiniPagination } from '@mathesar/components/mini-pagination';
   import RefreshButton from '@mathesar/components/RefreshButton.svelte';
-  import { iconAddNew } from '@mathesar/icons';
+  import { iconAddNew, iconTable, iconUiTypeGeometry } from '@mathesar/icons';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { getFirstEditableColumn } from '@mathesar/stores/table-data/processedColumns';
+  import { shapesOnCanvas } from '@mathesar/systems/canvas-view/canvasViewMode';
+  import { isShapeDbType } from '@mathesar/systems/canvas-view/shapes';
   import Pagination from '@mathesar/utils/Pagination';
-  import { Select, SpinnerButton } from '@mathesar-component-library';
+  import {
+    Button,
+    Icon,
+    Select,
+    SpinnerButton,
+  } from '@mathesar-component-library';
 
   const tabularData = getTabularDataStoreFromContext();
   const numberFormatter = new Intl.NumberFormat();
@@ -48,6 +55,13 @@
     recordState === States.Error ||
     $constraintsDataStore.state === States.Error;
   $: hasNewRecordButton = context !== 'widget' && $canInsertRecords;
+  /**
+   * Whether the table holds shapes at all, which is what makes drawing them something to offer.
+   */
+  $: holdsShapes = [...$processedColumns.values()].some((c) =>
+    isShapeDbType(c.column.type),
+  );
+  $: canDrawShapes = context === 'page' && holdsShapes;
   $: refreshButtonState = (() => {
     let buttonState: 'loading' | 'error' | undefined = undefined;
     if ($isLoading) {
@@ -83,6 +97,20 @@
   bind:clientWidth={width}
 >
   <div class="status-pane-items-section">
+    {#if canDrawShapes}
+      <Button
+        appearance="secondary"
+        size="medium"
+        on:click={() => shapesOnCanvas.set(!$shapesOnCanvas)}
+      >
+        <Icon {...$shapesOnCanvas ? iconTable : iconUiTypeGeometry} />
+        {#if width > breakpoints.newRecordLabel}
+          <span
+            >{$shapesOnCanvas ? $_('show_the_table') : $_('draw_shapes')}</span
+          >
+        {/if}
+      </Button>
+    {/if}
     {#if hasNewRecordButton}
       <SpinnerButton
         disabled={$isLoading}

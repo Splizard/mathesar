@@ -22,7 +22,16 @@
     isJoinedColumn,
   } from '@mathesar/stores/table-data';
   import { tableInspectorTab } from '@mathesar/stores/tableInspector';
+  import { currentTablesMap } from '@mathesar/stores/tables';
   import { toast } from '@mathesar/stores/toast';
+  import CanvasView from '@mathesar/systems/canvas-view/CanvasView.svelte';
+  import { shapesOnCanvas } from '@mathesar/systems/canvas-view/canvasViewMode';
+  import {
+    type DrawnShape,
+    isShapeDbType,
+    parseShape,
+  } from '@mathesar/systems/canvas-view/shapes';
+  import RecordStore from '@mathesar/systems/record-view/RecordStore';
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
 
   import Body from './Body.svelte';
@@ -130,6 +139,46 @@
   ]);
   $: showTableInspector = $tableInspectorVisible && supportsTableInspector;
 
+  /** The columns holding shapes, which are the ones the canvas draws */
+  $: shapeColumns = [...$processedColumns.values()].filter((c) =>
+    isShapeDbType(c.column.type),
+  );
+  $: isDrawing =
+    context === 'page' && $shapesOnCanvas && shapeColumns.length > 0;
+  /**
+   * Every shape in the records on this page, with the record it belongs to. Only this page's
+   * records: the canvas draws what the table is showing rather than fetching a view of its own,
+   * so paging through the table pages through the drawing.
+   */
+  $: ({ selectableRowsMap } = recordsData);
+  $: drawnShapes = (() => {
+    if (!isDrawing) return [] as DrawnShape[];
+    const found: DrawnShape[] = [];
+    $selectableRowsMap.forEach((row, recordKey) => {
+      shapeColumns.forEach((column) => {
+        const shape = parseShape(
+          column.column.type,
+          row.record[String(column.column.id)],
+        );
+        if (shape) {
+          found.push({ shape, recordKey, columnName: column.column.name });
+        }
+      });
+    });
+    return found;
+  })();
+
+  function openRecord(recordKey: string) {
+    if (!modalRecordView) return;
+    const recordId = $tabularData.getRecordIdFromRowId(recordKey);
+    if (recordId === undefined) return;
+    const containingTable = $currentTablesMap.get(table.oid);
+    if (!containingTable) return;
+    modalRecordView.open(
+      new RecordStore({ table: containingTable, recordPk: String(recordId) }),
+    );
+  }
+
   function persistColumnWidths(widthsMap: [string, number | null][]): void {
     function* getChanges(): Generator<[number, ColumnMetadata | null]> {
       for (const [columnId, width] of widthsMap) {
@@ -152,7 +201,9 @@
     bind:activeTabId={$tableInspectorTab}
   >
     <div class="sheet-area">
-      {#if $processedColumns.size}
+      {#if isDrawing}
+        <CanvasView shapes={drawnShapes} onRecordClick={openRecord} />
+      {:else if $processedColumns.size}
         <Sheet
           {clipboardHandler}
           {columnWidths}
