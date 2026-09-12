@@ -7,6 +7,7 @@ from modernrpc.core import REQUEST_KEY
 
 from db.tables import (
     alter_table_on_database,
+    copy_table_structure_on_database,
     create_table_on_database,
     drop_table_from_database,
     get_all_table_info,
@@ -260,6 +261,7 @@ def add(
     constraint_data_list: list[CreatableConstraintInfo] = [],
     owner_oid: int = None,
     comment: str = None,
+    copy_structure_from: int = None,
     **kwargs
 ) -> int:
     """
@@ -275,6 +277,10 @@ def add(
         owner_oid: The OID of the role who will own the new table.
             If owner_oid is None, the current role will be the owner of the new table.
         comment: The comment for the new table.
+        copy_structure_from: The OID of a table whose shape the new one is given: its columns, the
+            constraints among them, the triggers that fill them in, and how they are shown. Its
+            records are not copied, and neither is its primary key, the new table having one of its
+            own. See the `msar.copy_table_structure` function.
 
     Returns:
         The `oid`, `name`, and `renamed_columns` of the created table.
@@ -284,6 +290,10 @@ def add(
         created_table_info = create_table_on_database(
             table_name, schema_oid, conn, pkey_column_info, column_data_list, constraint_data_list, owner_oid, comment
         )
+        if copy_structure_from is not None:
+            copy_table_structure_on_database(
+                copy_structure_from, created_table_info['oid'], conn
+            )
 
     set_table_meta_data(
         created_table_info['oid'],

@@ -29,6 +29,7 @@ import {
   type RpcRequest,
   batchRun,
 } from '@mathesar/packages/json-rpc-client-builder';
+import { getRecordTimestampColumnSpecs } from '@mathesar/stores/abstract-types';
 import { getErrorMessage } from '@mathesar/utils/errors';
 import { preloadCommonData } from '@mathesar/utils/preloadData';
 import {
@@ -47,12 +48,6 @@ import {
   fetchSchemasForCurrentDatabase,
   schemas as schemasReadable,
 } from './schemas';
-import {
-  applyCopiedTableStructure,
-  getCopiedColumnSpec,
-  getMissingRecordTimestampSpecs,
-  readTableStructure,
-} from './tableStructure';
 
 const commonData = preloadCommonData();
 const isInAuthenticatedContext = commonData.routing_context !== 'anonymous';
@@ -333,12 +328,6 @@ export async function createTable({
   /** A table whose shape the new one is given, apart from its primary key */
   copyStructureFromTableOid?: number;
 }): Promise<Table> {
-  // Read before creating anything, so that a table we can't read the shape of
-  // leaves no half-made table behind.
-  const structure = copyStructureFromTableOid
-    ? await readTableStructure(schema.database, copyStructureFromTableOid)
-    : undefined;
-
   const created = await api.tables
     .add({
       database_id: schema.database.id,
@@ -346,37 +335,22 @@ export async function createTable({
       table_name: name,
       comment: description,
       pkey_column_info: pkColumn,
+      copy_structure_from: copyStructureFromTableOid,
     })
     .run();
 
   // Added afterwards rather than passed to tables.add, which takes plain column
   // definitions: a default of the current time and an "Updated At" trigger both
-  // need the column to exist before they can be set.
-  const columnsToAdd = [
-    ...(structure?.columns ?? []).map(getCopiedColumnSpec),
-    ...(recordTimestamps ? getMissingRecordTimestampSpecs(structure) : []),
-  ];
-  if (columnsToAdd.length) {
-    const attnums = await api.columns
+  // need the column to exist before they can be set. A copied table brings
+  // whatever columns it has for this, so we add none of our own on top.
+  if (recordTimestamps && !copyStructureFromTableOid) {
+    await api.columns
       .add({
         database_id: schema.database.id,
         table_oid: created.oid,
-        column_data_list: columnsToAdd,
+        column_data_list: getRecordTimestampColumnSpecs(),
       })
       .run();
-    if (structure) {
-      // The copied columns are added first, and in their own order, so the
-      // attnums come back against them one for one.
-      const newAttnums = new Map(
-        structure.columns.map((column, i) => [column.id, attnums[i]]),
-      );
-      await applyCopiedTableStructure({
-        database: schema.database,
-        tableOid: created.oid,
-        structure,
-        newAttnums,
-      });
-    }
   }
 
   // TODO: Remove once tables.patch response provides RawTable

@@ -3846,6 +3846,116 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION
+msar.copy_table_structure(src_id oid, tgt_id oid) RETURNS void AS $$/*
+Give a table the shape of another one: its columns, the constraints among them, the triggers that
+fill them in, and how they are shown.
+
+Records are never copied, and neither are indexes that aren't constraints, which say how a table is
+read rather than what it holds. The source's primary key is left behind, along with every column it
+is over and every constraint resting on those columns: the target has a primary key of its own, and
+a second would be neither a key nor primary.
+
+Defaults are copied as the expressions they are -- PostgreSQL's own rendering of the source's, not
+anything a caller wrote, which is why they can go in as the SQL they are. The exception is a default
+drawing from a sequence, which is dropped: it would be the source table's sequence rather than one
+of the target's own. An identity column is copied as an identity column, which does get its own.
+
+The target is expected to be empty, as a table just created is: a copied column that is NOT NULL and
+has no default cannot be added to a table with records in it.
+
+Args:
+  src_id: The OID of the table to copy the shape of.
+  tgt_id: The OID of the table to give that shape to, which keeps the columns it has.
+*/
+DECLARE
+  sch_name text := msar.get_relation_schema_name(tgt_id);
+  tab_name text := msar.get_relation_name(tgt_id);
+  pkey_cols smallint[];
+  col RECORD;
+  con RECORD;
+  add_sql text;
+BEGIN
+  SELECT COALESCE(conkey, '{}') INTO pkey_cols
+  FROM pg_catalog.pg_constraint WHERE conrelid = src_id AND contype = 'p';
+  pkey_cols := COALESCE(pkey_cols, '{}');
+
+  FOR col IN
+    SELECT
+      att.attname,
+      pg_catalog.format_type(att.atttypid, att.atttypmod) AS type_name,
+      att.attnotnull,
+      att.attidentity,
+      att.attgenerated,
+      pg_catalog.pg_get_expr(def.adbin, def.adrelid) AS default_expr,
+      pg_catalog.col_description(src_id, att.attnum) AS comment_
+    FROM pg_catalog.pg_attribute AS att
+      LEFT JOIN pg_catalog.pg_attrdef AS def
+        ON def.adrelid = att.attrelid AND def.adnum = att.attnum
+    WHERE att.attrelid = src_id AND att.attnum > 0 AND NOT att.attisdropped
+      AND NOT att.attnum = ANY(pkey_cols)
+    ORDER BY att.attnum
+  LOOP
+    add_sql := format('ALTER TABLE %I.%I ADD COLUMN %I %s', sch_name, tab_name, col.attname,
+      col.type_name);
+    IF col.attgenerated <> '' THEN
+      add_sql := add_sql || format(' GENERATED ALWAYS AS (%s) STORED', col.default_expr);
+    ELSIF col.attidentity <> '' THEN
+      add_sql := add_sql || format(' GENERATED %s AS IDENTITY',
+        CASE col.attidentity WHEN 'a' THEN 'ALWAYS' ELSE 'BY DEFAULT' END);
+    ELSIF col.default_expr IS NOT NULL AND col.default_expr NOT LIKE '%nextval(%' THEN
+      add_sql := add_sql || format(' DEFAULT %s', col.default_expr);
+    END IF;
+    IF col.attnotnull THEN
+      add_sql := add_sql || ' NOT NULL';
+    END IF;
+    EXECUTE add_sql;
+    IF col.comment_ IS NOT NULL THEN
+      EXECUTE format('COMMENT ON COLUMN %I.%I.%I IS %L', sch_name, tab_name, col.attname,
+        col.comment_);
+    END IF;
+  END LOOP;
+
+  -- Names are left to PostgreSQL: the source's would collide were both tables in one schema.
+  FOR con IN
+    SELECT pg_catalog.pg_get_constraintdef(oid) AS def
+    FROM pg_catalog.pg_constraint
+    WHERE conrelid = src_id AND contype = ANY('{c,u,f,x}')
+      AND COALESCE(NOT (conkey && pkey_cols), true)
+    ORDER BY oid
+  LOOP
+    EXECUTE format('ALTER TABLE %I.%I ADD %s', sch_name, tab_name, con.def);
+  END LOOP;
+
+  -- A trigger names the column it fills in by attnum, so it is made anew rather than copied.
+  FOR col IN
+    SELECT tgt_att.attnum
+    FROM pg_catalog.pg_attribute AS src_att
+      JOIN pg_catalog.pg_attribute AS tgt_att
+        ON tgt_att.attrelid = tgt_id AND tgt_att.attname = src_att.attname
+          AND NOT tgt_att.attisdropped
+    WHERE src_att.attrelid = src_id AND src_att.attnum > 0 AND NOT src_att.attisdropped
+      AND EXISTS (SELECT msar.get_updated_at_triggers(src_id, src_att.attnum))
+  LOOP
+    PERFORM msar.set_updated_at_column(tgt_id, col.attnum, true);
+  END LOOP;
+
+  -- How a column is shown is as much a part of its shape as its type is.
+  FOR col IN
+    SELECT tgt_att.attnum, pres.value AS options
+    FROM jsonb_each(msar.column_presentation(src_id)) AS pres
+      JOIN pg_catalog.pg_attribute AS src_att
+        ON src_att.attrelid = src_id AND src_att.attnum = pres.key::smallint
+      JOIN pg_catalog.pg_attribute AS tgt_att
+        ON tgt_att.attrelid = tgt_id AND tgt_att.attname = src_att.attname
+          AND NOT tgt_att.attisdropped
+  LOOP
+    PERFORM msar.set_column_presentation(tgt_id, col.attnum, col.options);
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
 msar.prepare_table_for_import(
   sch_id oid,
   tab_name text,

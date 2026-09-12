@@ -122,6 +122,20 @@ def create_table_on_database(
     ).fetchone()[0]
 
 
+def copy_table_structure_on_database(source_oid, target_oid, conn):
+    """
+    Give a table the shape of another one.
+
+    See the `msar.copy_table_structure` function for what is copied.
+
+    Args:
+        source_oid: The OID of the table to copy the shape of.
+        target_oid: The OID of the table to give that shape to.
+        conn: A psycopg connection.
+    """
+    db_conn.exec_msar_func(conn, 'copy_table_structure', source_oid, target_oid)
+
+
 def create_and_import_from_rows(
         rows,
         table_name,

@@ -148,6 +148,53 @@ def test_tables_add(rf, monkeypatch, mocked_exec_msar_func):
     assert call_args[8] is None
 
 
+def test_tables_add_copying_structure(rf, monkeypatch, mocked_exec_msar_func):
+    """A table given the shape of another is created first, then shaped."""
+    request = rf.post('/api/rpc/v0', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(tables.base, 'connect', mock_connect)
+    monkeypatch.setattr(tables.base, 'set_table_meta_data', lambda *args: None)
+    mocked_exec_msar_func.fetchone.return_value = [
+        {"oid": 1964474, "name": "newtable", "pkey_column_attnum": 1}
+    ]
+    tables.add(
+        table_name='newtable',
+        schema_oid=2200,
+        database_id=11,
+        copy_structure_from=1234567,
+        request=request,
+    )
+    assert [call[0][1] for call in mocked_exec_msar_func.call_args_list] == [
+        'add_mathesar_table', 'copy_table_structure'
+    ]
+    assert mocked_exec_msar_func.call_args_list[1][0][2:] == (1234567, 1964474)
+
+
+def test_tables_add_without_copying_structure(rf, monkeypatch, mocked_exec_msar_func):
+    """Left out, nothing is copied: the new table is shaped by its own arguments."""
+    request = rf.post('/api/rpc/v0', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(tables.base, 'connect', mock_connect)
+    monkeypatch.setattr(tables.base, 'set_table_meta_data', lambda *args: None)
+    mocked_exec_msar_func.fetchone.return_value = [
+        {"oid": 1964474, "name": "newtable", "pkey_column_attnum": 1}
+    ]
+    tables.add(table_name='newtable', schema_oid=2200, database_id=11, request=request)
+    assert [call[0][1] for call in mocked_exec_msar_func.call_args_list] == [
+        'add_mathesar_table'
+    ]
+
+
 def test_tables_patch(rf, monkeypatch, mocked_exec_msar_func):
     request = rf.post('/api/rpc/v0', data={})
     request.user = User(username='alice', password='pass1234')

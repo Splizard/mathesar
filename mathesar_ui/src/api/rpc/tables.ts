@@ -242,6 +242,13 @@ export const tables = {
       };
       /** TODO */
       constraint_data_list?: unknown;
+      /**
+       * The OID of a table whose shape the new one is given: its columns, the
+       * constraints among them, the triggers that fill them in, and how they
+       * are shown. Its records are not copied, and neither is its primary key,
+       * the new table having one of its own.
+       */
+      copy_structure_from?: number;
     },
     {
       oid: number;

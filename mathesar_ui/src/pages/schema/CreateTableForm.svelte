@@ -96,10 +96,10 @@
 
 <FieldLayout>
   <CollapsibleFieldset bind:isOpen={isCopying}>
-    <span slot="label">
-      {$_('copy_structure_from_table')}
+    <span slot="label" class="copy-label">
+      <span>{$_('copy_structure_from_table')}</span>
       {#if copiedTable}
-        <span class="copied-table"><TableName table={copiedTable} /></span>
+        <TableName table={copiedTable} />
       {/if}
       <Help>
         <p>{$_('copy_structure_from_table_help')}</p>
@@ -109,24 +109,30 @@
   </CollapsibleFieldset>
 </FieldLayout>
 
-<FieldLayout>
-  <LabeledInput layout="inline-input-first">
-    <div slot="label">
-      {$_('record_timestamps')}
-      <Help>
-        <p>{$_('record_timestamps_help')}</p>
-      </Help>
-    </div>
-    <Checkbox bind:checked={$recordTimestamps} />
-  </LabeledInput>
-</FieldLayout>
+<!-- A copied table brings whatever columns it has for this -->
+{#if !copiedTable}
+  <FieldLayout>
+    <LabeledInput layout="inline-input-first">
+      <div slot="label">
+        {$_('record_timestamps')}
+        <Help>
+          <p>{$_('record_timestamps_help')}</p>
+        </Help>
+      </div>
+      <Checkbox bind:checked={$recordTimestamps} />
+    </LabeledInput>
+  </FieldLayout>
+{/if}
 
 <div use:portalToWindowFooter>
   <FormSubmit {form} onProceed={save} onCancel={close} />
 </div>
 
 <style>
-  .copied-table {
-    margin-left: var(--sm4);
+  .copy-label {
+    display: inline-flex;
+    align-items: baseline;
+    gap: var(--sm4);
+    flex-wrap: wrap;
   }
 </style>
