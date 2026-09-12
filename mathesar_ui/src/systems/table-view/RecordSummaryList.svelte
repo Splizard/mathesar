@@ -1,6 +1,7 @@
 <script lang="ts">
   import { get } from 'svelte/store';
   import { _ } from 'svelte-i18n';
+  import { router } from 'tinro';
 
   import {
     iconAddNew,
@@ -8,9 +9,9 @@
     iconShowTheRestAgain,
   } from '@mathesar/icons';
   import type { Table } from '@mathesar/models/Table';
+  import { getRecordPageUrlByTable } from '@mathesar/routes/urls';
   import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
-  import { currentTablesMap } from '@mathesar/stores/tables';
   import { chooseDefaultCard } from '@mathesar/systems/record-summary-card/defaultCard';
   import RecordSummaryCard from '@mathesar/systems/record-summary-card/RecordSummaryCard.svelte';
   import {
@@ -18,8 +19,6 @@
     cardHasAnything,
     renderCard,
   } from '@mathesar/systems/record-summary-card/renderCard';
-  import RecordStore from '@mathesar/systems/record-view/RecordStore';
-  import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
   import { Button, Icon, Spinner } from '@mathesar-component-library';
 
   import { showTheRestAgain, tableIsFullScreen } from './fullScreen';
@@ -27,7 +26,6 @@
   export let table: Table;
 
   const tabularData = getTabularDataStoreFromContext();
-  const modalRecordView = modalRecordViewContext.get();
   /** The abstract types the database would file under strings */
   const textualTypes = new Set<string>([
     abstractTypeCategory.Text,
@@ -124,13 +122,15 @@
     };
   });
 
+  /**
+   * Go to the record's own page.
+   *
+   * A page rather than something laid over this one: a record is most of what a phone can show at
+   * once, and the way back is the one the phone already has.
+   */
   function open(recordId: unknown) {
-    if (!modalRecordView || recordId === undefined) return;
-    const containingTable = $currentTablesMap.get(table.oid);
-    if (!containingTable) return;
-    modalRecordView.open(
-      new RecordStore({ table: containingTable, recordPk: String(recordId) }),
-    );
+    if (recordId === undefined) return;
+    router.goto(getRecordPageUrlByTable(table, recordId));
   }
 
   async function addRecord() {
@@ -252,6 +252,11 @@
     border-radius: 50%;
     width: 3.5rem;
     height: 3.5rem;
+    /* Round, so what is on it goes in the middle rather than where a label would start. */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0;
     box-shadow: var(--card-hover-box-shadow);
   }
 
