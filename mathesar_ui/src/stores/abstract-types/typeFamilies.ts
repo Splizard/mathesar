@@ -545,7 +545,10 @@ export function getColumnSaveSpec(
   return {
     ...spec,
     dbOptions: {
-      ...spec.dbOptions,
+      // Only the type carries over from the item: an autofilled default or
+      // nullability describes one value of it, not an array of them, and a
+      // scalar default wouldn't even be castable to the array type.
+      type: spec.dbOptions.type,
       typeOptions: { ...spec.dbOptions.typeOptions, array: true },
     },
   };

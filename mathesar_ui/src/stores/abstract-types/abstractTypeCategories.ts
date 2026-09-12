@@ -561,7 +561,10 @@ export function getAllowedAbstractTypesForDbTypeAndItsTargetTypes(
   return abstractTypeList;
 }
 
-type AutoFillSpec = Pick<ColumnCreationSpec, 'default' | 'updated_at_trigger'>;
+type AutoFillSpec = Pick<
+  ColumnCreationSpec,
+  'default' | 'updated_at_trigger' | 'nullable'
+>;
 
 export function isAutoFilledAbstractType(abstractType: AbstractType) {
   return (
@@ -572,7 +575,13 @@ export function isAutoFilledAbstractType(abstractType: AbstractType) {
 
 /**
  * What a new column needs in order to be of the given abstract type: "Created
- * At" defaults to the current time, and "Updated At" has a trigger.
+ * At" defaults to the current time, "Updated At" has a trigger, and a boolean
+ * is false rather than null until someone says otherwise — a checkbox that is
+ * neither checked nor unchecked is rarely what's wanted, and it's easier to
+ * allow nulls later than to remove them from a column already holding some.
+ *
+ * This applies when creating a column, not when changing an existing one to
+ * the type: see `getAutoFillChangesForTypeChange`.
  */
 function getAutoFillSpecForAbstractType(
   abstractType: AbstractType,
@@ -580,6 +589,9 @@ function getAutoFillSpecForAbstractType(
 ): AutoFillSpec {
   if (abstractType.identifier === abstractTypeCategory.UpdatedAt) {
     return { updated_at_trigger: true };
+  }
+  if (abstractType.identifier === abstractTypeCategory.Boolean) {
+    return { nullable: false, default: { is_dynamic: false, value: 'false' } };
   }
   const expression = currentTimeDefaultExpressions[dbType];
   if (

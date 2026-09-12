@@ -6,6 +6,7 @@ import {
   getAutoFillChangesForTypeChange,
 } from '../abstractTypeCategories';
 import { DB_TYPES } from '../dbTypes';
+import { getColumnSaveSpec } from '../typeFamilies';
 
 vi.mock('svelte-i18n', () => {
   const translate = (s: string) => s;
@@ -22,6 +23,8 @@ const updatedAt = getAbstractTypeForDbType(TZ, null, {
   updated_at_trigger: true,
 });
 const text = getAbstractTypeForDbType(DB_TYPES.TEXT, null);
+const boolean = getAbstractTypeForDbType(DB_TYPES.BOOLEAN, null);
+const isFalse = { is_dynamic: false, value: 'false' };
 
 describe('recognising Created At and Updated At', () => {
   test('from what the database fills in', () => {
@@ -66,6 +69,42 @@ describe('abstractTypeToColumnSaveSpec', () => {
     expect(abstractTypeToColumnSaveSpec(dateTime).dbOptions).not.toHaveProperty(
       'default',
     );
+  });
+
+  test('a new boolean column is false rather than null', () => {
+    expect(abstractTypeToColumnSaveSpec(boolean).dbOptions).toMatchObject({
+      type: DB_TYPES.BOOLEAN,
+      nullable: false,
+      default: isFalse,
+    });
+  });
+
+  test('other types are left nullable and without a default', () => {
+    const { dbOptions } = abstractTypeToColumnSaveSpec(text);
+    expect(dbOptions).not.toHaveProperty('nullable');
+    expect(dbOptions).not.toHaveProperty('default');
+  });
+});
+
+describe('getColumnSaveSpec', () => {
+  test('a boolean column is NOT NULL DEFAULT FALSE', () => {
+    expect(
+      getColumnSaveSpec({ abstractType: boolean, dbType: DB_TYPES.BOOLEAN })
+        .dbOptions,
+    ).toMatchObject({ nullable: false, default: isFalse });
+  });
+
+  // `false` is not castable to boolean[], so carrying the item type's default
+  // over to the array would make the column impossible to create.
+  test('an array of booleans takes neither the default nor the nullability', () => {
+    const { dbOptions } = getColumnSaveSpec({
+      abstractType: boolean,
+      dbType: DB_TYPES.ARRAY,
+      itemType: DB_TYPES.BOOLEAN,
+    });
+    expect(dbOptions.typeOptions).toMatchObject({ array: true });
+    expect(dbOptions).not.toHaveProperty('nullable');
+    expect(dbOptions).not.toHaveProperty('default');
   });
 });
 
