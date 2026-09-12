@@ -109,15 +109,15 @@
     align-items: center;
     gap: var(--sm4);
   }
+  /* The name takes what the type leaves, rather than the other way around: a
+  type is as long as it is, and a name being typed can do with what is left. */
   .line > :global(.input-element) {
-    flex: 1 1 auto;
+    flex: 1 1 0;
     min-width: 0;
   }
   code {
-    /* Shrinks to an ellipsis rather than breaking a type name across lines,
-    the name input having the room it gives up. */
-    flex: 0 1 auto;
-    min-width: 0;
+    flex: 0 0 auto;
+    max-width: 50%;
     font-size: var(--sm2);
     white-space: nowrap;
     overflow: hidden;
