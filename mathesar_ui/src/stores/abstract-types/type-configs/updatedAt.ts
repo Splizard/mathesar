@@ -6,7 +6,10 @@ import { iconUiTypeUpdatedAt } from '@mathesar/icons';
 import { DB_TYPES } from '../dbTypes';
 import type { AbstractTypeConfiguration } from '../types';
 
-import DateTime, { getDateTimeDbConfig } from './datetime';
+import DateTime, {
+  dateTimeOnlyDisplayConfig,
+  getDateTimeDbConfig,
+} from './datetime';
 
 /**
  * A Date & Time column that a trigger keeps at the time its record was last
@@ -18,6 +21,7 @@ const updatedAtType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconUiTypeUpdatedAt, label: 'Updated At' }),
   defaultDbType: DB_TYPES.TIMESTAMP_WITH_TZ,
   getDbConfig: () => getDateTimeDbConfig(true),
+  getDisplayConfig: () => dateTimeOnlyDisplayConfig,
   getHelpInfo: () => get(_)('updated_at_type_help'),
 };
 

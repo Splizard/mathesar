@@ -11,8 +11,27 @@ import type { ComponentAndProps } from '@mathesar-component-library/types';
 
 import DateTimeCell from './components/date-time/DateTimeCell.svelte';
 import DateTimeInput from './components/date-time/DateTimeInput.svelte';
+import TimeCheckboxCell from './components/time-checkbox/TimeCheckboxCell.svelte';
 import type { DateTimeCellExternalProps } from './components/typeDefinitions';
 import type { CellComponentFactory } from './typeDefinitions';
+
+/** Whether the column says its instants are shown as a tick */
+export function isTimeCheckboxColumn(
+  metadata: RawColumnWithMetadata['metadata'],
+): boolean {
+  return getColumnMetadataValue({ metadata }, 'time_checkbox');
+}
+
+/**
+ * The props of a checkbox standing for an instant: what the box says, and what
+ * to write when it is ticked, in the form the column's own type reads back.
+ */
+function getCheckboxProps(supportTimeZone: boolean) {
+  const specification = new DateTimeSpecification({
+    type: supportTimeZone ? 'timestampWithTZ' : 'timestamp',
+  });
+  return { stampNow: () => specification.getCanonicalString(new Date()) };
+}
 
 function getProps(
   column: RawColumnWithMetadata,
@@ -47,10 +66,19 @@ const datetimeType: CellComponentFactory = {
   get: (
     column: RawColumnWithMetadata,
     config?: { supportTimeZone?: boolean },
-  ): ComponentAndProps<DateTimeCellExternalProps> => ({
-    component: DateTimeCell,
-    props: getProps(column, config?.supportTimeZone ?? false),
-  }),
+  ): ComponentAndProps => {
+    const supportTimeZone = config?.supportTimeZone ?? false;
+    if (isTimeCheckboxColumn(column.metadata)) {
+      return {
+        component: TimeCheckboxCell,
+        props: getCheckboxProps(supportTimeZone),
+      };
+    }
+    return {
+      component: DateTimeCell,
+      props: getProps(column, supportTimeZone),
+    };
+  },
   getInput: (
     column: RawColumnWithMetadata,
     config?: { supportTimeZone?: boolean },

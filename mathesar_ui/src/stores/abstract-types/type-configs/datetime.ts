@@ -17,6 +17,7 @@ import type {
   AbstractTypeConfigForm,
   AbstractTypeConfiguration,
   AbstractTypeDbConfig,
+  AbstractTypeDisplayConfig,
 } from '../types';
 
 import { getDateFormatOptions, getTimeFormatOptions } from './utils';
@@ -65,33 +66,61 @@ function constructDbFormValuesFromTypeOptions(
   };
 }
 
+const dateTimeElements: AbstractTypeConfigForm['layout']['elements'] = [
+  {
+    type: 'input',
+    variable: 'dateFormat',
+    label: 'Date Format',
+    options: getDateFormatOptions(),
+  },
+  {
+    type: 'input',
+    variable: 'timeFormat',
+    label: 'Time Format',
+    options: getTimeFormatOptions(),
+  },
+];
+
+const dateTimeVariables: AbstractTypeConfigForm['variables'] = {
+  dateFormat: {
+    type: 'string',
+    enum: ['none', 'us', 'eu', 'friendly', 'iso'],
+    default: 'none',
+  },
+  timeFormat: {
+    type: 'string',
+    enum: ['24hr', '24hrLong', '12hr', '12hrLong'],
+    default: '24hr',
+  },
+};
+
 const displayForm: AbstractTypeConfigForm = {
   variables: {
-    dateFormat: {
+    showAs: {
       type: 'string',
-      enum: ['none', 'us', 'eu', 'friendly', 'iso'],
-      default: 'none',
+      enum: ['dateTime', 'checkbox'],
+      default: 'dateTime',
     },
-    timeFormat: {
-      type: 'string',
-      enum: ['24hr', '24hrLong', '12hr', '12hrLong'],
-      default: '24hr',
-    },
+    ...dateTimeVariables,
   },
   layout: {
     orientation: 'vertical',
     elements: [
       {
         type: 'input',
-        variable: 'dateFormat',
-        label: 'Date Format',
-        options: getDateFormatOptions(),
+        variable: 'showAs',
+        label: 'Show as',
+        options: {
+          dateTime: { label: 'Date & Time' },
+          checkbox: { label: 'Checkbox' },
+        },
       },
       {
-        type: 'input',
-        variable: 'timeFormat',
-        label: 'Time Format',
-        options: getTimeFormatOptions(),
+        type: 'if',
+        variable: 'showAs',
+        condition: 'eq',
+        value: 'dateTime',
+        elements: dateTimeElements,
       },
     ],
   },
@@ -100,11 +129,16 @@ const displayForm: AbstractTypeConfigForm = {
 function determineDisplayOptions(
   dispFormValues: FormValues,
 ): RawColumnWithMetadata['metadata'] {
-  const displayOptions: RawColumnWithMetadata['metadata'] = {
+  if (dispFormValues.showAs === 'checkbox') {
+    return { time_checkbox: true };
+  }
+  return {
+    // False rather than left out: this is what turns a column of ticks back
+    // into one of dates, and the options we send are the options we set.
+    time_checkbox: false,
     date_format: dispFormValues.dateFormat as DateFormat,
     time_format: dispFormValues.timeFormat as TimeFormat,
   };
-  return displayOptions;
 }
 
 function constructDisplayFormValuesFromDisplayOptions(
@@ -112,11 +146,28 @@ function constructDisplayFormValuesFromDisplayOptions(
 ): FormValues {
   const column = { metadata };
   const formValues: FormValues = {
+    showAs: getColumnMetadataValue(column, 'time_checkbox')
+      ? 'checkbox'
+      : 'dateTime',
     dateFormat: getColumnMetadataValue(column, 'date_format'),
     timeFormat: getColumnMetadataValue(column, 'time_format'),
   };
   return formValues;
 }
+
+/**
+ * The same options without the "Show as". A column that records when a record
+ * was made or last changed always holds an instant, so there is nothing for a
+ * tick to say about it.
+ */
+export const dateTimeOnlyDisplayConfig: AbstractTypeDisplayConfig = {
+  form: {
+    variables: dateTimeVariables,
+    layout: { orientation: 'vertical', elements: dateTimeElements },
+  },
+  determineDisplayOptions,
+  constructDisplayFormValuesFromDisplayOptions,
+};
 
 export function getDateTimeDbConfig(
   supportTimeZonesByDefault = false,

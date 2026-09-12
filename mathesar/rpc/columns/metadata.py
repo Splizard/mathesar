@@ -34,6 +34,9 @@ class ColumnMetaDataRecord(TypedDict):
         mon_currency_location: Where the currency symbol should be shown.
         time_format: A string representing the format of time values.
         date_format: A string representing the format of date values.
+        time_checkbox: Whether an instant is shown as a tick rather than as a date and a time. The
+            value is still the instant: the tick says whether there is one, ticking writes the
+            moment it was ticked, and unticking clears it.
         duration_min: The smallest unit for displaying durations.
         duration_max: The largest unit for displaying durations.
         duration_format: Whether a duration is displayed as a time on a clock or written
@@ -61,6 +64,7 @@ class ColumnMetaDataRecord(TypedDict):
     mon_currency_location: Optional[Literal["after-minus", "end-with-space"]]
     time_format: Optional[str]
     date_format: Optional[str]
+    time_checkbox: Optional[bool]
     duration_min: Optional[str]
     duration_max: Optional[str]
     duration_format: Optional[Literal["clock", "words"]]
@@ -96,6 +100,9 @@ class ColumnMetaDataBlob(TypedDict):
         mon_currency_location: Where the currency symbol should be shown.
         time_format: A string representing the format of time values.
         date_format: A string representing the format of date values.
+        time_checkbox: Whether an instant is shown as a tick rather than as a date and a time. The
+            value is still the instant: the tick says whether there is one, ticking writes the
+            moment it was ticked, and unticking clears it.
         duration_min: The smallest unit for displaying durations.
         duration_max: The largest unit for displaying durations.
         duration_format: Whether a duration is displayed as a time on a clock or written
@@ -121,6 +128,7 @@ class ColumnMetaDataBlob(TypedDict):
     mon_currency_location: Optional[Literal["after-minus", "end-with-space"]]
     time_format: Optional[str]
     date_format: Optional[str]
+    time_checkbox: Optional[bool]
     duration_min: Optional[str]
     duration_max: Optional[str]
     duration_format: Optional[Literal["clock", "words"]]

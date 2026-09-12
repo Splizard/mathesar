@@ -88,6 +88,13 @@ export interface RequiredColumnMetadata {
 
   date_format: DateFormat;
 
+  /**
+   * Whether an instant is shown as a tick rather than as a date and a time.
+   * The value is still the instant: the tick says whether there is one,
+   * ticking writes the moment it was ticked, and unticking clears it.
+   */
+  time_checkbox: boolean;
+
   duration_min: DurationUnit;
 
   duration_max: DurationUnit;
@@ -132,6 +139,7 @@ export const defaultColumnMetadata: RequiredColumnMetadata = {
   mon_currency_location: 'after-minus',
   time_format: '24hr',
   date_format: 'none',
+  time_checkbox: false,
   duration_min: 's',
   duration_max: 'm',
   duration_format: 'clock',

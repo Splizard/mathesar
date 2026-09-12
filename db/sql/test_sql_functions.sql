@@ -9666,6 +9666,19 @@ BEGIN
     NULL,
     'and a unit that is not one of them is refused'
   );
+  PERFORM msar.set_column_presentation(
+    'pres'::regclass::oid, 1, '{"time_checkbox": true}'::jsonb
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '1' -> 'time_checkbox',
+    'true'::jsonb,
+    'a column can say an instant of it is shown as a tick'
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '1' ->> 'num_unix_time',
+    'nanoseconds',
+    'and setting the one option leaves the others as they were'
+  );
 END;
 $f$ LANGUAGE plpgsql;
 

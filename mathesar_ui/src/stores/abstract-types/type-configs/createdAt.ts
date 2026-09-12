@@ -6,7 +6,10 @@ import { iconUiTypeCreatedAt } from '@mathesar/icons';
 import { DB_TYPES } from '../dbTypes';
 import type { AbstractTypeConfiguration } from '../types';
 
-import DateTime, { getDateTimeDbConfig } from './datetime';
+import DateTime, {
+  dateTimeOnlyDisplayConfig,
+  getDateTimeDbConfig,
+} from './datetime';
 
 /**
  * A Date & Time column whose default is the current time, so that it records
@@ -18,6 +21,7 @@ const createdAtType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconUiTypeCreatedAt, label: 'Created At' }),
   defaultDbType: DB_TYPES.TIMESTAMP_WITH_TZ,
   getDbConfig: () => getDateTimeDbConfig(true),
+  getDisplayConfig: () => dateTimeOnlyDisplayConfig,
   getHelpInfo: () => get(_)('created_at_type_help'),
 };
 

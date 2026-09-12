@@ -66,6 +66,15 @@ CREATE TABLE IF NOT EXISTS presentation_schema.columns (
     CHECK (mon_currency_location IN ('after-minus', 'end-with-space')),
   time_format text,
   date_format text,
+
+  -- Whether an instant is shown as a tick rather than as a date and a time.
+  --
+  -- The value is still the instant, and null is still null: what the tick says is whether there is
+  -- one. Ticking a column like this writes the moment it was ticked, and unticking clears it, which
+  -- is how a column named for something that happened -- archived_at, completed_at, verified_at --
+  -- is usually wanted: the convenience of a checkbox without throwing away when it happened.
+  time_checkbox boolean,
+
   duration_min text,
   duration_max text,
   duration_format text CONSTRAINT duration_format_known
@@ -104,6 +113,8 @@ ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS display_positio
 ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS num_unix_time text
   CONSTRAINT num_unix_time_known
   CHECK (num_unix_time IN ('seconds', 'milliseconds', 'microseconds', 'nanoseconds'));
+
+ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS time_checkbox boolean;
 
 
 CREATE OR REPLACE FUNCTION

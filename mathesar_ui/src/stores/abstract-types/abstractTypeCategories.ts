@@ -778,6 +778,20 @@ export function mergeMetadataOnTypeChange(
     };
   }
 
+  // Only an instant is shown as a tick, and only one the user keeps themselves:
+  // a Created At or Updated At column always has one, so there is nothing for a
+  // tick to say. Without this, a column changed away from Date & Time would go
+  // on being drawn as a checkbox with no way left to say otherwise.
+  if (
+    metadata?.time_checkbox &&
+    newAbstractType.identifier !== abstractTypeCategory.DateTime
+  ) {
+    result = {
+      ...result,
+      time_checkbox: false,
+    };
+  }
+
   // The currency symbol is what makes a number money, so changing to or from
   // Money is a change of metadata rather than of type.
   if (newAbstractType.identifier === abstractTypeCategory.Money) {
