@@ -36,18 +36,19 @@
 
   const name = requiredField('');
   const description = optionalField('');
+  const form = makeForm({ name, description });
 
   let entries: EnumValueEntry[] = [];
 
   function reset(_type: RawSchemaType | undefined) {
-    name.reset();
-    description.reset();
+    // The whole form, so that what the database said about the last attempt goes
+    // with the values it was said about.
+    form.reset();
     name.set(_type?.name ?? '');
     description.set(_type?.description ?? '');
     entries = getEntries(_type?.values);
   }
 
-  $: form = makeForm({ name, description });
   // The modal is the same whether a choice is being made or changed, so what it
   // holds is set from the choice each time it is opened rather than once.
   $: reset(type);

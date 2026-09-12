@@ -953,7 +953,6 @@
   "transform_results_help": "Transformations can be used to summarize data, filter data, and more. Note that transformations are applied in the order they are listed.",
   "trim_and_restrict": "Trim and Restrict",
   "two_columns_cannot_have_same_name": "The two columns cannot have the same name.",
-  "type_delete_columns_warning": "The values of this choice are held by {columns}, which would have to be dropped with it.",
   "type_of_relationship_with_table": "Type of Relationship with [tableName]",
   "type_used_by": "Held by {columns}",
   "type_used_by_nothing": "Held by no column",

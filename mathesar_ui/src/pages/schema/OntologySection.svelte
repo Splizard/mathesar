@@ -61,19 +61,7 @@
     void confirmDelete({
       identifierType: $_('ontology_choice'),
       identifierName: type.name,
-      body:
-        type.used_by.length > 0
-          ? [
-              $_('type_delete_columns_warning', {
-                values: {
-                  columns: type.used_by
-                    .map((user) => `${user.table_name}.${user.column_name}`)
-                    .join(', '),
-                },
-              }),
-              $_('are_you_sure_to_proceed'),
-            ]
-          : [$_('are_you_sure_to_proceed')],
+      body: [$_('are_you_sure_to_proceed')],
       onProceed: async () => {
         try {
           await api.types
@@ -132,14 +120,18 @@
                   >
                     <Icon {...iconEdit} />
                   </Button>
-                  <Button
-                    appearance="plain"
-                    size="small"
-                    tooltip={$_('delete_choice')}
-                    on:click={() => remove(type)}
-                  >
-                    <Icon {...iconDeleteMajor} />
-                  </Button>
+                  <!-- A choice a column holds cannot be dropped, and the card
+                  says which column holds it. -->
+                  {#if type.used_by.length === 0}
+                    <Button
+                      appearance="plain"
+                      size="small"
+                      tooltip={$_('delete_choice')}
+                      on:click={() => remove(type)}
+                    >
+                      <Icon {...iconDeleteMajor} />
+                    </Button>
+                  {/if}
                 </span>
               {/if}
             </div>
