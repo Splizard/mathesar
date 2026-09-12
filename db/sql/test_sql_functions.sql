@@ -9834,3 +9834,138 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_summary() RETURNS SETOF TEXT AS $$
+BEGIN
+  -- Gaps on both tables, so that a restore would shift the attnums of each.
+  CREATE TABLE sum_authors (id integer PRIMARY KEY, scratch integer, name text);
+  ALTER TABLE sum_authors DROP COLUMN scratch;
+  CREATE TABLE sum_books (
+    id integer PRIMARY KEY, junk integer, title text, author_id integer REFERENCES sum_authors(id)
+  );
+  ALTER TABLE sum_books DROP COLUMN junk;
+  -- "<title> by <the author's name>": the second reference walks the foreign key.
+  PERFORM msar.set_table_record_summary_template(
+    'sum_books'::regclass::oid, '[[3], " by ", [4, 3]]'::jsonb
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_record_summary_template_round_trip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary();
+  RETURN NEXT is(
+    msar.table_record_summary_template('sum_books'::regclass::oid),
+    '[[3], " by ", [4, 3]]'::jsonb,
+    'the template comes back as it was given'
+  );
+  RETURN NEXT is(
+    (SELECT record_summary_names FROM presentation_schema.tables
+     WHERE "table" = 'sum_books'::regclass),
+    '[["title"], " by ", ["author_id", "name"]]'::jsonb,
+    'and is written down by name as well, following the foreign key to get there'
+  );
+  RETURN NEXT is(
+    msar.table_record_summary_templates() -> ('sum_books'::regclass::oid::bigint::text),
+    '[[3], " by ", [4, 3]]'::jsonb,
+    'the whole database can be asked at once'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_record_summary_template_survives_a_rename() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary();
+  PERFORM msar.rename_column('sum_authors'::regclass::oid, 3, 'writer');
+  RETURN NEXT is(
+    msar.table_record_summary_template('sum_books'::regclass::oid),
+    '[[3], " by ", [4, 3]]'::jsonb,
+    'renaming a column a template reaches through a foreign key leaves the attnums alone'
+  );
+  RETURN NEXT is(
+    (SELECT record_summary_names FROM presentation_schema.tables
+     WHERE "table" = 'sum_books'::regclass),
+    '[["title"], " by ", ["author_id", "writer"]]'::jsonb,
+    'but the names it would be restored by are caught up, on whichever table the rename was'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_record_summary_template_reads_through_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary();
+  -- What a restore leaves behind: the same columns by name on both tables, gaps closed up.
+  CREATE TABLE sum_authors_r (id integer PRIMARY KEY, name text);
+  CREATE TABLE sum_books_r (
+    id integer PRIMARY KEY, title text, author_id integer REFERENCES sum_authors_r(id)
+  );
+  UPDATE presentation_schema.tables
+  SET "table" = 'sum_books_r'::regclass
+  WHERE "table" = 'sum_books'::regclass;
+  -- Believing the stored attnums would take attnum 3 for the title, which is now author_id, and
+  -- drop the author entirely, since attnum 4 is not there any more. The summary would read as an
+  -- id and nothing else, with nothing to say it had gone wrong.
+  RETURN NEXT is(
+    msar.table_record_summary_template('sum_books_r'::regclass::oid),
+    '[[2], " by ", [3, 2]]'::jsonb,
+    'every reference is walked back by name, on both sides of the foreign key'
+  );
+  RETURN NEXT matches(
+    msar.build_record_summary_query_for_table(
+      'sum_books_r'::regclass::oid,
+      NULL,
+      jsonb_build_object(
+        'sum_books_r'::regclass::oid::bigint::text,
+        msar.table_record_summary_template('sum_books_r'::regclass::oid)
+      )
+    ),
+    'base\.title',
+    'so the query built from it reads the column someone actually chose'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_record_summary_template_drops_a_dead_reference() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary();
+  RETURN NEXT is(
+    msar.record_summary_chain_names('sum_books'::regclass::oid, '[99]'::jsonb),
+    NULL,
+    'a reference to a column that is not there leads nowhere'
+  );
+  RETURN NEXT is(
+    msar.record_summary_chain_names('sum_books'::regclass::oid, '[3, 3]'::jsonb),
+    NULL,
+    'and neither does one that tries to walk through a column that is not a foreign key'
+  );
+  RETURN NEXT is(
+    msar.record_summary_template_as('sum_books'::regclass::oid, '[[3], " and ", [99]]'::jsonb, true),
+    '[["title"], " and ", null]'::jsonb,
+    'a dead reference keeps its place as null, which the query builder passes over'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_record_summary_template_is_cleared_by_null() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary();
+  PERFORM msar.set_table_record_summary_template('sum_books'::regclass::oid, NULL);
+  RETURN NEXT is(
+    msar.table_record_summary_template('sum_books'::regclass::oid),
+    NULL,
+    'null says nothing about the summary again'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM presentation_schema.tables
+     WHERE "table" = 'sum_books'::regclass),
+    0,
+    'and the row goes with it'
+  );
+END;
+$f$ LANGUAGE plpgsql;

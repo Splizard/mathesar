@@ -401,3 +401,233 @@ BEGIN
     );
 END;
 $$ LANGUAGE plpgsql;
+
+
+----------------------------------------------------------------------------------------------------
+-- A TABLE'S OWN PRESENTATION
+----------------------------------------------------------------------------------------------------
+
+CREATE TABLE IF NOT EXISTS presentation_schema.tables (
+  -- The table, held the same way presentation_schema.columns holds it.
+  "table" regclass PRIMARY KEY,
+
+  -- The OID this row was last written against, so a restore is something we can tell has happened.
+  written_against oid NOT NULL,
+
+  -- How a record of this table is written out in a sentence: an array whose string parts are
+  -- literal text and whose array parts are references to a column, given as a chain of attnums.
+  -- All but the last attnum in a chain is a single-column foreign key to follow; the last is the
+  -- column to read once the chain has been walked.
+  record_summary_template jsonb,
+
+  -- The same references written as column names, which is what survives a restore.
+  --
+  -- The attnums above are meaningless in a restored database, and unlike a column's attnum they
+  -- are buried inside a JSON document, so there is nothing for the row's own identity to fix. This
+  -- is the same chain walked by name at each hop instead, kept up to date behind the attnums.
+  record_summary_names jsonb
+);
+
+
+CREATE OR REPLACE FUNCTION
+msar.record_summary_chain_names(tab_id oid, chain jsonb) RETURNS jsonb AS $$/*
+Write one column reference chain out as names, or null if it leads nowhere.
+
+Args:
+  tab_id: The OID of the table the chain starts from.
+  chain: An array of attnums, all but the last being single-column foreign keys to follow.
+*/
+DECLARE
+  names jsonb := '[]'::jsonb;
+  ctx_tab_id oid := tab_id;
+  hops integer := jsonb_array_length(chain);
+  hop integer;
+  col_id smallint;
+  col_name name;
+  ref_tab_id oid;
+BEGIN
+  IF hops IS NULL OR hops = 0 THEN
+    RETURN NULL;
+  END IF;
+  FOR hop IN 0..hops - 1 LOOP
+    col_id := (chain ->> hop)::smallint;
+    SELECT attname INTO col_name
+    FROM pg_catalog.pg_attribute
+    WHERE attrelid = ctx_tab_id AND attnum = col_id AND attnum > 0 AND NOT attisdropped;
+    IF col_name IS NULL THEN
+      RETURN NULL;
+    END IF;
+    names := names || to_jsonb(col_name::text);
+    IF hop < hops - 1 THEN
+      SELECT confrelid INTO ref_tab_id
+      FROM pg_catalog.pg_constraint
+      WHERE contype = 'f' AND conrelid = ctx_tab_id AND conkey = ARRAY[col_id];
+      IF ref_tab_id IS NULL THEN
+        RETURN NULL;
+      END IF;
+      ctx_tab_id := ref_tab_id;
+    END IF;
+  END LOOP;
+  RETURN names;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.record_summary_chain_attnums(tab_id oid, names jsonb) RETURNS jsonb AS $$/*
+Read one column reference chain back from names, or null if it leads nowhere.
+
+The same walk as msar.record_summary_chain_names, the other way about: each name is looked up on
+the table the chain has reached so far, and all but the last must be a single-column foreign key.
+
+Args:
+  tab_id: The OID of the table the chain starts from.
+  names: An array of column names.
+*/
+DECLARE
+  chain jsonb := '[]'::jsonb;
+  ctx_tab_id oid := tab_id;
+  hops integer := jsonb_array_length(names);
+  hop integer;
+  col_name text;
+  col_id smallint;
+  ref_tab_id oid;
+BEGIN
+  IF hops IS NULL OR hops = 0 THEN
+    RETURN NULL;
+  END IF;
+  FOR hop IN 0..hops - 1 LOOP
+    col_name := names ->> hop;
+    SELECT attnum INTO col_id
+    FROM pg_catalog.pg_attribute
+    WHERE attrelid = ctx_tab_id AND attname = col_name AND attnum > 0 AND NOT attisdropped;
+    IF col_id IS NULL THEN
+      RETURN NULL;
+    END IF;
+    chain := chain || to_jsonb(col_id::integer);
+    IF hop < hops - 1 THEN
+      SELECT confrelid INTO ref_tab_id
+      FROM pg_catalog.pg_constraint
+      WHERE contype = 'f' AND conrelid = ctx_tab_id AND conkey = ARRAY[col_id];
+      IF ref_tab_id IS NULL THEN
+        RETURN NULL;
+      END IF;
+      ctx_tab_id := ref_tab_id;
+    END IF;
+  END LOOP;
+  RETURN chain;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.record_summary_template_as(tab_id oid, template jsonb, to_names boolean) RETURNS jsonb AS $$/*
+Rewrite a record summary template's column references, either to names or back to attnums.
+
+Literal text is passed through untouched. A reference that leads nowhere becomes null, keeping its
+place in the template: the query builder ignores a part that is neither text nor a reference, which
+is how it already copes with a column that has been deleted.
+
+Args:
+  tab_id: The OID of the table the template belongs to.
+  template: The template to rewrite.
+  to_names: Whether to rewrite references to names, rather than back to attnums.
+*/
+SELECT CASE WHEN template IS NULL THEN NULL ELSE (
+  SELECT COALESCE(jsonb_agg(
+    CASE
+      WHEN jsonb_typeof(part) = 'array' AND to_names
+        THEN COALESCE(msar.record_summary_chain_names(tab_id, part), 'null'::jsonb)
+      WHEN jsonb_typeof(part) = 'array'
+        THEN COALESCE(msar.record_summary_chain_attnums(tab_id, part), 'null'::jsonb)
+      ELSE part
+    END
+    ORDER BY ordinality
+  ), '[]'::jsonb)
+  FROM jsonb_array_elements(template) WITH ORDINALITY AS t(part, ordinality)
+) END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_record_summary_template(tab_id oid) RETURNS jsonb AS $$/*
+Return how a record of this table should be written out, in attnums, or null if nobody has said.
+
+Which of the two stored forms to believe is the same question as for a column, answered the same
+way: while the OID the row was written against is still the table's, the attnums are right and the
+names are only a cache; once it isn't, a restore has moved the attnums and the names are what is
+left to go on.
+
+Args:
+  tab_id: The OID of the table.
+*/
+SELECT CASE
+  WHEN t.written_against = tab_id THEN t.record_summary_template
+  ELSE msar.record_summary_template_as(tab_id, t.record_summary_names, false)
+END
+FROM presentation_schema.tables t
+WHERE t."table" = tab_id::regclass;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_record_summary_templates() RETURNS jsonb AS $$/*
+Return every table's record summary template in the database, keyed by table OID.
+*/
+SELECT COALESCE(jsonb_object_agg(tab_id, template), '{}'::jsonb)
+FROM (
+  SELECT
+    t."table"::oid::bigint::text AS tab_id,
+    msar.table_record_summary_template(t."table"::oid) AS template
+  FROM presentation_schema.tables t
+  WHERE t.record_summary_template IS NOT NULL
+) AS templates
+WHERE template IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_table_record_summary_template(tab_id oid, template jsonb) RETURNS void AS $$/*
+Say how a record of this table should be written out.
+
+Both forms are written at once: the attnums to bind by while the database is live, and the names to
+fall back on once a restore has been through.
+
+Args:
+  tab_id: The OID of the table.
+  template: The template, with column references as chains of attnums, or null to say nothing.
+*/
+BEGIN
+  IF template IS NULL THEN
+    DELETE FROM presentation_schema.tables WHERE "table" = tab_id::regclass;
+    RETURN;
+  END IF;
+
+  INSERT INTO presentation_schema.tables
+    ("table", written_against, record_summary_template, record_summary_names)
+  VALUES (
+    tab_id::regclass, tab_id, template, msar.record_summary_template_as(tab_id, template, true)
+  )
+  ON CONFLICT ("table") DO UPDATE SET
+    written_against = EXCLUDED.written_against,
+    record_summary_template = EXCLUDED.record_summary_template,
+    record_summary_names = EXCLUDED.record_summary_names;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.refresh_record_summary_names() RETURNS void AS $$/*
+Bring every stored template's name form back into step with the attnums it is shadowing.
+
+A column rename can reach a template on any table, since a reference may walk a chain of foreign
+keys to get there, and following that back to just the templates affected would cost more than
+rewriting the lot. There is one row per table anybody has written a summary for, and renaming is
+not something that happens in a loop.
+*/
+UPDATE presentation_schema.tables
+SET record_summary_names = msar.record_summary_template_as(
+  "table"::oid, record_summary_template, true
+)
+WHERE written_against = "table"::oid AND record_summary_template IS NOT NULL;
+$$ LANGUAGE SQL;

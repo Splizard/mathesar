@@ -19,7 +19,7 @@ from mathesar.utils.forms import (
     get_form_source_info,
     submit_form,
 )
-from mathesar.utils.tables import get_table_record_summary_templates
+from db.presentation import get_table_record_summary_templates
 from mathesar.rpc.records import RecordSummaryList
 
 
@@ -389,7 +389,6 @@ def list_related_records(
     """
     user = kwargs.get(REQUEST_KEY).user
     form = get_form(form_token, user)
-    database_id = form.database.id
     form_field = form.fields.get(key=field_key)
     if form_field.kind != "foreign_key":
         raise ValueError(f"Field {field_key} is not a foreign key field.")
@@ -403,7 +402,7 @@ def list_related_records(
             limit=limit,
             offset=offset,
             search=search,
-            table_record_summary_templates=get_table_record_summary_templates(database_id),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
         )
     return RecordSummaryList.from_dict(record_info)
 

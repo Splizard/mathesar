@@ -23,7 +23,12 @@ from mathesar.rpc.columns import (
     SettableColumnInfo,
 )
 from mathesar.rpc.constraints import CreatableConstraintInfo
-from db.presentation import get_table_column_order, get_table_column_orders
+from db.presentation import (
+    get_table_column_order,
+    get_table_column_orders,
+    get_table_record_summary_template,
+    get_table_record_summary_templates,
+)
 from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.rpc.tables.metadata import TableMetaDataBlob
 from mathesar.rpc.utils import connect
@@ -439,17 +444,25 @@ def list_with_metadata(*, schema_oid: int, database_id: int, **kwargs) -> list:
     with connect(database_id, user) as conn:
         tables = get_table_info(schema_oid, conn)
         column_orders = get_table_column_orders(conn)
+        summaries = {
+            int(oid): template
+            for oid, template in get_table_record_summary_templates(conn).items()
+        }
 
     metadata_records = list_tables_meta_data(database_id)
     metadata_map = {
-        r.table_oid: TableMetaDataBlob.from_model(r, column_orders.pop(r.table_oid, None))
+        r.table_oid: TableMetaDataBlob.from_model(
+            r, column_orders.pop(r.table_oid, None), summaries.pop(r.table_oid, None)
+        )
         for r in metadata_records
     }
     # A table Mathesar has nothing of its own to say about may still have had its columns
-    # arranged, and that arrangement is in the user's database rather than here.
+    # arranged, or been given a summary; both live in the user's database rather than here.
     metadata_map.update({
-        table_oid: TableMetaDataBlob.from_column_order(column_order)
-        for table_oid, column_order in column_orders.items()
+        table_oid: TableMetaDataBlob.from_presentation(
+            column_orders.get(table_oid), summaries.get(table_oid)
+        )
+        for table_oid in column_orders.keys() | summaries.keys()
     })
 
     return [table | {"metadata": metadata_map.get(table["oid"])} for table in tables]
@@ -471,8 +484,9 @@ def get_with_metadata(*, table_oid: int, database_id: int, **kwargs) -> dict:
     with connect(database_id, user) as conn:
         table = get_table(table_oid, conn)
         column_order = get_table_column_order(conn, table_oid)
+        summary = get_table_record_summary_template(conn, table_oid)
 
     raw_metadata = get_table_meta_data(table_oid, database_id)
     return TableInfo(table) | {
-        "metadata": TableMetaDataBlob.from_model(raw_metadata, column_order)
+        "metadata": TableMetaDataBlob.from_model(raw_metadata, column_order, summary)
     }

@@ -52,6 +52,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
     monkeypatch.setattr(
         metadata, "get_table_column_orders", lambda conn: {1234: [8, 9, 10]}
     )
+    monkeypatch.setattr(metadata, "get_table_record_summary_templates", lambda conn: {})
 
     expect_metadata_list = [
         metadata.TableMetaDataRecord(
@@ -95,6 +96,9 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
     monkeypatch.setattr(metadata, "list_tables_meta_data", lambda _database_id: [])
     monkeypatch.setattr(metadata, "connect", _no_connection)
     monkeypatch.setattr(metadata, "get_table_column_orders", lambda conn: {4567: [3, 1, 2]})
+    monkeypatch.setattr(
+        metadata, "get_table_record_summary_templates", lambda conn: {"4567": [[3]]}
+    )
 
     actual = metadata.list_(database_id=2, request=request)
     assert actual == [
@@ -105,7 +109,7 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
             data_file_id=None,
             import_verified=None,
             column_order=[3, 1, 2],
-            record_summary_template=None,
+            record_summary_template=[[3]],
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
         )

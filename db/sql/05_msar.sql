@@ -4177,6 +4177,9 @@ BEGIN
     UPDATE presentation_schema.columns
     SET column_name = new_col_name
     WHERE "table" = tab_id::regclass AND attnum = col_id;
+    -- A record summary on any table may walk a chain of foreign keys into this column, so its
+    -- name has to be caught up everywhere rather than just here.
+    PERFORM msar.refresh_record_summary_names();
     RETURN col_id;
   ELSE
     RETURN null;

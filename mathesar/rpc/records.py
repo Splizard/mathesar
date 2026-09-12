@@ -18,7 +18,8 @@ from db.records import (
 from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.rpc.utils import connect
 from mathesar.utils.columns import get_columns_meta_data
-from mathesar.utils.tables import get_table_meta_data, get_table_record_summary_templates
+from db.presentation import get_table_record_summary_templates
+from mathesar.utils.tables import get_table_meta_data
 from mathesar.utils.download_links import get_download_links
 from mathesar.utils.user_display import (
     apply_track_editing_user,
@@ -345,9 +346,7 @@ def list_(
             group=grouping,
             joined_columns=joined_columns,
             return_record_summaries=return_record_summaries,
-            table_record_summary_templates=get_table_record_summary_templates(
-                database_id
-            ),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
         )
 
     record_info["download_links"] = get_download_links(
@@ -407,7 +406,7 @@ def get(
             joined_columns,
             return_record_summaries=return_record_summaries,
             table_record_summary_templates={
-                **get_table_record_summary_templates(database_id),
+                **get_table_record_summary_templates(conn),
                 **(table_record_summary_templates or {}),
             },
         )
@@ -467,9 +466,7 @@ def add(
             record_def,
             table_oid,
             return_record_summaries=return_record_summaries,
-            table_record_summary_templates=get_table_record_summary_templates(
-                database_id
-            ),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
         )
 
     user_summaries = get_user_linked_record_summaries(
@@ -524,9 +521,7 @@ def patch(
             record_id,
             table_oid,
             return_record_summaries=return_record_summaries,
-            table_record_summary_templates=get_table_record_summary_templates(
-                database_id
-            ),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
         )
 
     user_summaries = get_user_linked_record_summaries(
@@ -608,9 +603,7 @@ def search(
             limit=limit,
             offset=offset,
             return_record_summaries=return_record_summaries,
-            table_record_summary_templates=get_table_record_summary_templates(
-                database_id
-            ),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
         )
 
     record_info["download_links"] = get_download_links(
@@ -662,9 +655,7 @@ def list_summaries(
             limit=limit,
             offset=offset,
             search=search,
-            table_record_summary_templates=get_table_record_summary_templates(
-                database_id
-            ),
+            table_record_summary_templates=get_table_record_summary_templates(conn),
             linked_record_path=linked_record_path,
         )
     return RecordSummaryList.from_dict(record_info)

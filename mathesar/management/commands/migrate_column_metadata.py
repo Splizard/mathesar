@@ -3,8 +3,10 @@ from django.core.management.base import BaseCommand, CommandError
 from db.presentation import (
     get_column_presentation,
     get_table_column_order,
+    get_table_record_summary_template,
     set_column_presentation,
     set_table_column_order,
+    set_table_record_summary_template,
 )
 from mathesar.models.base import ColumnMetaData, Database, TableMetaData, UserDatabaseRoleMap
 
@@ -19,7 +21,8 @@ class Command(BaseCommand):
     help = (
         "Copy the column display settings Mathesar kept in its own database into"
         " presentation_schema in the database they describe, which is where they live"
-        " now, along with the order each table's columns are shown in. A column that"
+        " now, along with the order each table's columns are shown in and how a record"
+        " of it is written out. A column that"
         " already has settings there is left alone, and a column that has since gone is"
         " skipped, so this can be run as often as you like."
     )
@@ -37,10 +40,13 @@ class Command(BaseCommand):
             orders = TableMetaData.objects.filter(
                 database=database, column_order__isnull=False
             )
-            if not rows.exists() and not orders.exists():
+            summaries = TableMetaData.objects.filter(
+                database=database, record_summary_template__isnull=False
+            )
+            if not rows.exists() and not orders.exists() and not summaries.exists():
                 continue
             try:
-                if not self._migrate_database(database, rows, orders, dry_run):
+                if not self._migrate_database(database, rows, orders, summaries, dry_run):
                     failed = True
             except Exception as e:
                 self.stderr.write(f"{database.name}: {e}")
@@ -48,7 +54,7 @@ class Command(BaseCommand):
         if failed:
             raise CommandError("Some column settings were not copied; see above.")
 
-    def _migrate_database(self, database, rows, orders, dry_run):
+    def _migrate_database(self, database, rows, orders, summaries, dry_run):
         role_maps = UserDatabaseRoleMap.objects.filter(
             database=database
         ).select_related('configured_role')
@@ -86,10 +92,17 @@ class Command(BaseCommand):
                     ok = False
                 else:
                     ordered += result
-            if copied or ordered:
+            summarised = 0
+            for table_meta in summaries:
+                result = self._copy_summary(database, table_meta, conns, dry_run)
+                if result is None:
+                    ok = False
+                else:
+                    summarised += result
+            if copied or ordered or summarised:
                 self.stdout.write(
-                    f"{database.name}: {copied} column(s) and {ordered} column order(s)"
-                    f" copied{' (dry run)' if dry_run else ''}"
+                    f"{database.name}: {copied} column(s), {ordered} column order(s) and"
+                    f" {summarised} record summary(s) copied{' (dry run)' if dry_run else ''}"
                 )
             return ok
         finally:
@@ -157,5 +170,37 @@ class Command(BaseCommand):
         self.stderr.write(
             f"{database.name}: no configured role could reach table {table_meta.table_oid}"
             " to copy the order of its columns."
+        )
+        return None
+
+    def _copy_summary(self, database, table_meta, conns, dry_run):
+        """
+        Copy one table's record summary template, returning how many were copied (0 or 1), or None
+        if it went wrong.
+        """
+        for conn in conns:
+            try:
+                existing = get_table_record_summary_template(conn, table_meta.table_oid)
+            except Exception:
+                conn.rollback()
+                continue
+            if existing is not None:
+                # Already said there, and that is the newer word.
+                return 0
+            if dry_run:
+                return 1
+            try:
+                set_table_record_summary_template(
+                    conn, table_meta.table_oid, table_meta.record_summary_template
+                )
+            except Exception as e:
+                conn.rollback()
+                self.stdout.write(f"{database.name}: table {table_meta.table_oid}: {e}")
+                return 0
+            conn.commit()
+            return 1
+        self.stderr.write(
+            f"{database.name}: no configured role could reach table {table_meta.table_oid}"
+            " to copy its record summary."
         )
         return None
