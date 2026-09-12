@@ -9,5 +9,11 @@ export const staticText = {
   LOGIN: 'LOGIN',
   COLON: ':',
   EN_DASH: '–',
+  /**
+   * The upstream project, its Foundation and its documentation, which keep
+   * their name wherever the text is really about them.
+   */
   MATHESAR: 'Mathesar',
+  /** What this build of it calls itself, everywhere it speaks of itself. */
+  PRODUCT_NAME: 'Hidden Strings',
 } as const;

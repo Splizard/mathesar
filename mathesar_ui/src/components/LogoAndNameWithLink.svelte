@@ -1,6 +1,6 @@
 <script lang="ts">
   import Logo from './Logo.svelte';
-  import MathesarName from './MathesarName.svelte';
+  import ProductName from './ProductName.svelte';
 
   export let href: string;
   export let compactLayout = false;
@@ -8,7 +8,7 @@
 
 <a {...$$restProps} {href} class="home-link" class:compact={compactLayout}>
   <Logo />
-  <div class="mathesar"><MathesarName /></div>
+  <div class="product-name"><ProductName /></div>
 </a>
 
 <style>
@@ -25,12 +25,12 @@
     font-size: 1.5rem;
     display: block;
   }
-  .mathesar {
+  .product-name {
     font-size: var(--lg2);
     font-weight: var(--font-weight-extra-bold);
     margin-left: 0.3rem;
   }
-  .home-link.compact .mathesar {
+  .home-link.compact .product-name {
     display: none;
   }
 </style>

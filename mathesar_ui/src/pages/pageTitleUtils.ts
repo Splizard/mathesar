@@ -4,7 +4,7 @@ const SEPARATOR = ' | ';
 
 function makePageTitle(parts: string[]): string {
   const allParts = [...parts];
-  allParts.push(staticText.MATHESAR);
+  allParts.push(staticText.PRODUCT_NAME);
   return allParts.join(SEPARATOR);
 }
 
