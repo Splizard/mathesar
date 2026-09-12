@@ -1272,6 +1272,22 @@ WHERE table_data.schema = sch_id;
 $$ LANGUAGE SQL RETURNS NULL ON NULL INPUT;
 
 
+CREATE OR REPLACE FUNCTION msar.get_all_table_info() RETURNS jsonb AS $$/*
+Return an array of objects describing every table of the database's user-defined schemas, in the
+form msar.get_table_info gives them, each with the name of its schema.
+
+The schemas are those msar.get_schemas returns: every one but information_schema and PostgreSQL's
+own.
+*/
+SELECT coalesce(
+  jsonb_agg(to_jsonb(table_data) || jsonb_build_object('schema_name', nsp.nspname)), '[]'::jsonb
+)
+FROM msar.table_info_table() AS table_data
+  JOIN pg_catalog.pg_namespace AS nsp ON nsp.oid = table_data.schema
+WHERE nsp.nspname <> 'information_schema' AND nsp.nspname NOT LIKE 'pg_%';
+$$ LANGUAGE SQL STABLE;
+
+
 CREATE OR REPLACE FUNCTION
 msar.list_schema_privileges_for_current_role(sch_id regnamespace) RETURNS jsonb AS $$/*
 Return a JSONB array of all privileges current_user holds on the passed schema.

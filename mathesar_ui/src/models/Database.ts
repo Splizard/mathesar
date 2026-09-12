@@ -69,6 +69,16 @@ export class Database {
     });
   }
 
+  /**
+   * Every table of the database, of all its schemas, which is what a Database
+   * Table column holds one of.
+   */
+  constructAllTablesStore() {
+    return new AsyncRpcApiStore(api.tables.list_all, {
+      staticProps: { database_id: this.id },
+    });
+  }
+
   constructCollaboratorsStore() {
     return new AsyncRpcApiStore(api.collaborators.list, {
       staticProps: { database_id: this.id },

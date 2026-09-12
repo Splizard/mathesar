@@ -1174,6 +1174,7 @@ INSERT INTO msar.all_mathesar_objects VALUES
   ('msar', 'msar.format_data(time without time zone)', 'FUNCTION', NULL),
   ('msar', 'msar.format_data(timestamp with time zone)', 'FUNCTION', NULL),
   ('msar', 'msar.format_data(timestamp without time zone)', 'FUNCTION', NULL),
+  ('msar', 'msar.get_all_table_info()', 'FUNCTION', NULL),
   ('msar', 'msar.get_attnum(oid,text)', 'FUNCTION', NULL),
   ('msar', 'msar.get_cast_function_name(regtype)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_base_type(regtype,integer)', 'FUNCTION', NULL),

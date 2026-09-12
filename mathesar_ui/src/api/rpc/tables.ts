@@ -28,6 +28,11 @@ export interface RawTable {
   type: 'table' | 'view' | 'materialized_view';
 }
 
+/** A table as `tables.list_all` gives it, with the name of its schema */
+export interface RawTableWithSchemaName extends RawTable {
+  schema_name: string;
+}
+
 export interface RawTablePrivilegesForRole {
   role_oid: RawRole['oid'];
   direct: TablePrivilege[];
@@ -189,6 +194,13 @@ export const tables = {
       schema_oid: number;
     },
     RawTable[]
+  >(),
+
+  list_all: rpcMethodTypeContainer<
+    {
+      database_id: number;
+    },
+    RawTableWithSchemaName[]
   >(),
 
   list_with_metadata: rpcMethodTypeContainer<

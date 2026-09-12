@@ -851,6 +851,7 @@
   "table_name_cannot_be_empty": "The table name cannot be empty.",
   "table_new_items_scroll_hint": "Scroll or click here to see the table.",
   "table_not_found": "Table not found.",
+  "table_not_found_in_database": "This table does not exist in this database, or two of its schemas have one of this name.",
   "table_not_shared": "This table is currently not shared.",
   "table_or_view_delete_permanent_warning": "Warning: This action is permanent and once deleted, the table/view cannot be recovered.",
   "table_ownership_updated_successfully": "Table ownership has been updated successfully.",

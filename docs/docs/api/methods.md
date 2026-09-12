@@ -249,6 +249,7 @@
     options:
       members:
       - list_
+      - list_all
       - get
       - add
       - delete
@@ -259,6 +260,7 @@
       - list_with_metadata
       - get_with_metadata
       - TableInfo
+      - TableInfoWithSchemaName
       - AddedTableInfo
       - SettableTableInfo
       - JoinableTableRecord

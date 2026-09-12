@@ -33,6 +33,14 @@ def get_table_info(schema, conn):
     return db_conn.exec_msar_func(conn, 'get_table_info', schema).fetchone()[0]
 
 
+def get_all_table_info(conn):
+    """
+    Return a list of dictionaries describing every table of the database's user-defined schemas,
+    each with the name of its schema.
+    """
+    return db_conn.exec_msar_func(conn, 'get_all_table_info').fetchone()[0]
+
+
 def list_joinable_tables(table_oid, conn, max_depth):
     return db_conn.exec_msar_func(conn, 'get_joinable_tables', max_depth, table_oid).fetchone()[0]
 

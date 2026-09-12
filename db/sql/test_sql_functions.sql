@@ -3438,6 +3438,35 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_get_all_table_info() RETURNS SETOF TEXT AS $$
+DECLARE
+  all_table_info jsonb;
+  schema_names text[];
+BEGIN
+  PERFORM __setup_get_table_info();
+  SELECT msar.get_all_table_info() INTO all_table_info;
+  SELECT array_agg(DISTINCT t ->> 'schema_name') INTO schema_names
+    FROM jsonb_array_elements(all_table_info) t;
+
+  RETURN NEXT is(
+    (SELECT count(*) FROM jsonb_array_elements(all_table_info) t WHERE t ->> 'schema_name' = 'pi'),
+    2::bigint,
+    'every table of every schema is given'
+  );
+  RETURN NEXT is(
+    (SELECT t ->> 'name' FROM jsonb_array_elements(all_table_info) t
+      WHERE t ->> 'schema_name' = 'pi' AND t ->> 'description' IS NOT NULL),
+    'one',
+    'each as msar.get_table_info gives it'
+  );
+  RETURN NEXT ok(
+    NOT ('information_schema' = ANY(schema_names)) AND NOT ('pg_catalog' = ANY(schema_names)),
+    'but none of information_schema or PostgreSQL''s own'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_get_table_info() RETURNS SETOF TEXT AS $$
 DECLARE
  pi_table_info jsonb;

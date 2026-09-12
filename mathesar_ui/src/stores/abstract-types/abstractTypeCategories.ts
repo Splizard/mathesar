@@ -15,7 +15,6 @@ import type { DbType } from '@mathesar/AppTypes';
 import {
   iconUiTypeArray,
   iconUiTypeComposite,
-  iconUiTypeDatabaseTable,
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
   iconUiTypeXml,
@@ -31,6 +30,7 @@ import { DB_TYPES } from './dbTypes';
 import Binary from './type-configs/binary';
 import Boolean from './type-configs/boolean';
 import CreatedAt from './type-configs/createdAt';
+import DatabaseTable from './type-configs/databaseTable';
 import Date from './type-configs/date';
 import DateTime from './type-configs/datetime';
 import Duration from './type-configs/duration';
@@ -96,11 +96,7 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
     getIcon: () => ({ ...iconUiTypeComposite, label: 'Composite' }),
     cellInfo: { type: 'composite' },
   },
-  [abstractTypeCategory.DatabaseTable]: plainType(
-    iconUiTypeDatabaseTable,
-    'Database Table',
-    DB_TYPES.REGCLASS,
-  ),
+  [abstractTypeCategory.DatabaseTable]: DatabaseTable,
   [abstractTypeCategory.NumberRange]: numberRangeType,
   [abstractTypeCategory.TimeRange]: timeRangeType,
 };

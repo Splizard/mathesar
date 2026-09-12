@@ -9,6 +9,7 @@ from db.tables import (
     alter_table_on_database,
     create_table_on_database,
     drop_table_from_database,
+    get_all_table_info,
     get_preview,
     get_table,
     get_table_info,
@@ -64,6 +65,16 @@ class TableInfo(TypedDict):
     ]
     current_role_owns: bool
     type: Literal['table', 'view', 'materialized_view']
+
+
+class TableInfoWithSchemaName(TableInfo):
+    """
+    Information about a table, with the name of the schema it lives in.
+
+    Attributes:
+        schema_name: The name of the schema where the table lives.
+    """
+    schema_name: str
 
 
 class AddedTableInfo(TypedDict):
@@ -192,6 +203,25 @@ def list_(*, schema_oid: int, database_id: int, **kwargs) -> list[TableInfo]:
         raw_table_info = get_table_info(schema_oid, conn)
     return [
         TableInfo(tab) for tab in raw_table_info
+    ]
+
+
+@mathesar_rpc_method(name="tables.list_all", auth="login")
+def list_all(*, database_id: int, **kwargs) -> list[TableInfoWithSchemaName]:
+    """
+    List information about every table of the database's user-defined schemas.
+
+    Args:
+        database_id: The Django id of the database containing the tables.
+
+    Returns:
+        A list of table details, each with the name of its schema.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        raw_table_info = get_all_table_info(conn)
+    return [
+        TableInfoWithSchemaName(tab) for tab in raw_table_info
     ]
 
 

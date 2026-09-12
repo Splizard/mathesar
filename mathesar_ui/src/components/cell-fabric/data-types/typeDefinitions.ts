@@ -23,7 +23,8 @@ export type SimpleCellDataTypes =
   | 'file'
   | 'uuid'
   | 'composite'
-  | 'enum';
+  | 'enum'
+  | 'databaseTable';
 
 /**
  * Types whose cells hold values of other types, so are made from the cells of

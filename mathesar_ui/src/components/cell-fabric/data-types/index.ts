@@ -2,6 +2,7 @@ import arrayFactory from './arrayFactory';
 import boolean from './boolean';
 import compositeFactory from './composite';
 import compositeReadOnly from './compositeReadOnly';
+import databaseTable from './databaseTable';
 import date from './date';
 import datetime from './datetime';
 import duration from './duration';
@@ -37,6 +38,7 @@ const simpleDataTypeComponentFactories: Record<
   uuid,
   composite: compositeReadOnly,
   enum: enumFactory,
+  databaseTable,
 };
 
 const compoundDataTypeComponentFactories: Record<
