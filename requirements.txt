@@ -15,6 +15,10 @@ pyyaml==6.0.2
 requests==2.33.0
 s3fs==2025.7.0
 SQLAlchemy==1.4.54
+# Serves config.asgi, which is what carries the websocket that tells pages what changed.
+# gunicorn still serves config.wsgi perfectly well; it simply cannot carry a websocket.
+# The [standard] extra is what brings the websocket implementation.
+uvicorn[standard]==0.52.4
 whitenoise==6.7.0
 azure-identity==1.25.3
 adlfs==2026.4.0

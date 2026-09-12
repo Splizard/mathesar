@@ -167,3 +167,27 @@ def test_a_socket_opened_somewhere_else_is_refused():
         scope_with_cookie(path='/ws/something-else'), channels.receive, channels.send
     ))
     assert channels.sent == [{'type': 'websocket.close', 'code': 4404}]
+
+
+def test_the_server_is_told_we_have_started_and_stopped():
+    """
+    The lifespan scope is answered rather than left to Django, which errors on anything but HTTP.
+
+    Imported here rather than at the top of the file: importing config.asgi builds Django's ASGI
+    application, which these tests otherwise have no need of.
+    """
+    from config.asgi import application
+
+    sent = []
+    incoming = [{'type': 'lifespan.startup'}, {'type': 'lifespan.shutdown'}]
+
+    async def receive():
+        return incoming.pop(0)
+
+    async def send(message):
+        sent.append(message['type'])
+
+    asyncio.run(
+        asyncio.wait_for(application({'type': 'lifespan'}, receive, send), 5)
+    )
+    assert sent == ['lifespan.startup.complete', 'lifespan.shutdown.complete']

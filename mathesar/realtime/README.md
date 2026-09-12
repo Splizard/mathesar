@@ -19,16 +19,18 @@ listening.
 ## What it needs to run
 
 **An ASGI server.** A websocket is not something WSGI can serve, so `config/wsgi.py` cannot serve
-this. `config/asgi.py` routes a websocket to the handler and everything else to Django, and needs
-to be served by something that speaks ASGI:
+this. `config/asgi.py` routes a websocket to the handler, answers the server's lifespan messages,
+and gives everything else to Django. It is served with:
 
 ```
-gunicorn -k uvicorn.workers.UvicornWorker config.asgi:application
+uvicorn config.asgi:application --host 127.0.0.1 --port 8000 --workers 2
 ```
 
-which needs `uvicorn[standard]` installed — it is deliberately not in `requirements.txt`, so that
-the choice of server, and of whether to serve websockets at all, stays a deployment decision.
-`daphne config.asgi:application` works too.
+`uvicorn[standard]` is in `requirements.txt` — the `[standard]` extra is what brings the websocket
+implementation, without which uvicorn refuses the connection. Running it under gunicorn as a
+worker class is the older arrangement and no longer supported: `uvicorn.workers` was removed, and
+the replacement is a separate `uvicorn-worker` package. Nothing here needs gunicorn's process
+management, launchd already supervising the one process.
 
 Run under WSGI instead, every page works exactly as it did and the socket simply never connects.
 The browser gives up after a few attempts rather than knocking at a door that was never going to
@@ -36,7 +38,8 @@ open, so nothing is wasted and nothing is broken; you just don't get the live up
 
 **A session-pooled connection.** `LISTEN` belongs to a session, so a connection pooler in
 transaction pooling mode will break it — PgBouncer's default `pool_mode = transaction` among them.
-The websocket needs either a direct connection or `pool_mode = session`.
+The websocket needs either a direct connection or `pool_mode = session`. (On the Mac mini this is
+moot: Mathesar connects to PostgreSQL on 5432 directly, and PgBouncer's `[databases]` is empty.)
 
 **A connection per open page.** Each socket holds one. That is the number to watch if this is ever
 serving a great many pages at once, and the point at which a shared listener fanning out to many

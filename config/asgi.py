@@ -34,4 +34,21 @@ async def application(scope, receive, send):
         from mathesar.realtime.changes import changes_socket
         await changes_socket(scope, receive, send)
         return
+    if scope['type'] == 'lifespan':
+        # The server asks to be told when we have started and when we are ready to stop. Django
+        # has nothing to do at either moment and answers an error to anything that is not HTTP,
+        # so the asking is answered here instead of being left to fail in the log at every start.
+        await _lifespan(receive, send)
+        return
     await django_application(scope, receive, send)
+
+
+async def _lifespan(receive, send):
+    """Say that we have started, and then that we have stopped."""
+    while True:
+        message = await receive()
+        if message['type'] == 'lifespan.startup':
+            await send({'type': 'lifespan.startup.complete'})
+        elif message['type'] == 'lifespan.shutdown':
+            await send({'type': 'lifespan.shutdown.complete'})
+            return
