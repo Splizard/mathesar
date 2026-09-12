@@ -140,3 +140,48 @@ def set_table_record_summary_template(conn, table_oid, template):
         conn, 'set_table_record_summary_template', table_oid,
         json.dumps(template) if template is not None else None
     )
+
+
+def get_table_saved_filters(conn, table_oid):
+    """
+    Return the filters kept for this table, or None if nobody has kept any.
+
+    Columns come back given by attnum, whatever form they are stored in.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'table_saved_filters', table_oid
+    ).fetchone()[0]
+
+
+def get_table_saved_filters_all(conn):
+    """
+    Return the kept filters of every table that has any, keyed by table OID.
+
+    For listing a database's tables, where asking table by table would be a query apiece.
+
+    Args:
+        conn: a psycopg connection to the user's database
+    """
+    filters = db_conn.exec_msar_func(conn, 'table_saved_filters_all').fetchone()[0]
+    # The keys come back as strings, JSON objects having no other kind.
+    return {int(table_oid): kept for table_oid, kept in filters.items()}
+
+
+def set_table_saved_filters(conn, table_oid, filters):
+    """
+    Say which filters are kept for this table, replacing whatever was kept before.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+        filters: A list of dicts of a filter's name and the filter itself, with columns given by
+            attnum, or None to keep none.
+    """
+    db_conn.exec_msar_func(
+        conn, 'set_table_saved_filters', table_oid,
+        json.dumps(filters) if filters is not None else None
+    )

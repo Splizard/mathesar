@@ -51,6 +51,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
         metadata, "get_table_column_orders", lambda conn: {1234: [8, 9, 10]}
     )
     monkeypatch.setattr(metadata, "get_table_record_summary_templates", lambda conn: {})
+    monkeypatch.setattr(metadata, "get_table_saved_filters_all", lambda conn: {})
 
     expect_metadata_list = [
         metadata.TableMetaDataRecord(
@@ -61,6 +62,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
             import_verified=True,
             column_order=[8, 9, 10],
             record_summary_template=None,
+            saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
         ),
@@ -72,6 +74,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
             import_verified=False,
             column_order=None,
             record_summary_template=None,
+            saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
         ),
@@ -82,11 +85,11 @@ def test_tables_meta_data_list(rf, monkeypatch):
 
 def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
     """
-    A table Mathesar has no row of its own for can still have had its columns arranged.
+    A table Mathesar has no row of its own for can still have been arranged, or had a filter kept.
 
     Mathesar only makes a TableMetaData row for a table it created or imported, so a table made
-    outside it has none -- but its column order lives in the user's database, and listing has to
-    report it or the arrangement silently goes missing.
+    outside it has none -- but its column order, its summary and its kept filters all live in the
+    user's database, and listing has to report them or they silently go missing.
     """
     request = rf.post('/api/rpc/v0', data={})
     request.user = User(username='alice', password='pass1234')
@@ -97,9 +100,14 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
     monkeypatch.setattr(
         metadata, "get_table_record_summary_templates", lambda conn: {"4567": [[3]]}
     )
+    monkeypatch.setattr(
+        metadata,
+        "get_table_saved_filters_all",
+        lambda conn: {8901: [{"name": "Unpaid", "filter": ["g", "and", []]}]},
+    )
 
     actual = metadata.list_(database_id=2, request=request)
-    assert actual == [
+    assert sorted(actual, key=lambda r: r["table_oid"]) == [
         metadata.TableMetaDataRecord(
             id=None,
             database_id=2,
@@ -108,7 +116,21 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
             import_verified=None,
             column_order=[3, 1, 2],
             record_summary_template=[[3]],
+            saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
-        )
+        ),
+        # Kept filters are enough on their own to report a table nobody has otherwise touched
+        metadata.TableMetaDataRecord(
+            id=None,
+            database_id=2,
+            table_oid=8901,
+            data_file_id=None,
+            import_verified=None,
+            column_order=None,
+            record_summary_template=None,
+            saved_filters=[{"name": "Unpaid", "filter": ["g", "and", []]}],
+            mathesar_added_pkey_attnum=None,
+            user_tracking_attnum=None,
+        ),
     ]

@@ -6,6 +6,7 @@ import {
   faArrowsLeftRight,
   faBackspace,
   faBook,
+  faBookmark,
   faCalendarDay,
   faCalendarPlus,
   faCalendarWeek,
@@ -236,6 +237,8 @@ export const iconExploration: IconProps = { data: explorationIcon };
 export const iconExternalHyperlink: IconProps = { data: faUpRightFromSquare };
 export const iconFeedback: IconProps = { data: faCommentAlt };
 export const iconFiltering: IconProps = { data: faFilter };
+/** Filters somebody has named and kept for a table */
+export const iconSavedFilters: IconProps = { data: faBookmark };
 export const iconFilterGroup: IconProps = { data: filterGroupIcon };
 export const iconForm: IconProps = { data: faClipboardList };
 export const iconGrouping: IconProps = { data: faListUl };

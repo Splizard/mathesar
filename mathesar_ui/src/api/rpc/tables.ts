@@ -1,4 +1,3 @@
-import type { RecursivePartial } from '@mathesar/component-library';
 import { rpcMethodTypeContainer } from '@mathesar/packages/json-rpc-client-builder';
 
 import type { ColumnCastOptions, ColumnTypeOptions } from './columns';
@@ -49,7 +48,21 @@ export interface RawTablePrivilegesForRole {
 export type RecordSummaryTemplatePart = string | number[];
 export type RecordSummaryTemplate = RecordSummaryTemplatePart[];
 
-interface TableMetadata {
+/**
+ * A filter somebody has named and kept for a table.
+ *
+ * The filter itself is the terse form the table view writes a filter in, where
+ * a column is given by its attnum as a string — a `TerseFiltering`. It is typed
+ * here as what it is on the wire rather than as the table view's own type,
+ * which this layer knows nothing about; the one place that reads it back says
+ * so.
+ */
+export interface SavedTableFilter {
+  name: string;
+  filter: unknown;
+}
+
+export interface TableMetadata {
   /** The id of the data file used during import while creating the table */
   data_file_id: number | null;
   /**
@@ -63,6 +76,11 @@ interface TableMetadata {
   import_verified: boolean | null;
   column_order: number[] | null;
   record_summary_template: RecordSummaryTemplate | null;
+  /**
+   * Filters kept for the table, in the order they are offered. Setting them
+   * replaces the lot: an empty list or null keeps none.
+   */
+  saved_filters: SavedTableFilter[] | null;
   /** The attnum of the most recently-set pkey column (used during import) */
   mathesar_added_pkey_attnum: number | null;
   /**
@@ -320,7 +338,11 @@ export const tables = {
       {
         database_id: number;
         table_oid: number;
-        metadata: RecursivePartial<TableMetadata>;
+        /**
+         * The fields to set. Each is replaced whole rather than merged into
+         * what is there, so a partial one field deep is what this is.
+         */
+        metadata: Partial<TableMetadata>;
       },
       void
     >(),

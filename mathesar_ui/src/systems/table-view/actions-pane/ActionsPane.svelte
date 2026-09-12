@@ -14,6 +14,7 @@
   } from '@mathesar/utils/tables';
   import { Icon, Tooltip } from '@mathesar-component-library';
 
+  import SavedFilters from './record-operations/filter/SavedFilters.svelte';
   import TableFilter from './record-operations/filter/TableFilter.svelte';
   import GroupDropdown from './record-operations/group/GroupDropdown.svelte';
   import HideColumnsDropdown from './record-operations/hide/HideColumnsDropdown.svelte';
@@ -48,6 +49,7 @@
   {#if isSelectable}
     <div class="quick-access">
       <TableFilter />
+      <SavedFilters />
       <SortDropdown {sorting} />
       <GroupDropdown {grouping} />
       <HideColumnsDropdown {hiddenColumns} />

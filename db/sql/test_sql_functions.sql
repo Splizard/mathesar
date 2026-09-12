@@ -10149,3 +10149,128 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_saved_filters() RETURNS SETOF TEXT AS $$
+BEGIN
+  -- A gap, so that a restore would shift the attnums.
+  CREATE TABLE filt_invoices (id integer PRIMARY KEY, junk integer, amount numeric, paid boolean);
+  ALTER TABLE filt_invoices DROP COLUMN junk;
+  PERFORM msar.set_table_saved_filters('filt_invoices'::regclass::oid, $j$[
+    {"name": "Unpaid", "filter": ["g", "and", [["i", "4", "equal", false]]]},
+    {"name": "Big and unpaid", "filter": ["g", "and", [
+      ["i", "4", "equal", false], ["i", "3", "greater", 100]
+    ]]}
+  ]$j$::jsonb);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_saved_filters_round_trip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_saved_filters();
+  RETURN NEXT is(
+    msar.table_saved_filters('filt_invoices'::regclass::oid) -> 0,
+    '{"name": "Unpaid", "filter": ["g", "and", [["i", "4", "equal", false]]]}'::jsonb,
+    'a kept filter comes back as it was given, in the order it was given in'
+  );
+  RETURN NEXT is(
+    (SELECT saved_filters_by_column_name -> 1 -> 'filter' FROM presentation_schema.tables
+     WHERE "table" = 'filt_invoices'::regclass),
+    '["g", "and", [["i", "paid", "equal", false], ["i", "amount", "greater", 100]]]'::jsonb,
+    'and is written down by column name as well'
+  );
+  RETURN NEXT is(
+    msar.table_saved_filters_all() -> ('filt_invoices'::regclass::oid::bigint::text) -> 1 -> 'name',
+    '"Big and unpaid"'::jsonb,
+    'the whole database can be asked at once'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_saved_filters_survive_a_rename() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_saved_filters();
+  PERFORM msar.rename_column('filt_invoices'::regclass::oid, 4, 'settled');
+  RETURN NEXT is(
+    msar.table_saved_filters('filt_invoices'::regclass::oid) -> 0 -> 'filter',
+    '["g", "and", [["i", "4", "equal", false]]]'::jsonb,
+    'renaming a column a kept filter asks about leaves the attnums alone'
+  );
+  RETURN NEXT is(
+    (SELECT saved_filters_by_column_name -> 0 -> 'filter' FROM presentation_schema.tables
+     WHERE "table" = 'filt_invoices'::regclass),
+    '["g", "and", [["i", "settled", "equal", false]]]'::jsonb,
+    'but the names it would be restored by are caught up'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_saved_filters_read_through_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_saved_filters();
+  -- What a restore leaves behind: the same columns by name, the gap closed up.
+  CREATE TABLE filt_invoices_r (id integer PRIMARY KEY, amount numeric, paid boolean);
+  UPDATE presentation_schema.tables
+  SET "table" = 'filt_invoices_r'::regclass
+  WHERE "table" = 'filt_invoices'::regclass;
+  -- Believing the stored attnums would ask about attnum 4, which is not there any more, and about
+  -- attnum 3 for the amount, which is now paid.
+  RETURN NEXT is(
+    msar.table_saved_filters('filt_invoices_r'::regclass::oid) -> 1 -> 'filter',
+    '["g", "and", [["i", "3", "equal", false], ["i", "2", "greater", 100]]]'::jsonb,
+    'every column is walked back by name'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_saved_filters_drop_a_dead_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_saved_filters();
+  RETURN NEXT is(
+    msar.filter_columns_as(
+      'filt_invoices'::regclass::oid,
+      '["g", "and", [["i", "4", "equal", false], ["i", "99", "equal", 1]]]'::jsonb,
+      true
+    ),
+    '["g", "and", [["i", "paid", "equal", false]]]'::jsonb,
+    'a condition on a column that is not there is dropped, and the rest of the group kept'
+  );
+  RETURN NEXT is(
+    msar.filter_columns_as('filt_invoices'::regclass::oid, '["g", "and", []]'::jsonb, true),
+    '["g", "and", []]'::jsonb,
+    'and a group with nothing left in it is still a group'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_saved_filters_share_a_row_with_the_summary() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_saved_filters();
+  PERFORM msar.set_table_record_summary_template(
+    'filt_invoices'::regclass::oid, '[[3]]'::jsonb
+  );
+  PERFORM msar.set_table_record_summary_template('filt_invoices'::regclass::oid, NULL);
+  RETURN NEXT is(
+    jsonb_array_length(msar.table_saved_filters('filt_invoices'::regclass::oid)),
+    2,
+    'clearing the record summary leaves the filters kept alongside it'
+  );
+  PERFORM msar.set_table_saved_filters('filt_invoices'::regclass::oid, NULL);
+  RETURN NEXT is(
+    msar.table_saved_filters('filt_invoices'::regclass::oid),
+    NULL,
+    'and null says none are kept again'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM presentation_schema.tables
+     WHERE "table" = 'filt_invoices'::regclass),
+    0,
+    'with the row going once there is nothing left on it to say'
+  );
+END;
+$f$ LANGUAGE plpgsql;

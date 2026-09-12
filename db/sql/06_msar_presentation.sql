@@ -448,8 +448,26 @@ CREATE TABLE IF NOT EXISTS presentation_schema.tables (
   -- The attnums above are meaningless in a restored database, and unlike a column's attnum they
   -- are buried inside a JSON document, so there is nothing for the row's own identity to fix. This
   -- is the same chain walked by name at each hop instead, kept up to date behind the attnums.
-  record_summary_names jsonb
+  record_summary_names jsonb,
+
+  -- Filters somebody has named and kept, in the order they are offered: an array of objects of the
+  -- filter's own name and the filter itself, in the form the client writes a filter in, where a
+  -- column is named by its attnum as a string.
+  --
+  -- A filter is a question asked of the table often enough to be worth keeping -- the unpaid
+  -- invoices, this year's, mine -- and like everything else here it says how the table is looked at
+  -- rather than what it holds.
+  saved_filters jsonb,
+
+  -- The same filters with each column written as a name, for the same reason as above.
+  saved_filters_by_column_name jsonb
 );
+
+
+-- Added after the table was first created; see the note above presentation_schema.columns.
+ALTER TABLE presentation_schema.tables ADD COLUMN IF NOT EXISTS saved_filters jsonb;
+ALTER TABLE presentation_schema.tables
+  ADD COLUMN IF NOT EXISTS saved_filters_by_column_name jsonb;
 
 
 CREATE OR REPLACE FUNCTION
@@ -622,7 +640,10 @@ Args:
 */
 BEGIN
   IF template IS NULL THEN
-    DELETE FROM presentation_schema.tables WHERE "table" = tab_id::regclass;
+    UPDATE presentation_schema.tables
+    SET record_summary_template = NULL, record_summary_names = NULL
+    WHERE "table" = tab_id::regclass;
+    PERFORM msar.forget_empty_table_presentation(tab_id);
     RETURN;
   END IF;
 
@@ -653,4 +674,171 @@ SET record_summary_names = msar.record_summary_template_as(
   "table"::oid, record_summary_template, true
 )
 WHERE written_against = "table"::oid AND record_summary_template IS NOT NULL;
+$$ LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION
+msar.filter_columns_as(tab_id oid, filter_ jsonb, to_names boolean) RETURNS jsonb AS $$/*
+Rewrite a filter's column references, either to names or back to attnums.
+
+A filter is written as nested arrays: a group is ['g', operator, [args]] and a condition on one
+column is ['i', column, condition, value]. Only the column changes here, and it is a string either
+way, so the shape a client reads is the same in both forms.
+
+A condition whose column leads nowhere is dropped, leaving the rest of the group as it was, which is
+what the client already does with a filter on a column that has been deleted. A group is never
+dropped: an empty one filters nothing, which is what a question with nothing left to ask means.
+
+Args:
+  tab_id: The OID of the table the filter is over.
+  filter_: The filter to rewrite.
+  to_names: Whether to rewrite columns to names, rather than back to attnums.
+*/
+SELECT CASE
+  WHEN filter_ ->> 0 = 'g' THEN jsonb_build_array('g', filter_ -> 1, (
+    SELECT COALESCE(jsonb_agg(rewritten ORDER BY ordinality), '[]'::jsonb)
+    FROM jsonb_array_elements(filter_ -> 2) WITH ORDINALITY AS args(arg, ordinality),
+      LATERAL msar.filter_columns_as(tab_id, arg, to_names) AS rewritten
+    WHERE rewritten IS NOT NULL
+  ))
+  WHEN filter_ ->> 0 = 'i' THEN (
+    SELECT jsonb_build_array('i', to_jsonb(col.name), filter_ -> 2, filter_ -> 3)
+    FROM (
+      SELECT CASE WHEN to_names THEN (
+        SELECT a.attname::text FROM pg_catalog.pg_attribute a
+        WHERE a.attrelid = tab_id AND a.attnum = (filter_ ->> 1)::smallint AND NOT a.attisdropped
+      ) ELSE (
+        SELECT a.attnum::text FROM pg_catalog.pg_attribute a
+        WHERE a.attrelid = tab_id AND a.attname = (filter_ ->> 1)
+          AND a.attnum > 0 AND NOT a.attisdropped
+      ) END AS name
+    ) AS col
+    WHERE col.name IS NOT NULL
+  )
+  ELSE NULL
+END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.saved_filters_as(tab_id oid, filters jsonb, to_names boolean) RETURNS jsonb AS $$/*
+Rewrite every saved filter's column references, either to names or back to attnums.
+
+Args:
+  tab_id: The OID of the table the filters are over.
+  filters: An array of objects of a filter's name and the filter itself.
+  to_names: Whether to rewrite columns to names, rather than back to attnums.
+*/
+SELECT CASE WHEN filters IS NULL THEN NULL ELSE (
+  SELECT COALESCE(jsonb_agg(
+    jsonb_build_object('name', saved.entry -> 'name', 'filter', rewritten) ORDER BY saved.ordinality
+  ), '[]'::jsonb)
+  FROM jsonb_array_elements(filters) WITH ORDINALITY AS saved(entry, ordinality),
+    LATERAL msar.filter_columns_as(tab_id, saved.entry -> 'filter', to_names) AS rewritten
+  WHERE rewritten IS NOT NULL
+) END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_saved_filters(tab_id oid) RETURNS jsonb AS $$/*
+Return the filters kept for this table, in attnums, or null if nobody has kept any.
+
+Which of the two stored forms to believe is the same question as for a record summary, answered the
+same way: while the OID the row was written against is still the table's, the attnums are right and
+the names are only a cache; once it isn't, a restore has moved the attnums and the names are what is
+left to go on.
+
+Args:
+  tab_id: The OID of the table.
+*/
+SELECT CASE
+  WHEN t.written_against = tab_id THEN t.saved_filters
+  ELSE msar.saved_filters_as(tab_id, t.saved_filters_by_column_name, false)
+END
+FROM presentation_schema.tables t
+WHERE t."table" = tab_id::regclass;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_saved_filters_all() RETURNS jsonb AS $$/*
+Return the kept filters of every table that has any, keyed by table OID.
+*/
+SELECT COALESCE(jsonb_object_agg(tab_id, filters), '{}'::jsonb)
+FROM (
+  SELECT
+    t."table"::oid::bigint::text AS tab_id,
+    msar.table_saved_filters(t."table"::oid) AS filters
+  FROM presentation_schema.tables t
+  WHERE t.saved_filters IS NOT NULL
+) AS kept
+WHERE filters IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_table_saved_filters(tab_id oid, filters jsonb) RETURNS void AS $$/*
+Say which filters are kept for this table, replacing whatever was kept before.
+
+Both forms are written at once: the attnums to bind by while the database is live, and the names to
+fall back on once a restore has been through.
+
+Args:
+  tab_id: The OID of the table.
+  filters: An array of objects of a filter's name and the filter itself, with columns given by
+           attnum, or null to keep none.
+*/
+BEGIN
+  IF filters IS NULL OR jsonb_array_length(filters) = 0 THEN
+    UPDATE presentation_schema.tables
+    SET saved_filters = NULL, saved_filters_by_column_name = NULL
+    WHERE "table" = tab_id::regclass;
+    PERFORM msar.forget_empty_table_presentation(tab_id);
+    RETURN;
+  END IF;
+
+  INSERT INTO presentation_schema.tables
+    ("table", written_against, saved_filters, saved_filters_by_column_name)
+  VALUES (
+    tab_id::regclass, tab_id, filters, msar.saved_filters_as(tab_id, filters, true)
+  )
+  ON CONFLICT ("table") DO UPDATE SET
+    written_against = EXCLUDED.written_against,
+    saved_filters = EXCLUDED.saved_filters,
+    saved_filters_by_column_name = EXCLUDED.saved_filters_by_column_name;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.forget_empty_table_presentation(tab_id oid) RETURNS void AS $$/*
+Drop a table's presentation row once there is nothing left on it to say.
+
+The row holds several unrelated things, so clearing one of them is not on its own a reason to
+forget the table.
+
+Args:
+  tab_id: The OID of the table.
+*/
+DELETE FROM presentation_schema.tables
+WHERE "table" = tab_id::regclass
+  AND record_summary_template IS NULL
+  AND saved_filters IS NULL;
+$$ LANGUAGE SQL;
+
+
+CREATE OR REPLACE FUNCTION
+msar.refresh_saved_filter_columns(tab_id oid) RETURNS void AS $$/*
+Bring a table's kept filters' name form back into step with the attnums it is shadowing.
+
+Unlike a record summary, a filter only ever asks about its own table's columns, so a rename reaches
+no further than the one row.
+
+Args:
+  tab_id: The OID of the table whose columns have moved or been renamed.
+*/
+UPDATE presentation_schema.tables
+SET saved_filters_by_column_name = msar.saved_filters_as("table"::oid, saved_filters, true)
+WHERE "table" = tab_id::regclass AND written_against = "table"::oid AND saved_filters IS NOT NULL;
 $$ LANGUAGE SQL;

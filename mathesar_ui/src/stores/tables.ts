@@ -20,6 +20,7 @@ import type { ColumnPatchSpec } from '@mathesar/api/rpc/columns';
 import type {
   NewPkColumnType,
   RawTableWithMetadata,
+  TableMetadata,
 } from '@mathesar/api/rpc/tables';
 import { invalidIf } from '@mathesar/components/form';
 import type { Database } from '@mathesar/models/Database';
@@ -250,8 +251,10 @@ export async function updateTable({
   columnsToDelete,
 }: {
   schema: Schema;
-  table: RecursivePartial<RawTableWithMetadata> & {
+  table: RecursivePartial<Omit<RawTableWithMetadata, 'metadata'>> & {
     oid: RawTableWithMetadata['oid'];
+    /** Each field given is replaced whole rather than merged */
+    metadata?: Partial<TableMetadata>;
   };
   columnPatchSpecs?: ColumnPatchSpec[];
   columnsToDelete?: number[];
