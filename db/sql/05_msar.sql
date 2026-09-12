@@ -3851,9 +3851,14 @@ Give a table the shape of another one: its columns, the constraints among them, 
 fill them in, and how they are shown.
 
 Records are never copied, and neither are indexes that aren't constraints, which say how a table is
-read rather than what it holds. The source's primary key is left behind, along with every column it
-is over and every constraint resting on those columns: the target has a primary key of its own, and
-a second would be neither a key nor primary.
+read rather than what it holds.
+
+The target has a primary key of its own, so the source's is not copied as one. A key the database
+makes up as it goes -- an identity column, or one drawing from a sequence -- is left behind with it,
+along with every constraint resting on it: the number a record happens to have been given is the
+source table's business. A key made of the table's own values is as much a part of its shape as any
+other column, so it is copied, and what it said -- that those values identify a record -- is kept as
+a unique constraint. So is a column whose name the target already has, which is the one it keeps.
 
 Defaults are copied as the expressions they are -- PostgreSQL's own rendering of the source's, not
 anything a caller wrote, which is why they can go in as the SQL they are. The exception is a default
@@ -3871,6 +3876,7 @@ DECLARE
   sch_name text := msar.get_relation_schema_name(tgt_id);
   tab_name text := msar.get_relation_name(tgt_id);
   pkey_cols smallint[];
+  skipped_cols smallint[];
   col RECORD;
   con RECORD;
   add_sql text;
@@ -3878,6 +3884,26 @@ BEGIN
   SELECT COALESCE(conkey, '{}') INTO pkey_cols
   FROM pg_catalog.pg_constraint WHERE conrelid = src_id AND contype = 'p';
   pkey_cols := COALESCE(pkey_cols, '{}');
+
+  SELECT COALESCE(array_agg(att.attnum), '{}') INTO skipped_cols
+  FROM pg_catalog.pg_attribute AS att
+    LEFT JOIN pg_catalog.pg_attrdef AS def
+      ON def.adrelid = att.attrelid AND def.adnum = att.attnum
+  WHERE att.attrelid = src_id AND att.attnum > 0 AND NOT att.attisdropped
+    AND (
+      (
+        att.attnum = ANY(pkey_cols)
+        AND (
+          att.attidentity <> ''
+          OR pg_catalog.pg_get_expr(def.adbin, def.adrelid) LIKE '%nextval(%'
+        )
+      )
+      OR EXISTS (
+        SELECT 1 FROM pg_catalog.pg_attribute AS tgt_att
+        WHERE tgt_att.attrelid = tgt_id AND tgt_att.attname = att.attname
+          AND tgt_att.attnum > 0 AND NOT tgt_att.attisdropped
+      )
+    );
 
   FOR col IN
     SELECT
@@ -3892,7 +3918,7 @@ BEGIN
       LEFT JOIN pg_catalog.pg_attrdef AS def
         ON def.adrelid = att.attrelid AND def.adnum = att.attnum
     WHERE att.attrelid = src_id AND att.attnum > 0 AND NOT att.attisdropped
-      AND NOT att.attnum = ANY(pkey_cols)
+      AND NOT att.attnum = ANY(skipped_cols)
     ORDER BY att.attnum
   LOOP
     add_sql := format('ALTER TABLE %I.%I ADD COLUMN %I %s', sch_name, tab_name, col.attname,
@@ -3920,11 +3946,20 @@ BEGIN
     SELECT pg_catalog.pg_get_constraintdef(oid) AS def
     FROM pg_catalog.pg_constraint
     WHERE conrelid = src_id AND contype = ANY('{c,u,f,x}')
-      AND COALESCE(NOT (conkey && pkey_cols), true)
+      AND COALESCE(NOT (conkey && skipped_cols), true)
     ORDER BY oid
   LOOP
     EXECUTE format('ALTER TABLE %I.%I ADD %s', sch_name, tab_name, con.def);
   END LOOP;
+
+  IF pkey_cols <> '{}' AND NOT (pkey_cols && skipped_cols) THEN
+    EXECUTE format('ALTER TABLE %I.%I ADD UNIQUE (%s)', sch_name, tab_name, (
+      SELECT string_agg(quote_ident(att.attname), ', ' ORDER BY key_col.ord)
+      FROM unnest(pkey_cols) WITH ORDINALITY AS key_col(attnum, ord)
+        JOIN pg_catalog.pg_attribute AS att
+          ON att.attrelid = src_id AND att.attnum = key_col.attnum
+    ));
+  END IF;
 
   -- A trigger names the column it fills in by attnum, so it is made anew rather than copied.
   FOR col IN

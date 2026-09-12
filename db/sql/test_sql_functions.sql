@@ -2258,6 +2258,18 @@ BEGIN
   PERFORM msar.copy_table_structure(
     'tab_create_schema.shapely'::regclass::oid, 'tab_create_schema.likeness'::regclass::oid
   );
+
+  -- A key made of the table's own values rather than one the database made up
+  CREATE TABLE tab_create_schema.natural_key (
+    card text, seen_at timestamp, price numeric, PRIMARY KEY (card, seen_at)
+  );
+  PERFORM msar.add_mathesar_table(
+    'tab_create_schema'::regnamespace::oid, 'natural_likeness', null, null, null, null, null
+  );
+  PERFORM msar.copy_table_structure(
+    'tab_create_schema.natural_key'::regclass::oid,
+    'tab_create_schema.natural_likeness'::regclass::oid
+  );
 END;
 $f$ LANGUAGE plpgsql;
 
@@ -2311,6 +2323,32 @@ BEGIN
       ('f', 'FOREIGN KEY (ticket) REFERENCES tab_create_schema.referent(id)'),
       ('u', 'UNIQUE (label, quantity)')$v$,
     'the copy has the constraints among the columns it copied'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_copy_table_structure_natural_key() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_copy_structure();
+  RETURN NEXT columns_are(
+    'tab_create_schema'::name, 'natural_likeness'::name,
+    ARRAY['id', 'card', 'seen_at', 'price']::name[],
+    'a key made of the table''s own values is copied like any other column'
+  );
+  RETURN NEXT col_is_pk(
+    'tab_create_schema', 'natural_likeness', 'id',
+    'but the copy''s key is still its own'
+  );
+  RETURN NEXT results_eq(
+    $q$SELECT pg_get_constraintdef(oid) FROM pg_catalog.pg_constraint
+    WHERE conrelid = 'tab_create_schema.natural_likeness'::regclass AND contype = 'u'$q$,
+    $v$VALUES ('UNIQUE (card, seen_at)')$v$,
+    'and what the source''s key said is kept as a unique constraint'
+  );
+  RETURN NEXT col_not_null(
+    'tab_create_schema'::name, 'natural_likeness'::name, 'card'::name,
+    'with the columns still needing a value, as a key''s columns do'
   );
 END;
 $f$ LANGUAGE plpgsql;
