@@ -13,6 +13,7 @@ import geometry from './geometry';
 import money from './money';
 import network from './network';
 import number from './number';
+import rangeFactory from './range';
 import string from './string';
 import time from './time';
 import type {
@@ -53,6 +54,7 @@ const compoundDataTypeComponentFactories: Record<
 > = {
   array: arrayFactory(simpleDataTypeComponentFactories),
   composite: compositeFactory(simpleDataTypeComponentFactories),
+  range: rangeFactory(simpleDataTypeComponentFactories),
 };
 
 const dataTypeComponentFactories: Record<CellDataType, CellComponentFactory> = {

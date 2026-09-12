@@ -53,7 +53,8 @@ function getItemDataType(column: ArrayLikeColumn): SimpleCellDataTypes {
     column.metadata,
   );
   const dataType = cellInfo?.type ?? 'string';
-  return dataType === 'array' ? 'string' : dataType;
+  // The values of an array of arrays or of ranges are shown as their text
+  return dataType === 'array' || dataType === 'range' ? 'string' : dataType;
 }
 
 export function hasValuesShownOneByOne(column: ArrayLikeColumn): boolean {

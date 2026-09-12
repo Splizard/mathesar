@@ -6047,6 +6047,35 @@ END;
 $$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_patch_record_with_ranges() RETURNS SETOF TEXT AS $f$
+DECLARE
+  rel_id oid;
+BEGIN
+  CREATE TABLE bookings (id integer PRIMARY KEY, stay tsrange, stays int4multirange);
+  INSERT INTO bookings VALUES (1, NULL, NULL);
+  rel_id := 'bookings'::regclass::oid;
+  -- The bounds the cell inspector writes, as PostgreSQL gives them back
+  PERFORM msar.patch_record_in_table(
+    rel_id, 1, '{"2": "[\"2024-01-01 10:00\",\"2024-01-03 10:00\")", "3": "{[1,3),[10,20)}"}'
+  );
+  RETURN NEXT results_eq(
+    'SELECT stay::text, stays::text FROM bookings',
+    $v$VALUES ('["2024-01-01 10:00:00","2024-01-03 10:00:00")', '{[1,3),[10,20)}')$v$
+  );
+  PERFORM msar.patch_record_in_table(rel_id, 1, '{"2": "empty", "3": "{}"}');
+  RETURN NEXT results_eq(
+    'SELECT stay::text, stays::text FROM bookings',
+    $v$VALUES ('empty', '{}')$v$,
+    'a range holding nothing, and no ranges at all'
+  );
+  PERFORM msar.patch_record_in_table(rel_id, 1, '{"2": "(,)"}');
+  RETURN NEXT is(
+    (SELECT stay::text FROM bookings), '(,)', 'and one bounded neither way'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_patch_record_in_table_single() RETURNS SETOF TEXT AS $$
 DECLARE
   rel_id oid;

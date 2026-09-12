@@ -4,12 +4,18 @@
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import ArrayElements from '@mathesar/components/cell-fabric/data-types/components/array/ArrayElements.svelte';
   import CompositeFields from '@mathesar/components/cell-fabric/data-types/components/composite/CompositeFields.svelte';
+  import RangeBounds from '@mathesar/components/cell-fabric/data-types/components/range/RangeBounds.svelte';
+  import RangeList from '@mathesar/components/cell-fabric/data-types/components/range/RangeList.svelte';
   import { getCellInfo } from '@mathesar/components/cell-fabric/data-types/utils';
   import { getCellCap } from '@mathesar/components/cell-fabric/utils';
   import { parseFileReference } from '@mathesar/components/file-attachments/fileUtils';
   import CellInspector from '@mathesar/components/inspector/cell/CellInspector.svelte';
   import { parseCellId } from '@mathesar/components/sheet/cellIds';
   import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
+  import {
+    getRangeTypesOf,
+    isMultirangeType,
+  } from '@mathesar/stores/abstract-types/ranges';
   import {
     getTabularDataStoreFromContext,
     isPlaceholderRecordRow,
@@ -29,8 +35,8 @@
   $: ({ selectableRowsMap, fileManifests } = recordsData);
 
   /**
-   * The cell the inspector edits value by value: an array's values, or a
-   * composite's fields
+   * The cell the inspector edits part by part: an array's values, a composite's
+   * fields, or the bounds of a range
    */
   $: activePartedCell = (() => {
     const { activeCellId } = $selection;
@@ -40,7 +46,8 @@
     const column = $processedColumns.get(columnId);
     const type = column?.column.type;
     if (!row || !column) return undefined;
-    if (type !== DB_TYPES.ARRAY && type !== DB_TYPES.COMPOSITE) {
+    const rangeTypes = type ? getRangeTypesOf(type) : undefined;
+    if (type !== DB_TYPES.ARRAY && type !== DB_TYPES.COMPOSITE && !rangeTypes) {
       return undefined;
     }
     return {
@@ -49,6 +56,9 @@
       columnId,
       value: row.record[columnId],
       isArray: type === DB_TYPES.ARRAY,
+      /** The type of the range's values, when it holds ranges */
+      rangeValueType: rangeTypes?.value,
+      isMultirange: !!type && isMultirangeType(type),
     };
   })();
 
@@ -77,6 +87,10 @@
     name: field.name,
     columnFabric: getPartColumnFabric(field.name, field.type),
   }));
+  $: boundColumnFabric = getPartColumnFabric(
+    `${activePartedCell?.columnId ?? ''}-bound`,
+    activePartedCell?.rangeValueType ?? 'string',
+  );
 
   /** Arrays of files show each file, as a file column's cells do */
   function getFileManifest(columnId: string, value: unknown) {
@@ -125,9 +139,20 @@
   {@const isProcessing = saveState?.state === 'processing'}
   <div class="parted-cell">
     <header class="header">
-      {cell.isArray ? $_('values') : $_('fields')}
+      {#if cell.rangeValueType}
+        {cell.isMultirange ? $_('ranges') : $_('bounds')}
+      {:else}
+        {cell.isArray ? $_('values') : $_('fields')}
+      {/if}
     </header>
-    {#if cell.isArray}
+    {#if cell.rangeValueType}
+      <svelte:component
+        this={cell.isMultirange ? RangeList : RangeBounds}
+        columnFabric={boundColumnFabric}
+        bind:value
+        disabled={!isEditable || isProcessing}
+      />
+    {:else if cell.isArray}
       <ArrayElements
         {itemColumnFabric}
         bind:value

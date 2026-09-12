@@ -34,7 +34,7 @@ export type SimpleCellDataTypes =
  * those. A composite is also a simple type, whose cells only show its fields,
  * for where one is within an array.
  */
-export type CompoundCellDataTypes = 'array' | 'composite';
+export type CompoundCellDataTypes = 'array' | 'composite' | 'range';
 
 export type CellDataType = SimpleCellDataTypes | CompoundCellDataTypes;
 

@@ -139,7 +139,7 @@ function rangeType(
     getIcon: () => ({ ...iconUiTypeRange, label }),
     defaultDbType,
     cellInfo: {
-      type: 'string',
+      type: 'range',
     },
     getDbConfig,
   };
