@@ -21,7 +21,8 @@ const networkType: CellComponentFactory = {
   }),
   getInput: (column: RawColumnWithMetadata): ComponentAndProps => ({
     component: NetworkInput,
-    props: { holdsMacAddress: holdsMacAddress(column) },
+    // Outside a cell there's room to say what's wrong with what's typed
+    props: { holdsMacAddress: holdsMacAddress(column), showMessage: true },
   }),
   getDisplayFormatter: () => String,
 };

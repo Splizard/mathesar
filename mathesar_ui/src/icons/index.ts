@@ -64,6 +64,7 @@ import {
   faKey,
   faLink,
   faListUl,
+  faLocationCrosshairs,
   faLock,
   faMicrochip,
   faMicroscope,
@@ -215,6 +216,8 @@ export const iconFillOutForm: IconProps = { data: faPlay };
 export const iconDownload: IconProps = { data: faCloudDownloadAlt };
 export const iconSelectMultipleCells: IconProps = { data: faExpand };
 export const iconHideColumn: IconProps = { data: faEyeSlash };
+/** Fill in the IP address the person is connecting from */
+export const iconOwnIpAddress: IconProps = { data: faLocationCrosshairs };
 
 // THINGS
 //
