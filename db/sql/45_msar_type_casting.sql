@@ -2294,3 +2294,220 @@ CREATE OR REPLACE FUNCTION msar.cast_to_datemultirange(anymultirange)
 RETURNS datemultirange AS $$
   SELECT COALESCE(range_agg(msar.cast_to_daterange(r)), '{}'::datemultirange) FROM unnest($1) AS r;
 $$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+
+/*
+Casts between the types of the Binary, IP, and 2D families, which are the ones PostgreSQL itself
+converts between: bits of either kind, an IP address and the network it's in, MAC addresses of
+either size, and the geometric types, where a shape becomes the point at its centre, the box
+around it, and so on.
+
+Each type also casts from itself, since a column is cast even when only its options change.
+*/
+
+-- msar.cast_to_bytea
+
+CREATE OR REPLACE FUNCTION msar.cast_to_bytea(bytea)
+RETURNS bytea AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_bit
+
+CREATE OR REPLACE FUNCTION msar.cast_to_bit(bit)
+RETURNS bit AS $$
+  -- Not `$1::bit`, which would be a cast to bit(1), dropping all but the first bit
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_bit(bit varying)
+RETURNS bit AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_bit_varying
+
+CREATE OR REPLACE FUNCTION msar.cast_to_bit_varying(bit varying)
+RETURNS bit varying AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_bit_varying(bit)
+RETURNS bit varying AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_inet
+
+CREATE OR REPLACE FUNCTION msar.cast_to_inet(inet)
+RETURNS inet AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_inet(cidr)
+RETURNS inet AS $$
+  SELECT $1::inet;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_cidr
+
+CREATE OR REPLACE FUNCTION msar.cast_to_cidr(cidr)
+RETURNS cidr AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_cidr(inet)
+RETURNS cidr AS $$
+BEGIN
+  IF $1 <> $1::cidr::inet THEN
+    RAISE EXCEPTION '% has bits beyond its netmask, so is not a network', $1
+      USING ERRCODE = 'data_exception';
+  END IF;
+  RETURN $1::cidr;
+END;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_macaddr
+
+CREATE OR REPLACE FUNCTION msar.cast_to_macaddr(macaddr)
+RETURNS macaddr AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_macaddr(macaddr8)
+RETURNS macaddr AS $$
+  -- PostgreSQL raises for the addresses that aren't a MAC-48 one made into an EUI-64 one
+  SELECT $1::macaddr;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_macaddr8
+
+CREATE OR REPLACE FUNCTION msar.cast_to_macaddr8(macaddr8)
+RETURNS macaddr8 AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_macaddr8(macaddr)
+RETURNS macaddr8 AS $$
+  SELECT $1::macaddr8;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_point
+
+CREATE OR REPLACE FUNCTION msar.cast_to_point(point)
+RETURNS point AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_point(lseg)
+RETURNS point AS $$
+  SELECT $1::point;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_point(box)
+RETURNS point AS $$
+  SELECT $1::point;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_point(polygon)
+RETURNS point AS $$
+  SELECT $1::point;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_point(circle)
+RETURNS point AS $$
+  SELECT $1::point;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_line
+
+CREATE OR REPLACE FUNCTION msar.cast_to_line(line)
+RETURNS line AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_lseg
+
+CREATE OR REPLACE FUNCTION msar.cast_to_lseg(lseg)
+RETURNS lseg AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_lseg(box)
+RETURNS lseg AS $$
+  SELECT $1::lseg;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_box
+
+CREATE OR REPLACE FUNCTION msar.cast_to_box(box)
+RETURNS box AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_box(point)
+RETURNS box AS $$
+  SELECT $1::box;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_box(polygon)
+RETURNS box AS $$
+  SELECT $1::box;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_box(circle)
+RETURNS box AS $$
+  SELECT $1::box;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_path
+
+CREATE OR REPLACE FUNCTION msar.cast_to_path(path)
+RETURNS path AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_path(polygon)
+RETURNS path AS $$
+  SELECT $1::path;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_polygon
+
+CREATE OR REPLACE FUNCTION msar.cast_to_polygon(polygon)
+RETURNS polygon AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_polygon(path)
+RETURNS polygon AS $$
+  -- PostgreSQL raises for an open path, which isn't the boundary of a polygon
+  SELECT $1::polygon;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_polygon(box)
+RETURNS polygon AS $$
+  SELECT $1::polygon;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_polygon(circle)
+RETURNS polygon AS $$
+  SELECT $1::polygon;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+-- msar.cast_to_circle
+
+CREATE OR REPLACE FUNCTION msar.cast_to_circle(circle)
+RETURNS circle AS $$
+  SELECT $1;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_circle(box)
+RETURNS circle AS $$
+  SELECT $1::circle;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+CREATE OR REPLACE FUNCTION msar.cast_to_circle(polygon)
+RETURNS circle AS $$
+  SELECT $1::circle;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;

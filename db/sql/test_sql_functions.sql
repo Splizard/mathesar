@@ -8895,6 +8895,127 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_cast_between_binary_kinds() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(msar.cast_to_bytea('\x0aff'::bytea), '\x0aff'::bytea);
+  RETURN NEXT is(
+    msar.cast_to_bit_varying(B'101'::bit(3)), B'101'::bit varying, 'bits keep their length'
+  );
+  RETURN NEXT is(msar.cast_to_bit(B'101'::bit varying), B'101'::bit(3));
+  RETURN NEXT is(msar.cast_to_bit(B'101'::bit(3)), B'101'::bit(3));
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_cast_between_ip_kinds() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(msar.cast_to_inet('10.0.0.0/8'::cidr), '10.0.0.0/8'::inet);
+  RETURN NEXT is(msar.cast_to_cidr('10.0.0.0/8'::inet), '10.0.0.0/8'::cidr);
+  RETURN NEXT is(
+    msar.cast_to_cidr('10.1.2.3'::inet), '10.1.2.3/32'::cidr, 'an address is a network of one'
+  );
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.cast_to_cidr('10.1.2.3/8'::inet)$q$,
+    '22000', '10.1.2.3/8 has bits beyond its netmask, so is not a network'
+  );
+  RETURN NEXT is(
+    msar.cast_to_macaddr8('08:00:2b:01:02:03'::macaddr), '08:00:2b:ff:fe:01:02:03'::macaddr8
+  );
+  RETURN NEXT is(
+    msar.cast_to_macaddr('08:00:2b:ff:fe:01:02:03'::macaddr8), '08:00:2b:01:02:03'::macaddr
+  );
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.cast_to_macaddr('08:00:2b:01:02:03:04:05'::macaddr8)$q$,
+    '22003', 'macaddr8 data out of range to convert to macaddr'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_cast_between_2d_kinds() RETURNS SETOF TEXT AS $f$
+BEGIN
+  -- The geometric types compare by area, so we compare the text of the shapes instead
+  RETURN NEXT is(msar.cast_to_box('(1,2)'::point)::text, '(1,2),(1,2)');
+  RETURN NEXT is(
+    msar.cast_to_point('((0,0),(2,2))'::box)::text, '(1,1)', 'a shape becomes its centre'
+  );
+  RETURN NEXT is(msar.cast_to_point('[(0,0),(2,2)]'::lseg)::text, '(1,1)');
+  RETURN NEXT is(msar.cast_to_point('<(1,1),5>'::circle)::text, '(1,1)');
+  RETURN NEXT is(msar.cast_to_lseg('((0,0),(1,1))'::box)::text, '[(1,1),(0,0)]');
+  RETURN NEXT is(
+    msar.cast_to_box('((0,0),(2,0),(2,2))'::polygon)::text,
+    '(2,2),(0,0)',
+    'a polygon becomes the box around it'
+  );
+  RETURN NEXT is(
+    msar.cast_to_polygon('((0,0),(2,2))'::box)::text, '((0,0),(0,2),(2,2),(2,0))'
+  );
+  RETURN NEXT is(
+    msar.cast_to_polygon('((0,0),(2,0),(2,2))'::path)::text, '((0,0),(2,0),(2,2))'
+  );
+  RETURN NEXT is(msar.cast_to_path('((0,0),(2,0),(2,2))'::polygon)::text, '((0,0),(2,0),(2,2))');
+  RETURN NEXT throws_ok(
+    $q$SELECT msar.cast_to_polygon('[(0,0),(2,0),(2,2)]'::path)$q$,
+    '22023', 'open path cannot be converted to polygon'
+  );
+  RETURN NEXT is(
+    msar.cast_to_circle('((0,0),(2,2))'::box)::text, '<(1,1),1.4142135623730951>'
+  );
+  RETURN NEXT is(msar.cast_to_line('{1,-1,0}'::line)::text, '{1,-1,0}');
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_add_columns_of_binary_ip_and_2d_kinds() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE devices (id integer PRIMARY KEY);
+  PERFORM msar.add_columns('devices'::regclass, '[
+    {"name": "data", "type": {"name": "bytea"}},
+    {"name": "flags", "type": {"name": "bit varying"}},
+    {"name": "byte", "type": {"name": "bit", "options": {"precision": 8}}},
+    {"name": "mac", "type": {"name": "macaddr8"}},
+    {"name": "subnet", "type": {"name": "cidr"}},
+    {"name": "area", "type": {"name": "polygon"}},
+    {"name": "spots", "type": {"name": "point", "options": {"array": true}}}
+  ]');
+  RETURN NEXT col_type_is('devices', 'data', 'bytea');
+  RETURN NEXT col_type_is('devices', 'flags', 'bit varying');
+  RETURN NEXT col_type_is('devices', 'byte', 'bit(8)');
+  RETURN NEXT col_type_is('devices', 'mac', 'macaddr8');
+  RETURN NEXT col_type_is('devices', 'subnet', 'cidr');
+  RETURN NEXT col_type_is('devices', 'area', 'polygon');
+  RETURN NEXT col_type_is('devices', 'spots', 'point[]');
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_alter_columns_between_kinds() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE devices (
+    id integer PRIMARY KEY, addr inet, mac macaddr, code bit varying, spot point
+  );
+  INSERT INTO devices VALUES
+    (1, '10.0.0.0/8', '08:00:2b:01:02:03', B'101', '(1,2)'), (2, NULL, NULL, NULL, NULL);
+  PERFORM msar.alter_columns('devices'::regclass, '[
+    {"attnum": 2, "type": {"name": "cidr"}},
+    {"attnum": 3, "type": {"name": "macaddr8"}},
+    {"attnum": 4, "type": {"name": "bit", "options": {"precision": 3}}},
+    {"attnum": 5, "type": {"name": "box"}}
+  ]');
+  RETURN NEXT col_type_is('devices', 'addr', 'cidr');
+  RETURN NEXT col_type_is('devices', 'mac', 'macaddr8');
+  RETURN NEXT col_type_is('devices', 'code', 'bit(3)');
+  RETURN NEXT col_type_is('devices', 'spot', 'box');
+  RETURN NEXT results_eq(
+    'SELECT addr::text, mac::text, code::text, spot::text FROM devices ORDER BY id',
+    $v$VALUES
+      ('10.0.0.0/8', '08:00:2b:ff:fe:01:02:03', '101', '(1,2),(1,2)'),
+      (NULL, NULL, NULL, NULL)$v$
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_add_and_update_array_records() RETURNS SETOF TEXT AS $f$
 DECLARE
   rel_id oid;
