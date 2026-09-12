@@ -14,6 +14,7 @@
     tableInspectorVisible,
   } from '@mathesar/stores/localStorage';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
+  import { tableLayout } from '@mathesar/stores/viewport';
   import { isTableView } from '@mathesar/utils/tables';
   import { Dropdown, Icon, Tooltip } from '@mathesar-component-library';
 
@@ -32,6 +33,13 @@
   $: ({ sorting, grouping, hiddenColumns, sheetState } = meta);
   $: isSelectable = $currentRolePrivileges.has('SELECT');
   $: isView = isTableView(table);
+  /**
+   * Whether this row is where the breadcrumb is fetched from.
+   *
+   * Only on a screen held sideways. Upright, the bar at the top of the page keeps the name and a
+   * button of its own for going elsewhere, so there is nothing here to fetch.
+   */
+  $: hasHeaderToggle = $tableLayout === 'compactSheet';
 
   function toggleTableInspector() {
     tableInspectorVisible.update((v) => !v);
@@ -48,22 +56,26 @@
   one button on the right -- which is where somebody looks for it.
 -->
 <div class="compact-toolbar">
-  <!-- The table's name, and the way to the breadcrumb it came from, which is kept out of the way
-  until it is wanted. Naming the table here is the other half of that: the breadcrumb is what
-  otherwise says which table this is. -->
-  <button
-    type="button"
-    class="reveal"
-    aria-label={table.name}
-    aria-expanded={$compactPageHeaderVisible}
-    on:click={() => compactPageHeaderVisible.update((v) => !v)}
-  >
-    <span class="name">{table.name}</span>
-    <Icon
-      {...$compactPageHeaderVisible ? iconHidePageHeader : iconRevealPageHeader}
-      size="0.8em"
-    />
-  </button>
+  {#if hasHeaderToggle}
+    <!-- The table's name, and the way to the breadcrumb it came from, which is kept out of the
+    way until it is wanted. Naming the table here is the other half of that: the breadcrumb is
+    what otherwise says which table this is. -->
+    <button
+      type="button"
+      class="reveal"
+      aria-label={table.name}
+      aria-expanded={$compactPageHeaderVisible}
+      on:click={() => compactPageHeaderVisible.update((v) => !v)}
+    >
+      <span class="name">{table.name}</span>
+      <Icon
+        {...$compactPageHeaderVisible
+          ? iconHidePageHeader
+          : iconRevealPageHeader}
+        size="0.8em"
+      />
+    </button>
+  {/if}
 
   {#if isSelectable}
     <div class="operations">

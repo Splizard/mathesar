@@ -90,6 +90,17 @@ export const windowHeight = windowSize(
  */
 export const isPortrait = fromMediaQuery('(orientation: portrait)');
 
+/**
+ * Whether the way around is shown the way a phone shows it.
+ *
+ * A breadcrumb is a row of names with the room to read them, which a phone held upright does not
+ * have. Below this the page keeps its name and its logo and puts the trail behind a button.
+ */
+export const navigationIsCompact: Readable<boolean> = derived(
+  [windowWidth, isPortrait],
+  ([width, portrait]) => portrait && width <= compactWidth,
+);
+
 export const tableLayout: Readable<TableLayout> = derived(
   [windowWidth, windowHeight, isPortrait],
   ([width, height, portrait]) =>

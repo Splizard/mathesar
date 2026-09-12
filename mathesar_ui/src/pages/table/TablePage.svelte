@@ -128,7 +128,7 @@
   fitViewport
   restrictWidth={false}
   hideHeader={$tableIsFullScreen ||
-    ($tableLayout !== 'sheet' && !$compactPageHeaderVisible)}
+    ($tableLayout === 'compactSheet' && !$compactPageHeaderVisible)}
 >
   <div
     class="table-page"

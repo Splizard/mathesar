@@ -7,6 +7,7 @@
     iconDocumentation,
     iconDonation,
     iconLogout,
+    iconNavigation,
     iconSettingsMajor,
     iconUser,
   } from '@mathesar/icons';
@@ -21,9 +22,11 @@
   import { databasesStore } from '@mathesar/stores/databases';
   import { getReleaseDataStoreFromContext } from '@mathesar/stores/releases';
   import { getUserProfileStoreFromContext } from '@mathesar/stores/userProfile';
+  import { navigationIsCompact } from '@mathesar/stores/viewport';
   import Feedback from '@mathesar/systems/feedback/Feedback.svelte';
   import { preloadCommonData } from '@mathesar/utils/preloadData';
   import {
+    Button,
     DropdownMenu,
     Icon,
     LinkMenuItem,
@@ -33,6 +36,8 @@
 
   import Breadcrumb from './breadcrumb/Breadcrumb.svelte';
   import { getBreadcrumbItemsFromContext } from './breadcrumb/breadcrumbUtils';
+  import NavigationDrawer from './breadcrumb/NavigationDrawer.svelte';
+  import LogoAndNameWithLink from './LogoAndNameWithLink.svelte';
   import UiThemeSelect from './UiThemeSelect.svelte';
 
   const commonData = preloadCommonData();
@@ -57,6 +62,7 @@
   }
 
   let width = 0;
+  let drawerIsOpen = false;
 
   $: database = $currentDatabase;
   $: upgradable = $releaseDataStore?.value?.upgradeStatus === 'upgradable';
@@ -66,7 +72,24 @@
 
 <header class="app-header" bind:clientWidth={width}>
   <div class="left">
-    <Breadcrumb items={$breadcrumbItems} {compactLayout} />
+    {#if $navigationIsCompact}
+      <!-- A trail of names needs room to be read, and a phone held upright has none. The page
+      keeps its own name, and the trail is behind the button beside it. -->
+      <Button
+        appearance="plain"
+        class="padding-compact"
+        aria-label={$_('open_navigation')}
+        aria-expanded={drawerIsOpen}
+        on:click={() => {
+          drawerIsOpen = true;
+        }}
+      >
+        <Icon {...iconNavigation} />
+      </Button>
+      <LogoAndNameWithLink href="/" />
+    {:else}
+      <Breadcrumb items={$breadcrumbItems} {compactLayout} />
+    {/if}
   </div>
 
   {#if isNormalRoutingContext}
@@ -158,6 +181,8 @@
   {/if}
 </header>
 
+<NavigationDrawer bind:isOpen={drawerIsOpen} items={$breadcrumbItems} />
+
 <style lang="scss">
   .app-header {
     display: flex;
@@ -180,6 +205,7 @@
   .left {
     display: flex;
     align-items: center;
+    gap: var(--sm4);
     overflow: hidden;
   }
 

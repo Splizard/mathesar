@@ -190,6 +190,7 @@ export const iconImportData: IconProps = { data: faUpload };
 export const iconInferColumnType: IconProps = { data: faMicroscope };
 export const iconMoreActions: IconProps = { data: faEllipsisV };
 export const iconTableActions: IconProps = { data: faBars };
+export const iconNavigation: IconProps = { data: faBars };
 export const iconRevealPageHeader: IconProps = { data: faAngleDown };
 export const iconHidePageHeader: IconProps = { data: faAngleUp };
 export const iconShowOnlyTheTable: IconProps = { data: faExpand };
