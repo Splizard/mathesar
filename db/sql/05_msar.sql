@@ -3155,13 +3155,26 @@ col_def should have the form:
     "default": <any> (optional),
     "description": <str> (optional)
   }
+
+A type named "_enum" is a choice of the values in its options' "enum_values", which the column gets
+a type of its own for. See msar.create_column_enum.
 */
 DECLARE
   unique_col_name text;
+  col_type text;
   sanitized_default text;
   created_attnum smallint;
 BEGIN
   unique_col_name = msar.build_unique_column_name(tab_id, coalesce(col_def ->> 'name', 'Column'));
+  IF col_def -> 'type' ->> 'name' = '_enum' THEN
+    -- '_enum' asks for a choice of the values given rather than for a type by name, as it does in
+    -- msar.alter_columns; the column gets one of its own, made along with it.
+    col_type := msar.create_column_enum(
+      tab_id, unique_col_name, col_def -> 'type' -> 'options' -> 'enum_values'
+    );
+  ELSE
+    col_type := msar.build_type_text(col_def -> 'type');
+  END IF;
   sanitized_default = CASE
     WHEN col_def ->> 'default' IS NULL THEN null
     WHEN raw_default THEN col_def ->> 'default'
@@ -3172,7 +3185,7 @@ BEGIN
     msar.get_relation_schema_name(tab_id),
     msar.get_relation_name(tab_id),
     unique_col_name,
-    msar.build_type_text(col_def -> 'type'),
+    col_type,
     CASE WHEN (col_def -> 'not_null')::boolean THEN 'NOT NULL' END,
     'DEFAULT ' || sanitized_default
   );

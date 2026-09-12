@@ -573,6 +573,30 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION
+msar.create_column_enum(tab_id oid, col_name text, vals jsonb) RETURNS text AS $$/*
+Make a choice of values for one column to hold, returning the name to give the column.
+
+Nobody has to name the type: it goes in the table's schema, named after the table and the column,
+and from then on it is the column's own, since nothing else holds its values.
+
+Args:
+  tab_id: The OID of the table the column is in, or is going into.
+  col_name: The name of the column, which the type is named after.
+  vals: The values it may hold, in order, as described in msar.enum_values_given.
+*/
+DECLARE
+  sch_id regnamespace := (SELECT relnamespace FROM pg_catalog.pg_class WHERE oid = tab_id);
+  typ_name text := msar.build_unique_type_name(
+    sch_id, msar.get_relation_name(tab_id) || '_' || col_name
+  );
+BEGIN
+  PERFORM msar.create_enum_type(sch_id, typ_name, vals);
+  RETURN format('%s.%I', sch_id::text, typ_name);
+END;
+$$ LANGUAGE plpgsql STRICT;
+
+
+CREATE OR REPLACE FUNCTION
 msar.set_column_enum(tab_id oid, col_id smallint, vals jsonb) RETURNS text AS $$/*
 Give a column a choice of values, making it a type of its own if it hasn't got one.
 
@@ -597,10 +621,9 @@ DECLARE
   typ_id oid := (
     SELECT atttypid FROM pg_catalog.pg_attribute WHERE attrelid = tab_id AND attnum = col_id
   );
-  sch_id regnamespace := (SELECT relnamespace FROM pg_catalog.pg_class WHERE oid = tab_id);
   was_enum boolean := (SELECT typtype = 'e' FROM pg_catalog.pg_type WHERE oid = typ_id);
   renames jsonb;
-  new_name text;
+  new_type text;
 BEGIN
   IF was_enum AND NOT EXISTS (
     SELECT 1 FROM msar.type_column_users(typ_id) AS user_
@@ -609,11 +632,9 @@ BEGIN
     PERFORM msar.set_enum_values(typ_id, vals);
     RETURN null;
   END IF;
-  new_name := msar.build_unique_type_name(
-    sch_id,
-    msar.get_relation_name(tab_id) || '_' || msar.get_column_name(tab_id, col_id)
+  new_type := msar.create_column_enum(
+    tab_id, msar.get_column_name(tab_id, col_id), vals
   );
-  PERFORM msar.create_enum_type(sch_id, new_name, vals);
   renames := COALESCE((
     SELECT jsonb_object_agg(was, value_)
     FROM msar.enum_values_given(vals) WHERE was IS NOT NULL AND was <> value_
@@ -632,6 +653,6 @@ BEGIN
       msar.get_column_name(tab_id, col_id)
     );
   END IF;
-  RETURN format('%s.%I', sch_id::text, new_name);
+  RETURN new_type;
 END;
 $$ LANGUAGE plpgsql STRICT;

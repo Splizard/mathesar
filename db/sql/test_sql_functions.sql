@@ -10671,3 +10671,49 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_added_with_a_choice() RETURNS SETOF TEXT AS $f$
+DECLARE
+  col_info jsonb;
+BEGIN
+  CREATE TABLE enum_tickets (id integer PRIMARY KEY);
+  PERFORM msar.add_columns('enum_tickets'::regclass::oid, $j$[
+    {"name": "priority", "type": {"name": "_enum", "options": {
+      "enum_values": ["low", "high"]
+    }}}
+  ]$j$::jsonb);
+  col_info := msar.get_column_info('enum_tickets'::regclass) -> 1;
+  RETURN NEXT is(col_info ->> 'type', '_enum', 'a column can be added holding a choice');
+  RETURN NEXT is(
+    col_info -> 'type_options' ->> 'original_type',
+    'enum_tickets_priority',
+    'under a type made along with it and named for it'
+  );
+  RETURN NEXT is(
+    col_info -> 'type_options' -> 'enum_values',
+    '["low", "high"]'::jsonb,
+    'offering the values asked for, in order'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_added_with_a_choice_by_name() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  PERFORM msar.add_columns('enum_days'::regclass::oid, $j$[
+    {"name": "felt_later", "type": {"name": "mood"}}
+  ]$j$::jsonb);
+  RETURN NEXT col_type_is(
+    'enum_days', 'felt_later', 'mood',
+    'a column can also be added holding a choice the schema already has'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_type
+     WHERE typnamespace = 'public'::regnamespace AND typtype = 'e'),
+    1,
+    'which makes no type of its own'
+  );
+END;
+$f$ LANGUAGE plpgsql;

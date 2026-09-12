@@ -1,6 +1,7 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
 
+  import type { RawSchemaType } from '@mathesar/api/rpc/schemas';
   import {
     AbstractTypeName,
     TypeModifiers,
@@ -17,7 +18,16 @@
     isAbstractTypeDisabled,
     withModifiers,
   } from '@mathesar/stores/abstract-types';
+  import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
+  import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
+  import {
+    type EnumValueEntry,
+    getEntries,
+  } from '@mathesar/systems/ontology/enumValues';
+  import EnumValuesInput from '@mathesar/systems/ontology/EnumValuesInput.svelte';
   import { Select, SelectionList } from '@mathesar-component-library';
+
+  import type { ColumnChoice } from './columnChoice';
 
   export let value: TypeChoice = getDefaultTypeChoice();
   export let disabled = false;
@@ -26,6 +36,15 @@
    * whoever is guessing at it can stop.
    */
   export let onUserChoice: (() => void) | undefined = undefined;
+  /**
+   * Told which choice of values the column is to hold while Choice is its
+   * family, and told nothing whenever it isn't.
+   */
+  export let onChoiceChange: ((choice?: ColumnChoice) => void) | undefined =
+    undefined;
+
+  const tabularData = getTabularDataStoreFromContext();
+  $: ({ table } = $tabularData);
 
   // Families are offered, then the kinds of the chosen one, which can hold
   // ranges or arrays of their values
@@ -33,6 +52,37 @@
   $: selected = getKindOf(value);
   $: selectedFamily = families.find((f) => f.family === selected.family);
   $: selectedKind = selectedFamily?.kinds.find((k) => k.kind === selected.kind);
+
+  // A choice of values is a type in its own right rather than one of a fixed
+  // set, so the kinds of the Choice family are the choices this schema has,
+  // along with the offer to make another.
+  $: isChoice = value.abstractType.identifier === abstractTypeCategory.Enum;
+  $: typesFetch = table.schema.constructTypesStore();
+  $: if (isChoice) void typesFetch.runConservatively();
+  $: schemaChoices = ($typesFetch.resolvedValue ?? []).filter(
+    (type) => type.kind === 'enum',
+  );
+  /** The choice the column is to hold, or null for one to be made for it */
+  let schemaChoice: RawSchemaType | null = null;
+  let newChoiceEntries: EnumValueEntry[] = [];
+
+  // The schema's choices arrive after the family is picked, so the first of them
+  // is taken up whenever there is one to take and nothing has been picked yet.
+  let hasPickedChoice = false;
+  $: if (!isChoice) hasPickedChoice = false;
+  $: if (isChoice && !hasPickedChoice) {
+    schemaChoice = schemaChoices[0] ?? null;
+  }
+
+  function getChoice(
+    forChoice: boolean,
+    fromSchema: RawSchemaType | null,
+    entries: EnumValueEntry[],
+  ): ColumnChoice | undefined {
+    if (!forChoice) return undefined;
+    return fromSchema ? { schemaType: fromSchema } : { entries };
+  }
+  $: onChoiceChange?.(getChoice(isChoice, schemaChoice, newChoiceEntries));
 
   function isKindDisabled(option?: KindOption) {
     return option ? isAbstractTypeDisabled(option.abstractType) : false;
@@ -46,7 +96,15 @@
 
   function selectFamily(option: FamilyOption | undefined) {
     if (!option || option === selectedFamily) return;
+    hasPickedChoice = false;
+    newChoiceEntries = getEntries(undefined);
     selectKind(option.kinds.find((k) => !isKindDisabled(k)) ?? option.kinds[0]);
+  }
+
+  function selectSchemaChoice(option: RawSchemaType | null) {
+    hasPickedChoice = true;
+    schemaChoice = option;
+    onUserChoice?.();
   }
 </script>
 
@@ -75,7 +133,33 @@
   </SelectionList>
 </div>
 
-{#if selectedFamily && selectedFamily.family.kinds.length > 1}
+{#if isChoice}
+  <div class="kind">
+    <Select
+      options={[...schemaChoices, null]}
+      value={schemaChoice}
+      getLabel={(option) => option?.name ?? $_('new_choice')}
+      valuesAreEqual={(a, b) => (a?.oid ?? null) === (b?.oid ?? null)}
+      autoSelect="none"
+      on:change={(e) => selectSchemaChoice(e.detail ?? null)}
+      triggerAppearance="default"
+      ariaLabel={$_('kind')}
+      {disabled}
+    />
+  </div>
+  {#if schemaChoice}
+    <!-- What the choice offers, so that picking it by name is not picking blind -->
+    <div class="chips">
+      {#each schemaChoice.values ?? [] as choiceValue}
+        <span class="chip">{choiceValue}</span>
+      {/each}
+    </div>
+  {:else}
+    <div class="values">
+      <EnumValuesInput bind:entries={newChoiceEntries} {disabled} />
+    </div>
+  {/if}
+{:else if selectedFamily && selectedFamily.family.kinds.length > 1}
   <div class="kind">
     <Select
       options={selectedFamily.kinds}
@@ -113,7 +197,20 @@
 
 <style lang="scss">
   .kind,
+  .values,
+  .chips,
   .modifiers:not(:empty) {
     margin-top: var(--sm3);
+  }
+  .chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: var(--sm4);
+  }
+  .chip {
+    font-size: var(--sm1);
+    padding: 0 var(--sm3);
+    border-radius: var(--border-radius-xl);
+    background: var(--color-bg-raised-3);
   }
 </style>

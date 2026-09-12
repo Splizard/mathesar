@@ -23,11 +23,17 @@
     focusTrap,
   } from '@mathesar-component-library';
 
+  import {
+    type ColumnChoice,
+    getChoiceColumnSpec,
+    getChoiceError,
+  } from './columnChoice';
   import ColumnTypeSelector from './ColumnTypeSelector.svelte';
 
   const tabularData = getTabularDataStoreFromContext();
-  $: ({ columnsDataStore } = $tabularData);
+  $: ({ table, columnsDataStore } = $tabularData);
   $: ({ columns } = columnsDataStore);
+  $: ({ name: schemaName } = table.schema);
 
   $: columnName = requiredField('', [columnNameIsAvailable($columns)]);
 
@@ -46,8 +52,31 @@
     columnType.set(guessTypeFromColumnName($columnName) ?? defaultType);
   }
 
+  /**
+   * Which choice of values the column is to hold, while Choice is its type. A
+   * choice is a type of its own rather than one of a fixed set, so it is asked
+   * for alongside the type rather than being settled by it.
+   */
+  let choice: ColumnChoice | undefined = undefined;
+  $: choiceError = choice ? getChoiceError(choice) : undefined;
+
+  /**
+   * Made once, so that the selector's props keep the identity they had. A fresh
+   * object each time this component updated would reach the selector as a
+   * change, and the selector answering it here would be another one.
+   */
+  const typeSelectorProps = {
+    onUserChoice: () => {
+      hasChosenType = true;
+    },
+    onChoiceChange: (c?: ColumnChoice) => {
+      choice = c;
+    },
+  };
+
   function reset() {
     hasChosenType = false;
+    choice = undefined;
     form.reset();
   }
   $: ({ isSubmitting } = form);
@@ -60,6 +89,7 @@
         name: $columnName,
         ...dbOptions,
         type_options: typeOptions,
+        ...(choice ? getChoiceColumnSpec(choice, $schemaName) : {}),
       },
       spec.metadata,
     );
@@ -86,16 +116,14 @@
     <Field field={columnName} label={$_('column_name')} layout="stacked" />
     <Field
       field={columnType}
-      input={{
-        component: ColumnTypeSelector,
-        props: { onUserChoice: () => { hasChosenType = true; } },
-      }}
+      input={{ component: ColumnTypeSelector, props: typeSelectorProps }}
       label={$_('select_type')}
       layout="stacked"
     />
     <div class="submit">
       <FormSubmit
         {form}
+        canProceed={choiceError === undefined}
         proceedButton={{ label: $_('add') }}
         onProceed={() => addColumn(close)}
         onCancel={close}

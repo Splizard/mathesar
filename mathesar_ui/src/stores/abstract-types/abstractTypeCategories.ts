@@ -816,7 +816,6 @@ export function getAllowedAbstractTypesForNewColumn() {
   const typesDisallowedForNewColumnCreation = new Set<string>([
     abstractTypeCategory.JsonArray,
     abstractTypeCategory.JsonObject,
-    abstractTypeCategory.Enum,
   ]);
 
   return [
