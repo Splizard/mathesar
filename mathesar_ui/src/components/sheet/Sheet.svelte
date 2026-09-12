@@ -7,7 +7,10 @@
     getClipboardHandlerStoreFromContext,
   } from '@mathesar/stores/clipboard';
   import { getModifierKeyCombo } from '@mathesar/utils/pointerUtils';
-  import type { ClientPosition } from '@mathesar-component-library';
+  import {
+    type ClientPosition,
+    isTextEntry,
+  } from '@mathesar-component-library';
   import {
     ImmutableMap,
     ImmutableSet,
@@ -238,6 +241,9 @@
   function handleContextMenu(event: MouseEvent) {
     if (!onCellContextMenu) return;
     const target = event.target as HTMLElement;
+    // A right-click in a field being edited is the browser's: that menu is
+    // where the spelling suggestions and the clipboard are.
+    if (isTextEntry(target)) return;
     const targetCell = findContainingSheetCell(target);
     if (!targetCell) return;
     const state = onCellContextMenu({

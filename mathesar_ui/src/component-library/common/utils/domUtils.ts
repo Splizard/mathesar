@@ -32,3 +32,37 @@ export function blurElement(element: unknown): void {
     element.blur();
   }
 }
+
+/**
+ * The `type` values of an `input` the user types into, as against the ones
+ * that are really buttons or pickers.
+ */
+const textEntryInputTypes = new Set([
+  'text',
+  'search',
+  'url',
+  'tel',
+  'email',
+  'password',
+  'number',
+]);
+
+/**
+ * Whether the element is somewhere the user writes: a text input, a text area,
+ * or anything made editable. A right-click there belongs to the browser, whose
+ * menu holds the spelling suggestions and the clipboard, and not to whatever
+ * the field happens to sit inside.
+ */
+export function isTextEntry(element: unknown): boolean {
+  if (!(element instanceof HTMLElement)) return false;
+  if (element instanceof HTMLTextAreaElement) return true;
+  if (element instanceof HTMLInputElement) {
+    return textEntryInputTypes.has(element.type);
+  }
+  // Editability is inherited, and the nearest one to say either way wins. Read
+  // from the attribute rather than `isContentEditable`, which jsdom lacks.
+  const declared = element.closest('[contenteditable]');
+  if (!declared) return false;
+  const value = declared.getAttribute('contenteditable');
+  return value === '' || value === 'true' || value === 'plaintext-only';
+}
