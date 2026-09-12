@@ -238,7 +238,9 @@ TODO: Resolve code duplication between this file and RecordViewContent.svelte.
 
   .fields {
     display: grid;
-    grid-template-columns: auto 1fr;
+    /* minmax(0, ...) so that a field too wide to fit is scrolled or cut short inside its own
+    column rather than widening the column past the page. */
+    grid-template-columns: auto minmax(0, 1fr);
   }
   .submit {
     --form-submit-margin: 2rem 0 0 0;
@@ -247,6 +249,17 @@ TODO: Resolve code duplication between this file and RecordViewContent.svelte.
     margin: 0 var(--sm1) var(--lg1) var(--sm1);
   }
 
+  /* A name beside its field wants about fifteen characters of room and leaves the rest to the
+  field. Below this there is not enough for both, so each field is one column: the name, and
+  under it the field, the width of the page. */
+  @media (max-width: 40rem) {
+    .fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .record-page-header {
+      --page-padding-x: var(--lg1);
+    }
+  }
   @media (max-width: 38rem) {
     .responsive-label {
       display: none;

@@ -281,4 +281,26 @@
     left: 0.8rem;
     pointer-events: none;
   }
+
+  /* Narrow enough that a name beside its field leaves the field too little to be typed in, so
+  the name goes above it instead. The two are then one thing down the page rather than two
+  across it: the line under a field is what separates one from the next, and a line between a
+  name and its own field would say they were different things. */
+  @media (max-width: 40rem) {
+    .direct-field:not(:last-child) .left {
+      padding-bottom: 0;
+      margin-bottom: 0.35rem;
+      border-bottom: none;
+    }
+
+    .left {
+      justify-content: flex-start;
+      padding-right: 0;
+    }
+
+    .complex-label {
+      max-width: 100%;
+      width: 100%;
+    }
+  }
 </style>

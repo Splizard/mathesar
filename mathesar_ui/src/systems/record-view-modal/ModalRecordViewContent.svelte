@@ -138,7 +138,16 @@ TODO: Resolve code duplication between this file and RecordPageContent.svelte.
   }
   .fields {
     display: grid;
-    grid-template-columns: auto 1fr;
+    /* minmax(0, ...) so that a field too wide to fit is kept inside its own column rather than
+    widening the column past what is holding it. */
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  /* The same switch the record's own page makes, for the same reason: below this there is not
+  room for a name beside its field. */
+  @media (max-width: 40rem) {
+    .fields {
+      grid-template-columns: minmax(0, 1fr);
+    }
   }
   .submit {
     margin-top: 2rem;
