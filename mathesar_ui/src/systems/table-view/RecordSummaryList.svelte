@@ -6,6 +6,11 @@
   import type { Table } from '@mathesar/models/Table';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { currentTablesMap } from '@mathesar/stores/tables';
+  import RecordSummaryCard from '@mathesar/systems/record-summary-card/RecordSummaryCard.svelte';
+  import {
+    cardHasAnything,
+    renderCard,
+  } from '@mathesar/systems/record-summary-card/renderCard';
   import RecordStore from '@mathesar/systems/record-view/RecordStore';
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
   import { Button, Icon, Spinner } from '@mathesar-component-library';
@@ -15,18 +20,30 @@
   const tabularData = getTabularDataStoreFromContext();
   const modalRecordView = modalRecordViewContext.get();
 
-  $: ({ recordsData, isLoading, canInsertRecords } = $tabularData);
-  $: ({ selectableRowsMap, recordSummaries } = recordsData);
+  $: ({ recordsData, isLoading, canInsertRecords, processedColumns } =
+    $tabularData);
+  $: ({ selectableRowsMap, recordSummaries, linkedRecordSummaries } =
+    recordsData);
+  /** How a record of this table is shown as a card, when somebody has said */
+  $: card = table.metadata?.record_summary_card ?? undefined;
   /**
    * One entry per record on the page: what it is called, and the record it stands for. A record
    * with nothing to call it is shown by its key, which is at least something to tap.
    */
-  $: entries = [...$selectableRowsMap].map(([rowKey]) => {
+  $: entries = [...$selectableRowsMap].map(([rowKey, row]) => {
     const recordId = $tabularData.getRecordIdFromRowId(rowKey);
     const key = recordId === undefined ? undefined : String(recordId);
+    const filled = renderCard(card, {
+      values: row.record,
+      linkedSummaries: (attnum, value) =>
+        $linkedRecordSummaries.get(String(attnum))?.get(String(value)),
+      format: (attnum, value) =>
+        $processedColumns.get(String(attnum))?.formatCellValue(value) ?? '',
+    });
     return {
       rowKey,
       recordId,
+      card: cardHasAnything(filled) ? filled : undefined,
       summary: (key && $recordSummaries.get(key)) || key || '?',
     };
   });
@@ -61,7 +78,11 @@
         <li>
           <button type="button" on:click={() => open(entry.recordId)}>
             <Icon {...iconRecord} />
-            <span class="summary">{entry.summary}</span>
+            {#if entry.card}
+              <RecordSummaryCard card={entry.card} />
+            {:else}
+              <span class="summary">{entry.summary}</span>
+            {/if}
           </button>
         </li>
       {/each}

@@ -51,6 +51,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
         metadata, "get_table_column_orders", lambda conn: {1234: [8, 9, 10]}
     )
     monkeypatch.setattr(metadata, "get_table_record_summary_templates", lambda conn: {})
+    monkeypatch.setattr(metadata, "get_table_record_summary_cards", lambda conn: {})
     monkeypatch.setattr(metadata, "get_table_saved_filters_all", lambda conn: {})
 
     expect_metadata_list = [
@@ -62,6 +63,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
             import_verified=True,
             column_order=[8, 9, 10],
             record_summary_template=None,
+            record_summary_card=None,
             saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
@@ -74,6 +76,7 @@ def test_tables_meta_data_list(rf, monkeypatch):
             import_verified=False,
             column_order=None,
             record_summary_template=None,
+            record_summary_card=None,
             saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
@@ -100,6 +103,7 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
     monkeypatch.setattr(
         metadata, "get_table_record_summary_templates", lambda conn: {"4567": [[3]]}
     )
+    monkeypatch.setattr(metadata, "get_table_record_summary_cards", lambda conn: {})
     monkeypatch.setattr(
         metadata,
         "get_table_saved_filters_all",
@@ -116,6 +120,7 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
             import_verified=None,
             column_order=[3, 1, 2],
             record_summary_template=[[3]],
+            record_summary_card=None,
             saved_filters=None,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
@@ -129,6 +134,7 @@ def test_tables_meta_data_list_includes_order_only_tables(rf, monkeypatch):
             import_verified=None,
             column_order=None,
             record_summary_template=None,
+            record_summary_card=None,
             saved_filters=[{"name": "Unpaid", "filter": ["g", "and", []]}],
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,

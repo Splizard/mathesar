@@ -142,6 +142,50 @@ def set_table_record_summary_template(conn, table_oid, template):
     )
 
 
+def get_table_record_summary_card(conn, table_oid):
+    """
+    Return how a record of this table should be shown as a card, or None if nobody has said.
+
+    Column references come back as chains of attnums, whatever form they are stored in.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'table_record_summary_card', table_oid
+    ).fetchone()[0]
+
+
+def get_table_record_summary_cards(conn):
+    """
+    Return every table's record summary card in the database, keyed by table OID as a string.
+
+    A card is up to three templates -- primary, secondary and aside -- each shaped like a record
+    summary template. Keyed by string for the same reason the templates are.
+
+    Args:
+        conn: a psycopg connection to the user's database
+    """
+    return db_conn.exec_msar_func(conn, 'table_record_summary_cards').fetchone()[0]
+
+
+def set_table_record_summary_card(conn, table_oid, card):
+    """
+    Say how a record of this table should be shown as a card.
+
+    Args:
+        conn: a psycopg connection to the user's database
+        table_oid: The OID of the table.
+        card: The card, with column references as chains of attnums, or None to say nothing
+            about it.
+    """
+    db_conn.exec_msar_func(
+        conn, 'set_table_record_summary_card', table_oid,
+        json.dumps(card) if card is not None else None
+    )
+
+
 def get_table_saved_filters(conn, table_oid):
     """
     Return the filters kept for this table, or None if nobody has kept any.

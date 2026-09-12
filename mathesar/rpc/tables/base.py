@@ -27,6 +27,8 @@ from mathesar.rpc.constraints import CreatableConstraintInfo
 from db.presentation import (
     get_table_column_order,
     get_table_column_orders,
+    get_table_record_summary_card,
+    get_table_record_summary_cards,
     get_table_record_summary_template,
     get_table_record_summary_templates,
     get_table_saved_filters,
@@ -460,6 +462,10 @@ def list_with_metadata(*, schema_oid: int, database_id: int, **kwargs) -> list:
             int(oid): template
             for oid, template in get_table_record_summary_templates(conn).items()
         }
+        cards = {
+            int(oid): card
+            for oid, card in get_table_record_summary_cards(conn).items()
+        }
         saved_filters = get_table_saved_filters_all(conn)
 
     metadata_records = list_tables_meta_data(database_id)
@@ -469,19 +475,23 @@ def list_with_metadata(*, schema_oid: int, database_id: int, **kwargs) -> list:
             column_orders.pop(r.table_oid, None),
             summaries.pop(r.table_oid, None),
             saved_filters.pop(r.table_oid, None),
+            cards.pop(r.table_oid, None),
         )
         for r in metadata_records
     }
     # A table Mathesar has nothing of its own to say about may still have had its columns
-    # arranged, been given a summary, or had a filter kept for it; all of that lives in the
-    # user's database rather than here.
+    # arranged, been given a summary or a card, or had a filter kept for it; all of that lives in
+    # the user's database rather than here.
     metadata_map.update({
         table_oid: TableMetaDataBlob.from_presentation(
             column_orders.get(table_oid),
             summaries.get(table_oid),
             saved_filters.get(table_oid),
+            cards.get(table_oid),
         )
-        for table_oid in column_orders.keys() | summaries.keys() | saved_filters.keys()
+        for table_oid in (
+            column_orders.keys() | summaries.keys() | saved_filters.keys() | cards.keys()
+        )
     })
 
     return [table | {"metadata": metadata_map.get(table["oid"])} for table in tables]
@@ -504,11 +514,12 @@ def get_with_metadata(*, table_oid: int, database_id: int, **kwargs) -> dict:
         table = get_table(table_oid, conn)
         column_order = get_table_column_order(conn, table_oid)
         summary = get_table_record_summary_template(conn, table_oid)
+        card = get_table_record_summary_card(conn, table_oid)
         kept_filters = get_table_saved_filters(conn, table_oid)
 
     raw_metadata = get_table_meta_data(table_oid, database_id)
     return TableInfo(table) | {
         "metadata": TableMetaDataBlob.from_model(
-            raw_metadata, column_order, summary, kept_filters
+            raw_metadata, column_order, summary, kept_filters, card
         )
     }

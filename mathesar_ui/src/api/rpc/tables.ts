@@ -49,6 +49,22 @@ export type RecordSummaryTemplatePart = string | number[];
 export type RecordSummaryTemplate = RecordSummaryTemplatePart[];
 
 /**
+ * How a record is shown as a card rather than written out in a sentence.
+ *
+ * A sentence has to say everything on one line, which for three things worth
+ * knowing about a record means punctuation standing in for layout. A card puts
+ * each one where it belongs: the primary is what the record is called, the
+ * secondary sits under it, and the aside sits off to the side. Each slot is
+ * shaped exactly like a `RecordSummaryTemplate`, and only the primary is
+ * needed.
+ */
+export interface RecordSummaryCard {
+  primary: RecordSummaryTemplate;
+  secondary?: RecordSummaryTemplate;
+  aside?: RecordSummaryTemplate;
+}
+
+/**
  * A filter somebody has named and kept for a table.
  *
  * The filter itself is the terse form the table view writes a filter in, where
@@ -76,6 +92,7 @@ export interface TableMetadata {
   import_verified: boolean | null;
   column_order: number[] | null;
   record_summary_template: RecordSummaryTemplate | null;
+  record_summary_card: RecordSummaryCard | null;
   /**
    * Filters kept for the table, in the order they are offered. Setting them
    * replaces the lot: an empty list or null keeps none.

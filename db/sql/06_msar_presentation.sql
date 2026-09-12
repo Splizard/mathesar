@@ -488,6 +488,21 @@ CREATE TABLE IF NOT EXISTS presentation_schema.tables (
 
 -- Added after the table was first created; see the note above presentation_schema.columns.
 ALTER TABLE presentation_schema.tables ADD COLUMN IF NOT EXISTS saved_filters jsonb;
+
+-- How a record of this table is shown as a card rather than written out in a sentence: an object
+-- of up to three templates, each one of them shaped exactly like record_summary_template above.
+--
+--   {"primary": [...], "secondary": [...], "aside": [...]}
+--
+-- A sentence has to say everything in one line, which for three things worth knowing about a
+-- record means punctuation standing in for layout. A card puts each one where it belongs: the
+-- primary is what the record is called, the secondary sits under it, and the aside sits off to
+-- the side. Only the primary is needed.
+ALTER TABLE presentation_schema.tables ADD COLUMN IF NOT EXISTS record_summary_card jsonb;
+
+-- The same references written as column names, for the same reason as above.
+ALTER TABLE presentation_schema.tables
+  ADD COLUMN IF NOT EXISTS record_summary_card_names jsonb;
 ALTER TABLE presentation_schema.tables
   ADD COLUMN IF NOT EXISTS saved_filters_by_column_name jsonb;
 
@@ -683,6 +698,95 @@ $$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION
+msar.record_summary_card_as(tab_id oid, card jsonb, to_names boolean) RETURNS jsonb AS $$/*
+Rewrite a record summary card's column references, either to names or back to attnums.
+
+A card is up to three templates, so this is that rewrite done to each of them. A slot the card
+leaves out stays left out rather than becoming null.
+
+Args:
+  tab_id: The OID of the table the card belongs to.
+  card: The card to rewrite.
+  to_names: Whether to rewrite references to names, rather than back to attnums.
+*/
+SELECT CASE WHEN card IS NULL THEN NULL ELSE (
+  SELECT COALESCE(jsonb_object_agg(
+    slot, msar.record_summary_template_as(tab_id, template, to_names)
+  ), '{}'::jsonb)
+  FROM jsonb_each(card) AS c(slot, template)
+  WHERE jsonb_typeof(template) = 'array'
+) END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_record_summary_card(tab_id oid) RETURNS jsonb AS $$/*
+Return how a record of this table should be shown as a card, in attnums, or null if nobody said.
+
+Which of the two stored forms to believe is the same question as for the template, answered the
+same way.
+
+Args:
+  tab_id: The OID of the table.
+*/
+SELECT CASE
+  WHEN t.written_against = tab_id THEN t.record_summary_card
+  ELSE msar.record_summary_card_as(tab_id, t.record_summary_card_names, false)
+END
+FROM presentation_schema.tables t
+WHERE t."table" = tab_id::regclass;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.table_record_summary_cards() RETURNS jsonb AS $$/*
+Return every table's record summary card in the database, keyed by table OID.
+*/
+SELECT COALESCE(jsonb_object_agg(tab_id, card), '{}'::jsonb)
+FROM (
+  SELECT
+    t."table"::oid::bigint::text AS tab_id,
+    msar.table_record_summary_card(t."table"::oid) AS card
+  FROM presentation_schema.tables t
+  WHERE t.record_summary_card IS NOT NULL
+) AS cards
+WHERE card IS NOT NULL;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_table_record_summary_card(tab_id oid, card jsonb) RETURNS void AS $$/*
+Say how a record of this table should be shown as a card.
+
+Both forms are written at once, for the same reason the template writes both.
+
+Args:
+  tab_id: The OID of the table.
+  card: The card, with column references as chains of attnums, or null to say nothing.
+*/
+BEGIN
+  IF card IS NULL OR card = '{}'::jsonb THEN
+    UPDATE presentation_schema.tables
+    SET record_summary_card = NULL, record_summary_card_names = NULL
+    WHERE "table" = tab_id::regclass;
+    PERFORM msar.forget_empty_table_presentation(tab_id);
+    RETURN;
+  END IF;
+
+  INSERT INTO presentation_schema.tables
+    ("table", written_against, record_summary_card, record_summary_card_names)
+  VALUES (
+    tab_id::regclass, tab_id, card, msar.record_summary_card_as(tab_id, card, true)
+  )
+  ON CONFLICT ("table") DO UPDATE SET
+    written_against = EXCLUDED.written_against,
+    record_summary_card = EXCLUDED.record_summary_card,
+    record_summary_card_names = EXCLUDED.record_summary_card_names;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
 msar.refresh_record_summary_names() RETURNS void AS $$/*
 Bring every stored template's name form back into step with the attnums it is shadowing.
 
@@ -692,10 +796,15 @@ rewriting the lot. There is one row per table anybody has written a summary for,
 not something that happens in a loop.
 */
 UPDATE presentation_schema.tables
-SET record_summary_names = msar.record_summary_template_as(
-  "table"::oid, record_summary_template, true
-)
-WHERE written_against = "table"::oid AND record_summary_template IS NOT NULL;
+SET
+  record_summary_names = msar.record_summary_template_as(
+    "table"::oid, record_summary_template, true
+  ),
+  record_summary_card_names = msar.record_summary_card_as(
+    "table"::oid, record_summary_card, true
+  )
+WHERE written_against = "table"::oid
+  AND (record_summary_template IS NOT NULL OR record_summary_card IS NOT NULL);
 $$ LANGUAGE SQL;
 
 
@@ -846,6 +955,7 @@ Args:
 DELETE FROM presentation_schema.tables
 WHERE "table" = tab_id::regclass
   AND record_summary_template IS NULL
+  AND record_summary_card IS NULL
   AND saved_filters IS NULL;
 $$ LANGUAGE SQL;
 

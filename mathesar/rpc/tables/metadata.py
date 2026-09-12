@@ -7,9 +7,11 @@ from modernrpc.core import REQUEST_KEY
 
 from db.presentation import (
     get_table_column_orders,
+    get_table_record_summary_cards,
     get_table_record_summary_templates,
     get_table_saved_filters_all,
     set_table_column_order,
+    set_table_record_summary_card,
     set_table_record_summary_template,
     set_table_saved_filters,
 )
@@ -32,6 +34,9 @@ class TableMetaDataRecord(TypedDict):
         import_verified: Specifies whether a file has been successfully imported into a table.
         column_order: The order in which columns of a table are displayed.
         record_summary_template: The record summary template.
+        record_summary_card: How a record is shown as a card rather than written out in a
+            sentence: an object of up to three templates, keyed `primary`, `secondary` and
+            `aside`, each shaped like `record_summary_template`. Only `primary` is needed.
         saved_filters: Filters somebody has named and kept for the table, in the order they are
             offered, each a dict of the filter's `name` and the `filter` itself.
         mathesar_added_pkey_attnum: The attnum of the most recently-set pkey column.
@@ -46,13 +51,15 @@ class TableMetaDataRecord(TypedDict):
     import_verified: Optional[bool]
     column_order: Optional[list[int]]
     record_summary_template: Optional[dict[str, Union[str, list[int]]]]
+    record_summary_card: Optional[dict[str, list[Union[str, list[int]]]]]
     saved_filters: Optional[list[dict]]
     mathesar_added_pkey_attnum: Optional[int]
     user_tracking_attnum: Optional[int]
 
     @classmethod
     def from_model(
-        cls, model, column_order=None, record_summary_template=None, saved_filters=None
+        cls, model, column_order=None, record_summary_template=None, saved_filters=None,
+        record_summary_card=None
     ):
         return cls(
             id=model.id,
@@ -62,6 +69,7 @@ class TableMetaDataRecord(TypedDict):
             import_verified=model.import_verified,
             column_order=column_order,
             record_summary_template=record_summary_template,
+            record_summary_card=record_summary_card,
             saved_filters=saved_filters,
             mathesar_added_pkey_attnum=model.mathesar_added_pkey_attnum,
             user_tracking_attnum=model.user_tracking_attnum,
@@ -69,7 +77,8 @@ class TableMetaDataRecord(TypedDict):
 
     @classmethod
     def from_presentation(
-        cls, database_id, table_oid, column_order, record_summary_template, saved_filters
+        cls, database_id, table_oid, column_order, record_summary_template, saved_filters,
+        record_summary_card=None
     ):
         """
         Build a record for a table whose metadata is all in the user's own database.
@@ -86,6 +95,7 @@ class TableMetaDataRecord(TypedDict):
             import_verified=None,
             column_order=column_order,
             record_summary_template=record_summary_template,
+            record_summary_card=record_summary_card,
             saved_filters=saved_filters,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
@@ -101,6 +111,8 @@ class TableMetaDataBlob(TypedDict):
         import_verified: Specifies whether a file has been successfully imported into a table.
         column_order: The order in which columns of a table are displayed.
         record_summary_template: The record summary template
+        record_summary_card: How a record is shown as a card rather than written out in a
+            sentence; see TableMetaDataRecord.
         saved_filters: Filters somebody has named and kept for the table, in the order they are
             offered, each a dict of the filter's `name` and the `filter` itself. The list given
             replaces whatever was kept before; an empty list or null keeps none.
@@ -111,26 +123,32 @@ class TableMetaDataBlob(TypedDict):
     import_verified: Optional[bool]
     column_order: Optional[list[int]]
     record_summary_template: Optional[dict[str, Union[str, list[int]]]]
+    record_summary_card: Optional[dict[str, list[Union[str, list[int]]]]]
     saved_filters: Optional[list[dict]]
     mathesar_added_pkey_attnum: Optional[int]
     user_tracking_attnum: Optional[int]
 
     @classmethod
     def from_model(
-        cls, model, column_order=None, record_summary_template=None, saved_filters=None
+        cls, model, column_order=None, record_summary_template=None, saved_filters=None,
+        record_summary_card=None
     ):
         return cls(
             data_file_id=model.data_file_id,
             import_verified=model.import_verified,
             column_order=column_order,
             record_summary_template=record_summary_template,
+            record_summary_card=record_summary_card,
             saved_filters=saved_filters,
             mathesar_added_pkey_attnum=model.mathesar_added_pkey_attnum,
             user_tracking_attnum=model.user_tracking_attnum,
         )
 
     @classmethod
-    def from_presentation(cls, column_order, record_summary_template, saved_filters=None):
+    def from_presentation(
+        cls, column_order, record_summary_template, saved_filters=None,
+        record_summary_card=None
+    ):
         """
         Build a blob for a table whose metadata is all in the user's own database.
 
@@ -143,6 +161,7 @@ class TableMetaDataBlob(TypedDict):
             import_verified=None,
             column_order=column_order,
             record_summary_template=record_summary_template,
+            record_summary_card=record_summary_card,
             saved_filters=saved_filters,
             mathesar_added_pkey_attnum=None,
             user_tracking_attnum=None,
@@ -167,6 +186,10 @@ def list_(*, database_id: int, **kwargs) -> list[TableMetaDataRecord]:
             int(table_oid): template
             for table_oid, template in get_table_record_summary_templates(conn).items()
         }
+        cards = {
+            int(table_oid): card
+            for table_oid, card in get_table_record_summary_cards(conn).items()
+        }
         saved_filters = get_table_saved_filters_all(conn)
     table_meta_data = list_tables_meta_data(database_id)
     records = [
@@ -175,11 +198,12 @@ def list_(*, database_id: int, **kwargs) -> list[TableMetaDataRecord]:
             column_orders.pop(model.table_oid, None),
             summaries.pop(model.table_oid, None),
             saved_filters.pop(model.table_oid, None),
+            cards.pop(model.table_oid, None),
         )
         for model in table_meta_data
     ]
-    # A table Mathesar has no row of its own for may still have been arranged, given a summary, or
-    # had a filter kept for it.
+    # A table Mathesar has no row of its own for may still have been arranged, given a summary or
+    # a card, or had a filter kept for it.
     return records + [
         TableMetaDataRecord.from_presentation(
             database_id,
@@ -187,8 +211,11 @@ def list_(*, database_id: int, **kwargs) -> list[TableMetaDataRecord]:
             column_orders.get(table_oid),
             summaries.get(table_oid),
             saved_filters.get(table_oid),
+            cards.get(table_oid),
         )
-        for table_oid in column_orders.keys() | summaries.keys() | saved_filters.keys()
+        for table_oid in (
+            column_orders.keys() | summaries.keys() | saved_filters.keys() | cards.keys()
+        )
     ]
 
 
@@ -208,7 +235,9 @@ def set_(
     # The order lives with the columns it orders, the summary with the columns it reads and a kept
     # filter with the columns it asks about, all in the user's database; the rest is Mathesar's own
     # bookkeeping and stays here.
-    in_user_database = {"column_order", "record_summary_template", "saved_filters"}
+    in_user_database = {
+        "column_order", "record_summary_template", "record_summary_card", "saved_filters"
+    }
     if in_user_database & metadata.keys():
         user = kwargs.get(REQUEST_KEY).user
         with connect(database_id, user) as conn:
@@ -217,6 +246,10 @@ def set_(
             if "record_summary_template" in metadata:
                 set_table_record_summary_template(
                     conn, table_oid, metadata.pop("record_summary_template")
+                )
+            if "record_summary_card" in metadata:
+                set_table_record_summary_card(
+                    conn, table_oid, metadata.pop("record_summary_card")
                 )
             if "saved_filters" in metadata:
                 set_table_saved_filters(conn, table_oid, metadata.pop("saved_filters"))

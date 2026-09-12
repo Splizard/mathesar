@@ -21,6 +21,7 @@
   import { Help, Spinner, defined } from '@mathesar-component-library';
 
   import Preview from './Preview.svelte';
+  import RecordSummaryCardConfig from './RecordSummaryCardConfig.svelte';
   import Template from './Template.svelte';
   import { TemplateConfig } from './TemplateConfig';
 
@@ -118,6 +119,10 @@
       initiallyHidden
       size="small"
     />
+
+    <!-- Kept and saved on its own, so that saying how a record is shown as a card is not also
+    saying something about how it is written out in a sentence. -->
+    <RecordSummaryCardConfig {table} {processedColumns} {onSave} />
   {/if}
 </div>
 

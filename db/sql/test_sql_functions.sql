@@ -11528,3 +11528,148 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+-- RECORD SUMMARY CARDS ---------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION __setup_summary_card() RETURNS void AS $$
+BEGIN
+  -- Gaps on both tables, so that a restore would shift the attnums of each.
+  CREATE TABLE card_authors (id integer PRIMARY KEY, scratch integer, name text);
+  ALTER TABLE card_authors DROP COLUMN scratch;
+  CREATE TABLE card_books (
+    id integer PRIMARY KEY, junk integer, title text, author_id integer REFERENCES card_authors(id),
+    shelf text
+  );
+  ALTER TABLE card_books DROP COLUMN junk;
+  -- The title, with the author under it and the shelf off to the side. The secondary walks the
+  -- foreign key, as a template part may.
+  PERFORM msar.set_table_record_summary_card('card_books'::regclass::oid, jsonb_build_object(
+    'primary', '[[3]]'::jsonb,
+    'secondary', '["by ", [4, 3]]'::jsonb,
+    'aside', '[[5]]'::jsonb
+  ));
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_round_trip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  RETURN NEXT is(
+    msar.table_record_summary_card('card_books'::regclass::oid),
+    jsonb_build_object(
+      'primary', '[[3]]'::jsonb,
+      'secondary', '["by ", [4, 3]]'::jsonb,
+      'aside', '[[5]]'::jsonb
+    ),
+    'a card comes back as the three templates it was given'
+  );
+  RETURN NEXT is(
+    msar.table_record_summary_cards() -> ('card_books'::regclass::oid::text) -> 'primary',
+    '[[3]]'::jsonb,
+    'and is listed among every table''s'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_slot_left_out() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  PERFORM msar.set_table_record_summary_card(
+    'card_books'::regclass::oid, jsonb_build_object('primary', '[[3]]'::jsonb)
+  );
+  RETURN NEXT is(
+    msar.table_record_summary_card('card_books'::regclass::oid),
+    '{"primary": [[3]]}'::jsonb,
+    'a card of nothing but a primary keeps nothing but a primary'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_reads_through_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  -- What a restore leaves behind: the row is against an OID that is no longer the table's, and the
+  -- attnums in it have shifted, the dropped columns not coming back.
+  CREATE TABLE card_authors_restored (id integer PRIMARY KEY, name text);
+  CREATE TABLE card_books_restored (
+    id integer PRIMARY KEY, title text,
+    author_id integer REFERENCES card_authors_restored(id), shelf text
+  );
+  UPDATE presentation_schema.tables
+  SET "table" = 'card_books_restored'::regclass
+  WHERE "table" = 'card_books'::regclass;
+  RETURN NEXT is(
+    msar.table_record_summary_card('card_books_restored'::regclass::oid),
+    jsonb_build_object(
+      'primary', '[[2]]'::jsonb,
+      'secondary', '["by ", [3, 2]]'::jsonb,
+      'aside', '[[4]]'::jsonb
+    ),
+    'every slot is read back through the column names it was kept under, at the new attnums'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_follows_a_rename() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  -- Renamed the way Mathesar renames a column, which is what brings the names cached behind the
+  -- attnums back into step.
+  PERFORM msar.rename_column('card_authors'::regclass::oid, 3, 'full_name');
+  RETURN NEXT is(
+    msar.table_record_summary_card('card_books'::regclass::oid) -> 'secondary',
+    '["by ", [4, 3]]'::jsonb,
+    'a rename leaves the card saying what it said, the attnums not having moved'
+  );
+  RETURN NEXT is(
+    (
+      SELECT record_summary_card_names -> 'secondary' FROM presentation_schema.tables
+      WHERE "table" = 'card_books'::regclass
+    ),
+    '["by ", ["author_id", "full_name"]]'::jsonb,
+    'and the names kept behind the attnums are brought back into step with it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_is_enough_to_keep_a_row() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  RETURN NEXT isnt_empty(
+    $q$SELECT 1 FROM presentation_schema.tables WHERE "table" = 'card_books'::regclass$q$,
+    'a card is something to say about a table, so the row saying it is kept'
+  );
+  PERFORM msar.set_table_record_summary_card('card_books'::regclass::oid, NULL);
+  RETURN NEXT is_empty(
+    $q$SELECT 1 FROM presentation_schema.tables WHERE "table" = 'card_books'::regclass$q$,
+    'and with the card taken off there is nothing left to say, so the row goes'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_summary_card_kept_beside_a_template() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_summary_card();
+  PERFORM msar.set_table_record_summary_template(
+    'card_books'::regclass::oid, '[[3], " on ", [5]]'::jsonb
+  );
+  RETURN NEXT is(
+    msar.table_record_summary_template('card_books'::regclass::oid),
+    '[[3], " on ", [5]]'::jsonb,
+    'a table can say both how a record is written out and how it is shown as a card'
+  );
+  PERFORM msar.set_table_record_summary_card('card_books'::regclass::oid, NULL);
+  RETURN NEXT is(
+    msar.table_record_summary_template('card_books'::regclass::oid),
+    '[[3], " on ", [5]]'::jsonb,
+    'and taking the card off leaves the sentence where it was'
+  );
+END;
+$f$ LANGUAGE plpgsql;
