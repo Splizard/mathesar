@@ -9,12 +9,13 @@ usually meant: 30 minutes, 3 days.
   import { createEventDispatcher } from 'svelte';
   import { _ } from 'svelte-i18n';
 
-  import type { DurationUnit } from '@mathesar/api/rpc/_common/columnDisplayOptions';
   import {
     type DurationFormatter,
     DurationSpecification,
   } from '@mathesar/utils/duration';
   import {
+    type AmountUnit,
+    allAmountUnits,
     readDurationAmount,
     writeDurationAmount,
   } from '@mathesar/utils/duration/durationAmount';
@@ -38,23 +39,27 @@ usually meant: 30 minutes, 3 days.
   let element: HTMLInputElement;
   let isOpen = false;
 
-  $: units = specification.getUnitsInRange();
   $: labels = {
+    y: $_('years'),
+    mon: $_('months'),
+    w: $_('weeks'),
     d: $_('days'),
     h: $_('hours'),
     m: $_('minutes'),
     s: $_('seconds'),
     ms: $_('milliseconds'),
-  } as Record<DurationUnit, string>;
+  } as Record<AmountUnit, string>;
+  /** The unit a duration of none is taken to be of: the column's largest */
+  $: defaultUnit = specification.getUnitsInRange()[0] as AmountUnit;
 
   let amount: string | null | undefined;
-  let unit: DurationUnit;
+  let unit: AmountUnit;
   /** The value the amount and unit were last read from or written to */
   let settledValue: string | null | undefined;
 
   $: if (value !== settledValue) {
     settledValue = value;
-    ({ amount, unit } = readDurationAmount(value, units));
+    ({ amount, unit } = readDurationAmount(value, defaultUnit));
   }
 
   function setDuration(duration: string | null) {
@@ -65,6 +70,9 @@ usually meant: 30 minutes, 3 days.
   }
 
   function handlePicked() {
+    // A duration of more than one of PostgreSQL's parts is no single amount,
+    // and is left as it is rather than thrown away by picking at it
+    if (amount === null || amount === undefined || amount === '') return;
     setDuration(writeDurationAmount(amount, unit));
   }
 
@@ -119,7 +127,7 @@ usually meant: 30 minutes, 3 days.
           on:blur={handlePicked}
         />
         <Select
-          options={units}
+          options={[...allAmountUnits]}
           bind:value={unit}
           getLabel={(option) => (option && labels[option]) ?? ''}
           {disabled}

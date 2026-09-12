@@ -76,7 +76,11 @@ Decimal, Integer, and Float columns have the same formatting: the number of deci
     - Formatting: the format of the displayed date.
 - **Time of Day**: [`time with time zone`](https://www.postgresql.org/docs/17/datatype-datetime.html) **(default)** and `time without time zone`.
     - Formatting: the format of the displayed time.
-- **Duration**: a length of time, for example "1 hour" or "3 days", as [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html). A duration is typed as a time on a clock in the column's format, and a picker below the cell holds it as an amount and a unit — 30 minutes, 3 days — the units offered being those between the column's largest and smallest. It's shown there in the largest unit it's a whole number of, so an hour and a half reads as 90 minutes where minutes are the smallest unit.
+- **Duration**: a length of time, for example "1 hour" or "3 days", as [`interval`](https://www.postgresql.org/docs/current/datatype-datetime.html). A duration is typed as a time on a clock in the column's format, and a picker below the cell holds it as an amount and a unit — 30 minutes, 3 days, 6 months — in years, months, weeks, days, hours, minutes, seconds, or milliseconds.
+
+    PostgreSQL keeps a duration in three parts, since they aren't the same length as each other: months (which years are twelve of), days (which weeks are seven of, and which are 23 or 25 hours long where the clocks change), and the time of day. So a duration is read back as an amount of the largest unit of the one part it fills that it's a whole number of: a fortnight is 2 weeks, an hour and a half is 90 minutes where minutes are the smallest unit shown. One filling more than a single part, such as a month and 3 days, is no single amount, and the picker leaves it alone.
+
+    A duration of months can't be shown on a clock, so it's written out instead — "1 year 2 months" — and can be typed back that way.
     - Formatting: the largest and smallest unit a duration is shown in, which give the format of the displayed duration (e.g. `HH:mm:ss`).
 - **Created At**: a Date & Time column whose default is the current time, so it records when each record was created. Its cells can't be edited.
 - **Updated At**: a Date & Time column kept at the time its record was last changed, by a trigger in the database. Its cells can't be edited.

@@ -1,4 +1,6 @@
 import type { Duration, DurationUnitType } from 'dayjs/plugin/duration';
+import { get } from 'svelte/store';
+import { _ } from 'svelte-i18n';
 
 import type { DurationUnit } from '@mathesar/api/rpc/_common/columnDisplayOptions';
 import { dayjs } from '@mathesar-component-library';
@@ -8,6 +10,7 @@ import type {
 } from '@mathesar-component-library/types';
 
 import type DurationSpecification from './DurationSpecification';
+import { parseIntervalParts } from './intervalParts';
 
 const FLOAT_REGEX = /^((\.?\d+)|(\d+(\.\d+)?))$/;
 
@@ -160,6 +163,58 @@ function shiftAndFormatISODurationString(
     .format(specification.getFormattingString());
 }
 
+/**
+ * A duration of months written out, since a month isn't a number of days and
+ * so can't be shown on a clock: "1 year 2 months", with any days of its own.
+ */
+function formatMonths(months: number, days: number): string {
+  const translate = get(_);
+  const years = Math.trunc(months / 12);
+  const wholeMonths = months - years * 12;
+  return [
+    ...(years !== 0
+      ? [translate('years_count', { values: { count: years } })]
+      : []),
+    ...(wholeMonths !== 0
+      ? [translate('months_count', { values: { count: wholeMonths } })]
+      : []),
+    ...(days !== 0
+      ? [translate('days_count', { values: { count: days } })]
+      : []),
+  ].join(' ');
+}
+
+/** The number of years, months and days written out, if that's what this is */
+function parseMonths(userInput: string): string | null | undefined {
+  const translate = get(_);
+  const counts: Record<string, number> = {};
+  let rest = userInput.trim();
+  if (rest === '') return undefined;
+  for (const [key, months] of [
+    ['years_count', 12],
+    ['months_count', 1],
+    ['days_count', 0],
+  ] as const) {
+    for (const count of [1, 2]) {
+      // The written form of one and of many, to read back what we wrote
+      const written = translate(key, { values: { count } });
+      const number = written.replace(String(count), '(-?[\\d.]+)');
+      const match = new RegExp(`(?:^|\\s)${number}(?:\\s|$)`).exec(rest);
+      if (match) {
+        counts[key] = Number(match[1]) * (months || 1);
+        if (key === 'days_count') counts.days = Number(match[1]);
+        rest = rest.replace(match[0], ' ').trim();
+        break;
+      }
+    }
+  }
+  if (rest !== '' || Object.keys(counts).length === 0) return undefined;
+  const months = (counts.years_count ?? 0) + (counts.months_count ?? 0);
+  const days = counts.days ?? 0;
+  if (months === 0) return undefined;
+  return `P${String(months)}M${days === 0 ? '' : `${String(days)}D`}`;
+}
+
 export default class DurationFormatter implements InputFormatter<string> {
   specification: DurationSpecification;
 
@@ -168,6 +223,11 @@ export default class DurationFormatter implements InputFormatter<string> {
   }
 
   parse(userInput: string): ParseResult<string> {
+    // A duration of months is written out, so can be typed back that way
+    const months = parseMonths(userInput);
+    if (months) {
+      return { value: months, intermediateDisplay: userInput };
+    }
     const value = parseRawDurationStringToISOString(
       this.specification,
       userInput,
@@ -179,6 +239,16 @@ export default class DurationFormatter implements InputFormatter<string> {
   }
 
   format(canonicalValue: string): string {
+    const parts = parseIntervalParts(canonicalValue);
+    // Months are as long as the month they're in, so no clock can show them
+    if (parts && parts.months !== 0) {
+      const written = formatMonths(parts.months, parts.days);
+      if (parts.milliseconds === 0) return written;
+      return `${written} ${shiftAndFormatISODurationString(
+        `PT${String(parts.milliseconds / 1000)}S`,
+        this.specification,
+      )}`;
+    }
     return shiftAndFormatISODurationString(canonicalValue, this.specification);
   }
 }
