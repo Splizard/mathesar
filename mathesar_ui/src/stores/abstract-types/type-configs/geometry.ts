@@ -30,7 +30,7 @@ const geometryType: AbstractTypeConfiguration = {
     (args && icons[args.dbType]) ?? { ...iconUiTypeGeometry, label: '2D' },
   defaultDbType: DB_TYPES.POINT,
   cellInfo: {
-    type: 'string',
+    type: 'geometry',
   },
 };
 

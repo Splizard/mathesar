@@ -97,7 +97,7 @@ const binaryType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconUiTypeBinary, label: 'Binary' }),
   defaultDbType: DB_TYPES.BYTEA,
   cellInfo: {
-    type: 'string',
+    type: 'binary',
   },
   getDbConfig: getBinaryDbConfig,
 };

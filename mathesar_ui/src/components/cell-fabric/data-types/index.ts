@@ -1,4 +1,5 @@
 import arrayFactory from './arrayFactory';
+import binary from './binary';
 import boolean from './boolean';
 import compositeFactory from './composite';
 import compositeReadOnly from './compositeReadOnly';
@@ -8,6 +9,7 @@ import datetime from './datetime';
 import duration from './duration';
 import enumFactory from './enum';
 import file from './file';
+import geometry from './geometry';
 import money from './money';
 import network from './network';
 import number from './number';
@@ -41,6 +43,8 @@ const simpleDataTypeComponentFactories: Record<
   enum: enumFactory,
   databaseTable,
   network,
+  binary,
+  geometry,
 };
 
 const compoundDataTypeComponentFactories: Record<

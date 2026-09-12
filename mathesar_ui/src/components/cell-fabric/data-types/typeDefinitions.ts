@@ -25,7 +25,9 @@ export type SimpleCellDataTypes =
   | 'composite'
   | 'enum'
   | 'databaseTable'
-  | 'network';
+  | 'network'
+  | 'binary'
+  | 'geometry';
 
 /**
  * Types whose cells hold values of other types, so are made from the cells of
