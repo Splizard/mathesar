@@ -12,7 +12,7 @@
   type $$Props = TextBoxCellProps & {
     formatter: DurationFormatter;
     specification: DurationSpecification;
-    formatValue?: (
+    formatForDisplay?: (
       value: string | null | undefined,
     ) => string | null | undefined;
   };
@@ -26,7 +26,7 @@
   export let showTruncationPopover: $$Props['showTruncationPopover'] = false;
   export let formatter: $$Props['formatter'];
   export let specification: $$Props['specification'];
-  export let formatValue: $$Props['formatValue'] = undefined;
+  export let formatForDisplay: $$Props['formatForDisplay'] = undefined;
 </script>
 
 <SteppedInputCell
@@ -37,9 +37,10 @@
   {searchValue}
   {isIndependentOfSheet}
   {showTruncationPopover}
-  {formatValue}
+  formatValue={formatForDisplay}
   highlightSubstringMatches={false}
   useTabularNumbers={true}
+  horizontalAlignment="right"
   let:handleInputBlur
   let:setValueInEditMode
   on:movementKeyDown

@@ -47,20 +47,28 @@ function getProps(
 
 /** A duration is an amount of a unit, shown as the column's formatting says */
 const durationType: CellComponentFactory = {
-  get: (column: RawColumnWithMetadata): ComponentAndProps => ({
-    component: DurationCell,
-    props: {
-      ...getProps(column),
-      specification: getSpecification(column),
-    },
-  }),
-  getInput: (column: RawColumnWithMetadata): ComponentAndProps => ({
-    component: DurationInput,
-    props: {
-      ...getProps(column),
-      specification: getSpecification(column),
-    },
-  }),
+  get: (column: RawColumnWithMetadata): ComponentAndProps => {
+    const { formatter, formatForDisplay } = getProps(column);
+    return {
+      component: DurationCell,
+      props: {
+        formatter,
+        formatForDisplay,
+        specification: getSpecification(column),
+      },
+    };
+  },
+  getInput: (column: RawColumnWithMetadata): ComponentAndProps => {
+    const { formatter, formatForDisplay } = getProps(column);
+    return {
+      component: DurationInput,
+      props: {
+        formatter,
+        formatForDisplay,
+        specification: getSpecification(column),
+      },
+    };
+  },
   getSimpleInput: (
     column: RawColumnWithMetadata,
   ): ComponentAndProps<FormattedInputProps<string>> => ({

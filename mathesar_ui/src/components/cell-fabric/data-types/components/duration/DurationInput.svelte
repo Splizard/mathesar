@@ -30,6 +30,8 @@ usually meant: 30 minutes, 3 days.
   export let formatter: DurationFormatter;
   export let specification: DurationSpecification = new DurationSpecification();
   export let disabled = false;
+  /** Only a cell shows the value formatted, but both are given the same props */
+  export const formatForDisplay: unknown = undefined;
 
   const dispatch = createEventDispatcher();
 
