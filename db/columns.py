@@ -300,3 +300,57 @@ def convert_to_user_column(table_oid, column_attnum, users, conn):
     db_conn.exec_msar_func(
         conn, 'convert_to_user_column', table_oid, column_attnum, json.dumps(users)
     )
+
+
+# Every column still of the money domain, with whether the current role may alter its table.
+# The names come back unquoted and are quoted by the caller: a percent sign in the query would be
+# read as a placeholder by the driver, which rules out quoting them with PostgreSQL's own format().
+_MONEY_COLUMN_QUERY = """
+SELECT
+  c.oid,
+  a.attnum,
+  n.nspname,
+  c.relname,
+  a.attname,
+  pg_has_role(c.relowner, 'USAGE')
+FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
+JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
+WHERE a.atttypid = 'mathesar_types.mathesar_money'::regtype
+  AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p', 'f')
+"""
+
+
+def quote_identifier(identifier):
+    """Quote an SQL identifier, for the places we have to build SQL from names ourselves."""
+    return '"' + identifier.replace('"', '""') + '"'
+
+
+def find_money_columns(conn, table_oid=None, attnum=None):
+    """
+    Return the columns still of `mathesar_types.mathesar_money`, which money is no longer stored
+    as, narrowed to one column when a table_oid and attnum are given.
+
+    Returns:
+        A list of (table_oid, attnum, schema, table, column, may_alter) tuples.
+    """
+    if table_oid is None:
+        return conn.execute(_MONEY_COLUMN_QUERY).fetchall()
+    return conn.execute(
+        _MONEY_COLUMN_QUERY + " AND c.oid = %s AND a.attnum = %s", (table_oid, attnum)
+    ).fetchall()
+
+
+def convert_money_column(schema, table, column, conn):
+    """
+    Change a column of the money domain to a plain numeric one.
+
+    The domain is numeric underneath, so this touches nothing but the column's type: the values
+    are left exactly as they were. What makes the column money from here on is the currency symbol
+    in its metadata, which the caller is responsible for, there being nothing left in the database
+    to say so.
+    """
+    conn.execute(
+        f'ALTER TABLE {quote_identifier(schema)}.{quote_identifier(table)}'
+        f' ALTER COLUMN {quote_identifier(column)} TYPE numeric'
+    )

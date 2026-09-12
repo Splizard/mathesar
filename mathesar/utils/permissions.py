@@ -9,6 +9,7 @@ from config.database_config import get_internal_database_config
 from db.databases import create_database
 from db.connection import mathesar_connection
 from db.roles import create_init_login_role
+from db.columns import convert_money_column, find_money_columns
 from mathesar.examples.bike_shop_dataset import load_bike_shop_dataset
 from mathesar.examples.hardware_store_dataset import load_hardware_store_dataset
 from mathesar.examples.ice_cream_employees_dataset import (
@@ -19,6 +20,7 @@ from mathesar.examples.library_makerspace_dataset import load_library_makerspace
 from mathesar.examples.movies_lite_dataset import load_movie_rentals_dataset
 from mathesar.examples.museum_exhibits_dataset import load_museum_exhibits_dataset
 from mathesar.examples.nonprofit_grants_dataset import load_nonprofit_grants_dataset
+from mathesar.utils.columns import record_money_column
 from mathesar.models.base import Server, Database, ConfiguredRole, UserDatabaseRoleMap
 
 
@@ -103,7 +105,7 @@ def set_up_home_role_and_db_for_user(user, sample_data=[]):
         password=user_database_role.configured_role.password,
     )
     with user_database_role.connection as conn:
-        _load_sample_data(conn, sample_data)
+        _load_sample_data(conn, sample_data, user_database_role.database)
     return user_database_role
 
 
@@ -146,7 +148,7 @@ def set_up_new_database_for_user_on_internal_server(
         username=conn_info.role, password=conn_info.password
     )
     with user_database_role.connection as conn:
-        _load_sample_data(conn, sample_data)
+        _load_sample_data(conn, sample_data, user_database_role.database)
     return user_database_role
 
 
@@ -179,7 +181,7 @@ def set_up_preexisting_database_for_user(
         password=user_database_role.configured_role.password,
     )
     with user_database_role.connection as conn:
-        _load_sample_data(conn, sample_data)
+        _load_sample_data(conn, sample_data, user_database_role.database)
     return user_database_role
 
 
@@ -203,7 +205,23 @@ def _setup_connection_models(
     )[0]
 
 
-def _load_sample_data(conn, sample_data):
+def _convert_sample_money_columns(conn, database):
+    """
+    Put the sample data's money columns away as Mathesar stores money now.
+
+    The datasets say `mathesar_types.mathesar_money` where they mean an amount, which reads well
+    and is what the type is still for. Nothing should be stored as one, though, so convert them as
+    soon as they're loaded rather than leaving columns behind for the next deploy to find. Doing it
+    here rather than in each dataset means one added later needs nothing said about it.
+    """
+    for table_oid, attnum, schema, table, column, may_alter in find_money_columns(conn):
+        if not may_alter:
+            continue
+        convert_money_column(schema, table, column, conn)
+        record_money_column(database, table_oid, attnum)
+
+
+def _load_sample_data(conn, sample_data, database):
     DATASET_MAP = {
         "bike_shop": load_bike_shop_dataset,
         "hardware_store": load_hardware_store_dataset,
@@ -214,14 +232,18 @@ def _load_sample_data(conn, sample_data):
         "museum_exhibits": load_museum_exhibits_dataset,
         "nonprofit_grants": load_nonprofit_grants_dataset,
     }
+    loaded = False
     for key in sample_data:
         try:
             DATASET_MAP[key](conn)
+            loaded = True
         except DuplicateSchema:
             # We swallow this error, since otherwise we'll raise an
             # error on the front end even though installation
             # generally succeeded.
             continue
+    if loaded:
+        _convert_sample_money_columns(conn, database)
 
 
 def _grant_create_on_public(conn, owner):

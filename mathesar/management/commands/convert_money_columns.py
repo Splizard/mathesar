@@ -1,24 +1,8 @@
 from django.core.management.base import BaseCommand, CommandError
 
-from mathesar.models.base import ColumnMetaData, Database, UserDatabaseRoleMap
-
-# Every column still of the money domain, with whether the current role may alter its table.
-# The names come back unquoted and are quoted here: a percent sign in the query would be read as
-# a placeholder by the driver, which rules out quoting them with PostgreSQL's own format().
-MONEY_COLUMN_QUERY = """
-SELECT
-  c.oid,
-  a.attnum,
-  n.nspname,
-  c.relname,
-  a.attname,
-  pg_has_role(c.relowner, 'USAGE')
-FROM pg_catalog.pg_class c
-JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
-JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
-WHERE a.atttypid = 'mathesar_types.mathesar_money'::regtype
-  AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p', 'f')
-"""
+from db.columns import convert_money_column, find_money_columns
+from mathesar.models.base import Database, UserDatabaseRoleMap
+from mathesar.utils.columns import record_money_column
 
 
 class Command(BaseCommand):
@@ -73,16 +57,14 @@ class Command(BaseCommand):
             columns = []
             for conn in conns:
                 try:
-                    columns = conn.execute(MONEY_COLUMN_QUERY).fetchall()
+                    columns = find_money_columns(conn)
                 except Exception:
                     conn.rollback()
                     continue
                 break
             for table_oid, attnum, schema, table, column, _ in columns:
                 where = f"{database.name}: {schema}.{table}.{column}"
-                if not self._convert_column(
-                    database, conns, table_oid, attnum, where, dry_run
-                ):
+                if not self._convert_column(database, conns, table_oid, attnum, where, dry_run):
                     ok = False
             return ok
         finally:
@@ -92,42 +74,25 @@ class Command(BaseCommand):
     def _convert_column(self, database, conns, table_oid, attnum, where, dry_run):
         """Convert one column using the first connection whose role may alter its table."""
         for conn in conns:
-            row = conn.execute(
-                MONEY_COLUMN_QUERY + " AND c.oid = %s AND a.attnum = %s",
-                (table_oid, attnum),
-            ).fetchone()
-            if row is None:
+            found = find_money_columns(conn, table_oid, attnum)
+            if not found:
                 # Already converted, or not visible to this role.
                 continue
-            _, _, schema, table, column, can_alter = row
-            if not can_alter:
+            _, _, schema, table, column, may_alter = found[0]
+            if not may_alter:
                 continue
             if dry_run:
                 self.stdout.write(f"{where}: would become numeric (dry run)")
                 return True
             try:
-                # The domain is numeric underneath, so nothing is converted but the type.
-                conn.execute(
-                    f'ALTER TABLE {_quote(schema)}.{_quote(table)}'
-                    f' ALTER COLUMN {_quote(column)} TYPE numeric'
-                )
+                convert_money_column(schema, table, column, conn)
             except Exception as e:
                 conn.rollback()
                 self.stderr.write(f"{where}: {e}")
                 return False
             conn.commit()
-            # Without a symbol it would read as an ordinary number from here on.
-            metadata, _ = ColumnMetaData.objects.get_or_create(
-                database=database, table_oid=table_oid, attnum=attnum
-            )
-            if metadata.mon_currency_symbol is None:
-                metadata.mon_currency_symbol = '$'
-                metadata.save(update_fields=['mon_currency_symbol'])
+            record_money_column(database, table_oid, attnum)
             self.stdout.write(f"{where}: now a numeric holding money")
             return True
         self.stderr.write(f"{where}: no configured role can alter it.")
         return False
-
-
-def _quote(identifier):
-    return '"' + identifier.replace('"', '""') + '"'
