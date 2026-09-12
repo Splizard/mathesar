@@ -3,19 +3,22 @@ from django.core.management.base import BaseCommand, CommandError
 from mathesar.models.base import ColumnMetaData, Database, UserDatabaseRoleMap
 
 # Every column still of the money domain, with whether the current role may alter its table.
+# The names come back unquoted and are quoted here: a percent sign in the query would be read as
+# a placeholder by the driver, which rules out quoting them with PostgreSQL's own format().
 MONEY_COLUMN_QUERY = """
 SELECT
   c.oid,
   a.attnum,
-  format('%s.%I', c.oid::regclass, a.attname),
+  n.nspname,
+  c.relname,
+  a.attname,
   pg_has_role(c.relowner, 'USAGE')
 FROM pg_catalog.pg_class c
+JOIN pg_catalog.pg_namespace n ON n.oid = c.relnamespace
 JOIN pg_catalog.pg_attribute a ON a.attrelid = c.oid
 WHERE a.atttypid = 'mathesar_types.mathesar_money'::regtype
   AND a.attnum > 0 AND NOT a.attisdropped AND c.relkind IN ('r', 'p', 'f')
 """
-
-ALTER = 'ALTER TABLE %s ALTER COLUMN %s TYPE numeric'
 
 
 class Command(BaseCommand):
@@ -75,9 +78,10 @@ class Command(BaseCommand):
                     conn.rollback()
                     continue
                 break
-            for table_oid, attnum, where, _ in columns:
+            for table_oid, attnum, schema, table, column, _ in columns:
+                where = f"{database.name}: {schema}.{table}.{column}"
                 if not self._convert_column(
-                    database, conns, table_oid, attnum, f"{database.name}: {where}", dry_run
+                    database, conns, table_oid, attnum, where, dry_run
                 ):
                     ok = False
             return ok
@@ -95,15 +99,18 @@ class Command(BaseCommand):
             if row is None:
                 # Already converted, or not visible to this role.
                 continue
-            if not row[3]:
+            _, _, schema, table, column, can_alter = row
+            if not can_alter:
                 continue
-            name = row[2]
             if dry_run:
                 self.stdout.write(f"{where}: would become numeric (dry run)")
                 return True
             try:
                 # The domain is numeric underneath, so nothing is converted but the type.
-                conn.execute(ALTER % (name.rsplit('.', 1)[0], _quote(name.rsplit('.', 1)[1])))
+                conn.execute(
+                    f'ALTER TABLE {_quote(schema)}.{_quote(table)}'
+                    f' ALTER COLUMN {_quote(column)} TYPE numeric'
+                )
             except Exception as e:
                 conn.rollback()
                 self.stderr.write(f"{where}: {e}")
