@@ -33,7 +33,6 @@ def test_tables_meta_data_list(rf, monkeypatch):
                 table_oid=1234,
                 data_file=None,
                 import_verified=True,
-                record_summary_template=None,
                 user_tracking_attnum=None,
             ),
             TableMetaData(
@@ -42,7 +41,6 @@ def test_tables_meta_data_list(rf, monkeypatch):
                 table_oid=4567,
                 data_file=DataFile(id=11),
                 import_verified=False,
-                record_summary_template=None,
                 user_tracking_attnum=None,
             ),
         ]

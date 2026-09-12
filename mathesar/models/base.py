@@ -220,73 +220,11 @@ class UserDatabaseRoleMap(BaseModel):
         )
 
 
-class ColumnMetaData(BaseModel):
-    database = models.ForeignKey('Database', on_delete=models.CASCADE)
-    table_oid = models.PositiveBigIntegerField()
-    attnum = models.SmallIntegerField()
-    bool_input = models.CharField(
-        choices=[("dropdown", "dropdown"), ("checkbox", "checkbox")],
-        null=True
-    )
-    bool_true = models.CharField(null=True)
-    bool_false = models.CharField(null=True)
-    num_min_frac_digits = models.PositiveIntegerField(null=True)
-    num_max_frac_digits = models.PositiveIntegerField(null=True)
-    num_grouping = models.CharField(
-        choices=[("always", "always"), ("auto", "auto"), ("never", "never")],
-        null=True
-    )
-    num_format = models.CharField(
-        choices=[("english", "english"), ("german", "german"), ("french", "french"), ("hindi", "hindi"), ("swiss", "swiss")],
-        null=True
-    )
-    mon_currency_symbol = models.CharField(null=True)
-    mon_currency_location = models.CharField(
-        choices=[("after-minus", "after-minus"), ("end-with-space", "end-with-space")],
-        null=True
-    )
-    time_format = models.CharField(null=True)
-    date_format = models.CharField(null=True)
-    duration_min = models.CharField(max_length=255, null=True)
-    duration_max = models.CharField(max_length=255, null=True)
-    duration_format = models.CharField(
-        choices=[("clock", "clock"), ("words", "words")],
-        max_length=10,
-        null=True
-    )
-    display_width = models.PositiveIntegerField(null=True)
-    file_backend = models.CharField(max_length=255, null=True)
-    user_display_field = models.CharField(
-        choices=[("full_name", "full_name"), ("email", "email"), ("username", "username")],
-        max_length=50,
-        null=True
-    )
-    array_delimiter = models.CharField(max_length=1, null=True)
-
-    class Meta:
-        constraints = [
-            models.UniqueConstraint(
-                fields=["database", "table_oid", "attnum"],
-                name="unique_column_metadata"
-            ),
-            models.CheckConstraint(
-                check=(
-                    models.Q(num_max_frac_digits__lte=20)
-                    & models.Q(num_min_frac_digits__lte=20)
-                    & models.Q(num_min_frac_digits__lte=models.F("num_max_frac_digits"))
-                ),
-                name="frac_digits_integrity"
-            )
-        ]
-
-
 class TableMetaData(BaseModel):
     database = models.ForeignKey('Database', on_delete=models.CASCADE)
     table_oid = models.PositiveBigIntegerField()
     data_file = models.ForeignKey("DataFile", on_delete=models.SET_NULL, null=True)
     import_verified = models.BooleanField(null=True)
-    column_order = models.JSONField(null=True)
-    record_summary_template = models.JSONField(null=True)
     mathesar_added_pkey_attnum = models.PositiveIntegerField(null=True)
     user_tracking_attnum = models.SmallIntegerField(null=True)
 
