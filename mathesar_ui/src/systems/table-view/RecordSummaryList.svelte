@@ -19,6 +19,7 @@
     cardHasAnything,
     renderCard,
   } from '@mathesar/systems/record-summary-card/renderCard';
+  import { recordNameToText } from '@mathesar/utils/recordName';
   import { Button, Icon, Spinner } from '@mathesar-component-library';
 
   import { showTheRestAgain, tableIsFullScreen } from './fullScreen';
@@ -103,7 +104,9 @@
    */
   $: entries = [...$selectableRowsMap].map(([rowKey, row]) => {
     const recordId = $tabularData.getRecordIdFromRowId(rowKey);
-    const key = recordId === undefined ? undefined : String(recordId);
+    // Written the way the server writes it, a record's name being more than one value where its
+    // key is more than one column.
+    const key = recordId === undefined ? undefined : recordNameToText(recordId);
     const summary = (key && $recordSummaries.get(key)) || key || '?';
     const filled = card
       ? renderCard(card, {

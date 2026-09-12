@@ -38,6 +38,7 @@ export {
   type RecordGrouping,
   type RecordGroup,
   extractPrimaryKeyValue,
+  extractSingleKeyValue,
   type ClientSideCellError,
 } from './utils';
 export {

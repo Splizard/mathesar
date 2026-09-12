@@ -10,7 +10,7 @@
   import { getRecordPageUrlByTable } from '@mathesar/routes/urls';
   import {
     type TabularData,
-    extractPrimaryKeyValue,
+    extractSingleKeyValue,
   } from '@mathesar/stores/table-data';
   import { toast } from '@mathesar/stores/toast';
   import { getErrorMessage } from '@mathesar/utils/errors';
@@ -43,11 +43,11 @@
     columnsDataStore,
     recordsData,
     table,
-    hasSingleColumnPrimaryKey,
+    hasPrimaryKey,
   } = tabularData);
   $: ({ currentRolePrivileges } = table.currentAccess);
   $: hasSelect = $currentRolePrivileges.has('SELECT');
-  $: canViewTable = $hasSingleColumnPrimaryKey && hasSelect;
+  $: canViewTable = $hasPrimaryKey && hasSelect;
   $: canInsertRecords = $currentRolePrivileges.has('INSERT');
   $: ({ purpose: rowType } = controller);
   $: ({ columns, fetchStatus } = columnsDataStore);
@@ -102,7 +102,7 @@
         })
         .run();
       const record = response.results[0];
-      const recordId = extractPrimaryKeyValue(record, $columns);
+      const recordId = extractSingleKeyValue(record, $columns);
 
       const recordSummary = response.record_summaries?.[recordId] ?? '';
 
@@ -145,7 +145,7 @@
 
   {#if isInitialized && !canViewTable}
     <WarningBox fullWidth>
-      {#if !$hasSingleColumnPrimaryKey}
+      {#if !$hasPrimaryKey}
         {$_('record_sel_no_support_for_table_without_pk')}
       {:else if !hasSelect}
         {$_('no_privileges_view_table')}

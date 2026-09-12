@@ -57,6 +57,12 @@ export class ColumnsDataStore extends EventHandler<{
 
   pkColumn: Readable<RawColumnWithMetadata | undefined>;
 
+  /**
+   * Every column the primary key is made of, lowest attnum first, which is the order a record's
+   * name is written in. Empty where there is no key.
+   */
+  pkColumns: Readable<RawColumnWithMetadata[]>;
+
   constructor({
     database,
     table,
@@ -76,6 +82,9 @@ export class ColumnsDataStore extends EventHandler<{
     );
     this.pkColumn = derived(this.fetchedColumns, (fetched) =>
       fetched.find((c) => c.primary_key),
+    );
+    this.pkColumns = derived(this.fetchedColumns, (fetched) =>
+      fetched.filter((c) => c.primary_key).sort((a, b) => a.id - b.id),
     );
     void this.fetch();
   }

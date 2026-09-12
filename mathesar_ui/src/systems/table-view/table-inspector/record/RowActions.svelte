@@ -45,7 +45,7 @@
     if (recordId === undefined) return;
     const recordStore = new RecordStore({
       table,
-      recordPk: String(recordId),
+      recordPk: recordId,
     });
     modalRecordView.open(recordStore);
   }

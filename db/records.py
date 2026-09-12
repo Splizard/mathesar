@@ -1,10 +1,24 @@
 import json
 
+from psycopg.types.json import Jsonb
+
 from db import connection as db_conn
 
 
 def _json_or_none(value):
     return json.dumps(value) if value is not None else None
+
+
+def _record_name(record_id):
+    """
+    Send a record's name as JSON, whatever shape it is.
+
+    A record is named by its primary key, which may be made of more than one column; where it is,
+    the name is the list of the key's values in the key's own order. Sent as JSON so that a list
+    arrives as a JSON array rather than as a Postgres array, and so that one column and several
+    are the same thing to the SQL that reads it.
+    """
+    return Jsonb(record_id)
 
 
 def list_records_from_table(
@@ -70,7 +84,8 @@ def get_record_from_table(
     Only data from which the user is granted `SELECT` is returned.
 
     Args:
-        record_id: The primary key value of the record.
+        record_id: The name of the record: the primary key's value, or a list of the key's
+            values in the key's own order where the key is made of more than one column.
         table_id: The OID of the table whose record we'll get.
         joined_columns: An array of dict(s) that include an "alias" and "join_path" where,
             "join_path" represents linkages via a simple many-to-many mapping to a column in another table.
@@ -81,7 +96,7 @@ def get_record_from_table(
         conn,
         'get_record_from_table',
         table_oid,
-        record_id,
+        _record_name(record_id),
         _json_or_none(joined_columns),
         return_record_summaries,
         _json_or_none(table_record_summary_templates),
@@ -155,9 +170,8 @@ def delete_records_from_table(conn, record_ids, table_oid):
 
     Args:
         tab_id: The OID of the table whose record we'll delete.
-        record_ids: A list of primary values
-
-    The table must have a single primary key column.
+        record_ids: A list of record names, each of them as described on
+            `get_record_from_table`.
     """
     return db_conn.exec_msar_func(
         conn,
@@ -199,7 +213,7 @@ def patch_record_in_table(
         conn,
         'patch_record_in_table',
         table_oid,
-        record_id,
+        _record_name(record_id),
         json.dumps(record_def),
         return_record_summaries,
         _json_or_none(table_record_summary_templates),

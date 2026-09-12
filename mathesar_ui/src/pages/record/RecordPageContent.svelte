@@ -40,7 +40,7 @@ TODO: Resolve code duplication between this file and RecordViewContent.svelte.
   $: canUpdateTableRecords = $currentRolePrivileges.has('UPDATE');
   $: canDeleteTableRecords = $currentRolePrivileges.has('DELETE');
   $: ({ processedColumns } = tableStructure);
-  $: ({ recordPk, summary, fieldValues } = record);
+  $: ({ recordPkText, summary, fieldValues } = record);
   $: fieldPropsObjects = [...$processedColumns.values()]
     .filter((c) => !c.isUserTrackingColumn)
     .map((c) => ({
@@ -185,7 +185,11 @@ TODO: Resolve code duplication between this file and RecordViewContent.svelte.
     <RecordViewLoadingSpinner />
   {:then joinableTablesResult}
     <div class="widgets-container">
-      <Widgets {joinableTablesResult} {recordPk} recordSummary={$summary} />
+      <Widgets
+        {joinableTablesResult}
+        recordPk={recordPkText}
+        recordSummary={$summary}
+      />
     </div>
   {/await}
 </div>

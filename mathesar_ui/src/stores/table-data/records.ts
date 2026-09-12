@@ -30,6 +30,11 @@ import {
 } from '@mathesar/packages/json-rpc-client-builder';
 import type Pagination from '@mathesar/utils/Pagination';
 import {
+  type RecordName,
+  byCanonicalRecordName,
+  recordNameToText,
+} from '@mathesar/utils/recordName';
+import {
   type CancellablePromise,
   ImmutableMap,
   WritableMap,
@@ -113,23 +118,40 @@ export interface RowModificationRecipe {
 }
 
 /**
+ * What a record is called: the value of its primary key, or the values of the key's columns where
+ * the key is made of more than one. Nothing where the row does not hold all of them yet.
+ */
+function nameOfRecord(
+  record: ApiRecord,
+  pkColumns: RawColumnWithMetadata[],
+): RecordName | undefined {
+  if (pkColumns.length === 0) return undefined;
+  const values = pkColumns.map((column) => record[column.id]);
+  if (values.some((value) => value === undefined)) return undefined;
+  return pkColumns.length === 1 ? values[0] : values;
+}
+
+/**
  * @throws Error if the recipe has problems
  */
 function validateRowModificationRecipe(
   { row, cells }: RowModificationRecipe,
-  pkColumn: RawColumnWithMetadata,
+  pkColumns: RawColumnWithMetadata[],
 ): void {
   // Validate that PK value exists if we're updating a saved row
-  const primaryKeyValue = row.record[pkColumn.id];
+  const primaryKeyValue = nameOfRecord(row.record, pkColumns);
   if (isPersistedRecordRow(row) && primaryKeyValue === undefined) {
     throw new Error(
       'Unable to update record for a row with a missing primary key value',
     );
   }
 
-  // Validate against problems with directly editing PK values
-  const isEditingPk = cells.some((c) => c.columnId === String(pkColumn.id));
-  if (isEditingPk) {
+  // Validate against problems with directly editing PK values. Any one column of the key counts:
+  // changing half of what names a record changes which record it is.
+  const pkColumn = pkColumns.find((column) =>
+    cells.some((c) => c.columnId === String(column.id)),
+  );
+  if (pkColumn) {
     if (!isDraftRecordRow(row)) {
       // If modifying a PK cell in a saved record, then block editing.
       throw new Error('Unable to modify primary key cells of saved rows');
@@ -340,7 +362,7 @@ export class RecordsData {
       }
       if (response.record_summaries) {
         this.recordSummaries.reconstruct(
-          Object.entries(response.record_summaries),
+          byCanonicalRecordName(Object.entries(response.record_summaries)),
         );
       }
       if (response.download_links) {
@@ -371,8 +393,8 @@ export class RecordsData {
 
   /** @returns the number of selected rows deleted */
   async deleteSelected(rowSelectionIds: Iterable<string>): Promise<number> {
-    const pkColumn = get(this.columnsDataStore.pkColumn);
-    if (!pkColumn) throw new Error('Cannot delete without primary key');
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    if (!pkColumns.length) throw new Error('Cannot delete without primary key');
 
     const rowIds =
       typeof rowSelectionIds === 'string' ? [rowSelectionIds] : rowSelectionIds;
@@ -407,9 +429,9 @@ export class RecordsData {
     const rowsFailedToDelete = new Map<RowKey, RpcError>();
 
     if (persistedRowsToDelete.size) {
-      const primaryKeysOfPersistedRows = [
-        ...persistedRowsToDelete.values(),
-      ].map((row) => row.record[pkColumn.id]);
+      const primaryKeysOfPersistedRows = [...persistedRowsToDelete.values()]
+        .map((row) => nameOfRecord(row.record, pkColumns))
+        .filter((name): name is RecordName => name !== undefined);
 
       try {
         const deletionRequest = api.records
@@ -419,9 +441,13 @@ export class RecordsData {
             record_ids: primaryKeysOfPersistedRows,
           })
           .run();
-        const deletedIds = new Set(await deletionRequest);
+        // Compared as text, a name of several values being a fresh array each time it is built
+        // and so never the same object as the one that came back.
+        const deletedIds = new Set(
+          (await deletionRequest).map((name) => recordNameToText(name)),
+        );
         persistedRowsToDelete.forEach((row) => {
-          const rowId = row.record[pkColumn.id];
+          const rowId = recordNameToText(nameOfRecord(row.record, pkColumns));
           if (deletedIds.has(rowId)) {
             rowsSuccessfullyDeleted.add(row.identifier);
           } else {
@@ -495,9 +521,11 @@ export class RecordsData {
    * @throws Error if PK column does not exist
    */
   private getPkColumOrError() {
-    const pkColumn = get(this.columnsDataStore.pkColumn);
-    if (!pkColumn) throw new Error('Unable to update without primary key');
-    return pkColumn;
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    if (!pkColumns.length) {
+      throw new Error('Unable to update without primary key');
+    }
+    return pkColumns;
   }
 
   private updateSummaryStores(responses: RpcResponse<RecordsResponse>[]): void {
@@ -577,9 +605,9 @@ export class RecordsData {
       .map(({ row }) => row)
       .filter(isDraftRecordRow);
 
-    const pkColumn = this.getPkColumOrError();
+    const pkColumns = this.getPkColumOrError();
     const unifiedRecipes = [...modificationRecipes, ...convertedRecipes];
-    unifiedRecipes.forEach((r) => validateRowModificationRecipe(r, pkColumn));
+    unifiedRecipes.forEach((r) => validateRowModificationRecipe(r, pkColumns));
 
     this.newRecords.update((rows) => [...rows, ...additionalRows]);
 
@@ -606,7 +634,7 @@ export class RecordsData {
 
     const cellStatus = this.meta.cellModificationStatus;
     const { cellClientSideErrors, rowCreationStatus } = this.meta;
-    const pkColumn = this.getPkColumOrError();
+    const pkColumns = this.getPkColumOrError();
 
     const recipeMap = new Map(
       recipes.map((recipe) => [recipe.row.identifier, recipe]),
@@ -638,7 +666,7 @@ export class RecordsData {
     }
 
     if (validateRecipes) {
-      forEachRow((r) => validateRowModificationRecipe(r, pkColumn));
+      forEachRow((r) => validateRowModificationRecipe(r, pkColumns));
     }
 
     const requestId = getGloballyUniqueId();
@@ -665,9 +693,15 @@ export class RecordsData {
           },
         });
       }
+      const recordName = nameOfRecord(row.record, pkColumns);
+      if (recordName === undefined) {
+        // Already ruled out by validateRowModificationRecipe, which runs over every recipe
+        // before any of them is sent.
+        throw new Error('Unable to update a record with no name');
+      }
       return api.records.patch({
         ...this.apiContext,
-        record_id: row.record[pkColumn.id],
+        record_id: recordName,
         record_def: recordDef,
       });
     });
@@ -765,10 +799,8 @@ export class RecordsData {
     if (!isPersistedRecordRow(row)) return;
 
     const { record } = row;
-    const pkColumn = get(this.columnsDataStore.pkColumn);
-    if (pkColumn === undefined) return;
-
-    const primaryKeyValue = record[pkColumn.id];
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    const primaryKeyValue = nameOfRecord(record, pkColumns);
     if (primaryKeyValue === undefined) return;
 
     const { joining } = get(this.meta.recordsRequestParamsData);
@@ -874,12 +906,12 @@ export class RecordsData {
   }
 
   async duplicateRecord(sourceRow: RecordRow): Promise<void> {
-    const pkColumn = get(this.columnsDataStore.pkColumn);
+    const pkColumns = get(this.columnsDataStore.pkColumns);
 
     const fields = { ...sourceRow.record };
-    if (pkColumn) {
-      delete fields[pkColumn.id];
-    }
+    pkColumns.forEach((column) => {
+      delete fields[column.id];
+    });
 
     const newRow = new DraftRecordRow({
       record: {

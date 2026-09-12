@@ -8,7 +8,7 @@
     type RecordRow,
     type TabularData,
     constraintIsFk,
-    extractPrimaryKeyValue,
+    extractSingleKeyValue,
     setTabularDataStoreInContext,
   } from '@mathesar/stores/table-data';
   import overflowObserver, {
@@ -112,7 +112,7 @@
     if (!record || Object.keys(record).length === 0) {
       return undefined;
     }
-    return extractPrimaryKeyValue(record, $columns);
+    return extractSingleKeyValue(record, $columns);
   }
 
   function getRowHref(row: RecordRow): string | undefined {

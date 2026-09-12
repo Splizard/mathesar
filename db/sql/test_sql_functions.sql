@@ -11743,3 +11743,124 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_composite_key() RETURNS void AS $$
+BEGIN
+  CREATE TABLE inventory (
+    card_id text,
+    condition text,
+    name text,
+    quantity integer,
+    PRIMARY KEY (card_id, condition)
+  );
+  INSERT INTO inventory VALUES
+    ('lotus', 'nm', 'Black Lotus', 1),
+    ('lotus', 'lp', 'Black Lotus', 2),
+    ('mox', 'nm', 'Mox Pearl', 3);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_named_by_a_key_of_two_columns() RETURNS SETOF TEXT AS $$
+DECLARE
+  rel_id oid;
+BEGIN
+  PERFORM __setup_composite_key();
+  rel_id := 'inventory'::regclass::oid;
+  RETURN NEXT is(
+    msar.get_selectable_pkey_attnums(rel_id), '{1,2}'::smallint[],
+    'both of the key''s columns, lowest attnum first'
+  );
+  RETURN NEXT is(
+    msar.get_selectable_pkey_attnum(rel_id), NULL::smallint,
+    'and no single column, which is what the old question asks'
+  );
+  RETURN NEXT is(
+    msar.get_record_from_table(rel_id, '["lotus", "lp"]'::jsonb) -> 'results',
+    '[{"1": "lotus", "2": "lp", "3": "Black Lotus", "4": 2}]'::jsonb,
+    'a record is fetched by the array of its key''s values'
+  );
+  RETURN NEXT is(
+    msar.get_record_from_table(rel_id, '["lotus", "xx"]'::jsonb) -> 'results',
+    '[]'::jsonb,
+    'and a name nothing answers to finds nothing'
+  );
+  RETURN NEXT throws_ok(
+    format($h$SELECT msar.get_record_from_table(%s, '["lotus"]'::jsonb)$h$, rel_id),
+    '22023',
+    NULL,
+    'a name with too few values in it is refused rather than half-used'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_of_two_columns_is_changed_and_deleted() RETURNS SETOF TEXT AS $$
+DECLARE
+  rel_id oid;
+BEGIN
+  PERFORM __setup_composite_key();
+  rel_id := 'inventory'::regclass::oid;
+  RETURN NEXT is(
+    msar.patch_record_in_table(rel_id, '["lotus", "lp"]'::jsonb, '{"4": 7}') -> 'results',
+    '[{"1": "lotus", "2": "lp", "3": "Black Lotus", "4": 7}]'::jsonb,
+    'the one record named is the one changed'
+  );
+  RETURN NEXT is(
+    (SELECT quantity FROM inventory WHERE card_id = 'lotus' AND condition = 'nm'), 1,
+    'and the record sharing half its name is left alone'
+  );
+  RETURN NEXT is(
+    msar.delete_records_from_table(rel_id, '[["lotus", "nm"], ["mox", "nm"]]'::jsonb),
+    '[["lotus", "nm"], ["mox", "nm"]]'::jsonb,
+    'deleting says which records went, by name'
+  );
+  RETURN NEXT is(
+    (SELECT count(*) FROM inventory), 1::bigint,
+    'and the one not named stays'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_of_two_columns_is_added() RETURNS SETOF TEXT AS $$
+DECLARE
+  rel_id oid;
+BEGIN
+  PERFORM __setup_composite_key();
+  rel_id := 'inventory'::regclass::oid;
+  RETURN NEXT is(
+    msar.add_record_to_table(
+      rel_id, '{"1": "sol", "2": "nm", "3": "Sol Ring", "4": 4}'
+    ) -> 'results',
+    '[{"1": "sol", "2": "nm", "3": "Sol Ring", "4": 4}]'::jsonb,
+    'a record added is read back by the name it was given'
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_record_of_two_columns_is_summarized() RETURNS SETOF TEXT AS $$
+DECLARE
+  rel_id oid;
+  summaries jsonb;
+BEGIN
+  PERFORM __setup_composite_key();
+  rel_id := 'inventory'::regclass::oid;
+  summaries := msar.list_records_from_table(
+    rel_id, null, null, null, null, null, null, true
+  ) -> 'record_summaries';
+  RETURN NEXT is(
+    summaries -> '["lotus", "lp"]', '"lotus"'::jsonb,
+    'a summary is keyed by the record''s name written out'
+  );
+  RETURN NEXT is(
+    jsonb_typeof(summaries), 'object', 'and every record on the page has one'
+  );
+  RETURN NEXT is(
+    (SELECT count(*) FROM jsonb_object_keys(summaries)), 3::bigint,
+    'one summary per record'
+  );
+END;
+$$ LANGUAGE plpgsql;

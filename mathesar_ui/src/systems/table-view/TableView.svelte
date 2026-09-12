@@ -80,7 +80,7 @@
     allColumns,
     displayedColumns,
     columnsDataStore,
-    hasSingleColumnPrimaryKey,
+    hasPrimaryKey,
   } = $tabularData);
   $: $tabularData, ($tableInspectorTab = 'table');
   $: clipboardHandler = new SheetClipboardHandler({
@@ -132,9 +132,7 @@
    * column of things that cannot be told apart.
    */
   $: effectiveLayout =
-    layout === 'recordList' && !$hasSingleColumnPrimaryKey
-      ? 'compactSheet'
-      : layout;
+    layout === 'recordList' && !$hasPrimaryKey ? 'compactSheet' : layout;
   $: supportsTableInspector = context === 'page';
   /**
    * Whether the inspector covers the table rather than sitting beside it.
@@ -222,7 +220,7 @@
     const containingTable = $currentTablesMap.get(table.oid);
     if (!containingTable) return;
     modalRecordView.open(
-      new RecordStore({ table: containingTable, recordPk: String(recordId) }),
+      new RecordStore({ table: containingTable, recordPk: recordId }),
     );
   }
 

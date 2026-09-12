@@ -21,6 +21,8 @@ import {
 
 import type { RowStatus } from './meta';
 import type { RecordRow, Row } from './Row';
+/** One of the values naming a record */
+type KeyValue = string | number;
 
 export type CellKey = string;
 export type RowKey = Row['identifier'];
@@ -281,17 +283,44 @@ export function buildGrouping(
  * @throws Error if no primary key column is found or the value is of an invalid type.
  * See `records.ts.README.md` for more info
  */
+/**
+ * What a record is called: the value of its primary key, or the values of the key's columns in
+ * attnum order where the key is made of more than one.
+ */
 export function extractPrimaryKeyValue(
   record: ApiRecord,
   columns: RawColumnWithMetadata[],
-): string | number {
-  const pkColumn = columns.find((c) => c.primary_key);
-  if (!pkColumn) {
+): KeyValue | KeyValue[] {
+  const pkColumns = columns
+    .filter((c) => c.primary_key)
+    .sort((a, b) => a.id - b.id);
+  if (pkColumns.length === 0) {
     throw new Error('No primary key column found.');
   }
-  const pkValue = record[pkColumn.id];
-  if (!(typeof pkValue === 'string' || typeof pkValue === 'number')) {
-    throw new Error('Primary key value is not a string or number.');
+  const values = pkColumns.map((column) => {
+    const value = record[column.id];
+    if (!(typeof value === 'string' || typeof value === 'number')) {
+      throw new Error('Primary key value is not a string or number.');
+    }
+    return value;
+  });
+  return pkColumns.length === 1 ? values[0] : values;
+}
+
+/**
+ * The one value naming a record, for the places that can hold only one.
+ *
+ * A foreign key in Mathesar is a single column, so a cell holding one can only point at a record
+ * of a table whose key is a single column too. Asked for here rather than assumed, so that a
+ * table it cannot point at says so rather than being pointed at wrongly.
+ */
+export function extractSingleKeyValue(
+  record: ApiRecord,
+  columns: RawColumnWithMetadata[],
+): KeyValue {
+  const name = extractPrimaryKeyValue(record, columns);
+  if (Array.isArray(name)) {
+    throw new Error('This record is named by more than one value.');
   }
-  return pkValue;
+  return name;
 }

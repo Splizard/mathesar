@@ -379,7 +379,9 @@ def get(
     Get a single record from a table by its primary key.
 
     Args:
-        record_id: The primary key value of the record to retrieve.
+        record_id: The name of the record: the primary key's value, or a list of the
+            key's values in the key's own order where the key is made of more than
+            one column.
         table_oid: Identity of the table in the user's database.
         database_id: The Django id of the database containing the table.
         joined_columns: An array of dict(s) that include an "alias" and "join_path" where,
@@ -500,7 +502,7 @@ def patch(
 
     Args:
         record_def: An object representing the record to be modified.
-        record_id: The primary key value of the record to modify.
+        record_id: The name of the record to modify, as described on `get`.
         table_oid: Identity of the table in the user's database.
         database_id: The Django id of the database containing the table.
         return_record_summaries: Whether to return summaries of the
@@ -542,7 +544,7 @@ def delete(
     Delete records from a table by primary key.
 
     Args:
-        record_ids: The primary key values of the records to be deleted.
+        record_ids: The names of the records to be deleted, as described on `get`.
         table_oid: The identity of the table in the user's database.
         database_id: The Django id of the database containing the table.
 

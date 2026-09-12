@@ -5,6 +5,12 @@ import type { JoinPath, RecordSummaryTemplate } from './tables';
 
 export type ResultValue = string | number | boolean | number[] | null;
 
+/**
+ * What a record is called: the value of its primary key, or -- where the key is made of more than
+ * one column -- the key's values, lowest attnum first.
+ */
+export type RecordName = ResultValue | ResultValue[];
+
 export type SortDirection = 'asc' | 'desc';
 export interface SortingEntry {
   /** column id */
@@ -154,7 +160,7 @@ export const records = {
     {
       database_id: number;
       table_oid: number;
-      record_id: ResultValue;
+      record_id: RecordName;
       /** Keys are stringified attnums */
       record_def: Record<string, unknown>;
       return_record_summaries?: boolean;
@@ -166,7 +172,7 @@ export const records = {
     {
       database_id: number;
       table_oid: number;
-      record_id: ResultValue;
+      record_id: RecordName;
       return_record_summaries?: boolean;
       /**
        * Keys are stringified table OIDs. Values are record summary templates
@@ -191,7 +197,7 @@ export const records = {
     {
       database_id: number;
       table_oid: number;
-      record_ids: ResultValue[];
+      record_ids: RecordName[];
     },
     ResultValue[]
   >(),

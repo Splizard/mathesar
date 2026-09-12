@@ -117,7 +117,8 @@ def test_records_get(rf, monkeypatch, mocked_exec_msar_func):
     call_args = mocked_exec_msar_func.call_args_list[0][0]
     assert actual_record == expect_record
     assert call_args[2] == table_oid
-    assert call_args[3] == record_id
+    # Sent as JSON, so that a record named by more than one column arrives as a JSON array.
+    assert call_args[3].obj == record_id
     assert call_args[4] is None  # joined_columns
     assert call_args[5] is True  # return_record_summaries
     assert call_args[6] == json.dumps({})  # table_record_summary_templates
@@ -219,7 +220,8 @@ def test_records_patch(rf, monkeypatch, mocked_exec_msar_func):
     call_args = mocked_exec_msar_func.call_args_list[0][0]
     assert actual_record == expect_record
     assert call_args[2] == table_oid
-    assert call_args[3] == record_id
+    # Sent as JSON, so that a record named by more than one column arrives as a JSON array.
+    assert call_args[3].obj == record_id
     assert call_args[4] == json.dumps(record_def)
     assert call_args[5] is True  # return_record_summaries
     assert call_args[6] == json.dumps({})  # table_record_summary_templates

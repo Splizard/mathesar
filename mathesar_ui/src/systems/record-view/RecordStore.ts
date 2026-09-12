@@ -10,6 +10,11 @@ import { getRecordPageUrl } from '@mathesar/routes/urls';
 import AssociatedCellData from '@mathesar/stores/AssociatedCellData';
 import { TableStructure } from '@mathesar/stores/table-data';
 import { getErrorMessage } from '@mathesar/utils/errors';
+import {
+  type RecordName,
+  canonicalRecordNameKey,
+  recordNameToText,
+} from '@mathesar/utils/recordName';
 
 export default class RecordStore {
   tableStructure: TableStructure;
@@ -27,15 +32,23 @@ export default class RecordStore {
 
   table: Table;
 
-  recordPk: string;
+  /**
+   * What this record is called: one value, or the key's values where the key is made of more than
+   * one column. Sent to the server as it is.
+   */
+  recordPk: RecordName;
+
+  /** The same name written out, which is how a URL holds it and how a summary is keyed by it */
+  recordPkText: string;
 
   recordPageUrl: string;
 
-  constructor({ table, recordPk }: { table: Table; recordPk: string }) {
+  constructor({ table, recordPk }: { table: Table; recordPk: RecordName }) {
     const { schema } = table;
     this.tableStructure = new TableStructure({ schema, oid: table.oid });
     this.table = table;
     this.recordPk = recordPk;
+    this.recordPkText = recordNameToText(recordPk);
     this.summary = writable('');
     this.recordPageUrl = getRecordPageUrl(
       table.schema.database.id,
@@ -51,7 +64,12 @@ export default class RecordStore {
     this.fieldValues.reconstruct(
       Object.entries(result).map(([k, v]) => [k, v]),
     );
-    this.summary.set(response.record_summaries?.[this.recordPk] ?? '');
+    // Keyed by the name the server writes, which for a name of several values is spaced its own
+    // way; read through the one form both ends agree on.
+    const summaries = Object.entries(response.record_summaries ?? {}).find(
+      ([key]) => canonicalRecordNameKey(key) === this.recordPkText,
+    );
+    this.summary.set(summaries?.[1] ?? '');
     if (response.linked_record_summaries) {
       this.recordSummaries.setFetchedValuesFromPrimitive(
         response.linked_record_summaries,
@@ -76,7 +94,7 @@ export default class RecordStore {
         .run();
       if (response.count === 0) {
         throw new Error(
-          get(_)('record_not_found', { values: { id: this.recordPk } }),
+          get(_)('record_not_found', { values: { id: this.recordPkText } }),
         );
       }
       this.updateSelfWithApiResponseData(response);

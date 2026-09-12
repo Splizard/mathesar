@@ -464,6 +464,30 @@ $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
+msar.get_selectable_pkey_attnums(rel_id regclass) RETURNS smallint[] AS $$/*
+Get the attnums of the columns making up a relation's primary key, lowest first.
+
+By attnum rather than in the order the key itself names them, because this order is what a record's
+name is written in, and the client has to arrive at the same order from what it knows -- which is
+the columns and which of them are part of the key, not how the key was declared. Nothing depends on
+the order being the key's own: a record is found by asking for every one of its key's values at
+once.
+
+Null if the relation has no primary key, or if the current user cannot read every column of it: a
+key half of which is readable names a record no better than no key at all.
+
+Args:
+  rel_id: The OID of the relation.
+*/
+SELECT array_agg(a ORDER BY a) FROM pg_catalog.pg_constraint, LATERAL unnest(conkey) AS a
+WHERE
+  conrelid = rel_id
+  AND contype = 'p'
+  AND (SELECT bool_and(has_column_privilege(rel_id, c, 'SELECT')) FROM unnest(conkey) AS c);
+$$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
 msar.is_default_possibly_dynamic(tab_id oid, col_id integer) RETURNS boolean AS $$/*
 Determine whether the default value for the given column is an expression or constant.
 
@@ -5345,6 +5369,184 @@ SELECT 'WHERE ' || msar.build_expr(rel_id, tree);
 $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 
+/*
+Naming one record.
+
+A record is named by its primary key, which Postgres allows to be made of more than one column.
+Everything below is written around that: the name of a record is one value when the key is one
+column and a JSON array of the key's values, in the key's own order, when it is more than one. The
+two live side by side so that nothing changes for the ordinary table with an `id`.
+
+There are two expressions because two different things are wanted from a row. `build_record_id_expr`
+gives the name as JSON, which is what travels to the client and comes back. `build_record_key_expr`
+gives it as something that can be a key in a JSON object -- the map of record summaries -- and is
+built once and compared against itself, so its exact text matters only in that it is the same on
+both sides of the join.
+*/
+
+CREATE OR REPLACE FUNCTION
+msar.record_naming_attnums(tab_id oid) RETURNS smallint[] AS $$/*
+The columns naming a record of this table, or a refusal saying why there are none.
+
+Two different refusals, because they are two different problems: a key whose columns cannot all be
+read is a matter of privileges, which is somebody else's to grant, and no key at all is a matter of
+the table's own shape.
+
+Args:
+  tab_id: The OID of the table.
+*/
+DECLARE
+  attnums smallint[] := msar.get_selectable_pkey_attnums(tab_id);
+BEGIN
+  IF attnums IS NOT NULL THEN
+    RETURN attnums;
+  END IF;
+  IF EXISTS (
+    SELECT 1 FROM pg_catalog.pg_constraint WHERE conrelid = tab_id AND contype = 'p'
+  ) THEN
+    RAISE EXCEPTION 'permission denied for table %', msar.get_relation_name(tab_id)
+      USING ERRCODE = 'insufficient_privilege';
+  END IF;
+  RAISE EXCEPTION
+    'Table % has no primary key, so a single record of it cannot be named.',
+    msar.get_relation_name(tab_id)
+    USING ERRCODE = 'undefined_object';
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.column_ref_name(tab_id oid, attnum smallint, use_attnums boolean) RETURNS text AS $$/*
+What a column is called where an expression is being built.
+
+Its own name against the table itself, and its attnum against the query's results, which name
+their columns that way -- see msar.build_selectable_column_expr.
+*/
+SELECT CASE WHEN use_attnums THEN attnum::text ELSE msar.get_column_name(tab_id, attnum) END;
+$$ LANGUAGE SQL STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_record_id_expr(
+  tab_id oid, alias text DEFAULT NULL, use_attnums boolean DEFAULT false
+) RETURNS text AS $$/*
+Build an SQL expression giving the name of a row's record, as JSON.
+
+Null if the table has no primary key the current user can read, there being nothing to name a
+record by.
+
+Args:
+  tab_id: The OID of the table.
+  alias: What the row is called where the expression is used. Omitted where it cannot be named,
+    as in the RETURNING of an INSERT.
+  use_attnums: Whether the columns are called by their attnums rather than their names, which is
+    how the query's own results are named once they have been selected.
+*/
+DECLARE
+  attnums smallint[] := msar.get_selectable_pkey_attnums(tab_id);
+  parts text[];
+BEGIN
+  IF attnums IS NULL THEN
+    RETURN NULL;
+  END IF;
+  SELECT array_agg(
+    CASE
+      WHEN alias IS NULL THEN quote_ident(msar.column_ref_name(tab_id, a, use_attnums))
+      ELSE format('%I.%I', alias, msar.column_ref_name(tab_id, a, use_attnums))
+    END
+    ORDER BY ord
+  ) INTO parts
+  FROM unnest(attnums) WITH ORDINALITY AS key_column(a, ord);
+  IF cardinality(attnums) = 1 THEN
+    RETURN format('to_jsonb(%s)', parts[1]);
+  END IF;
+  RETURN format('jsonb_build_array(%s)', array_to_string(parts, ', '));
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_record_key_expr(
+  tab_id oid, alias text DEFAULT NULL, use_attnums boolean DEFAULT false
+) RETURNS text AS $$/*
+Build an SQL expression giving the name of a row's record, as something to key a JSON object by.
+
+A single-column key is left as the column itself, which is what it has always been. A key of
+several columns is the JSON array written out, so that the same row always produces the same text
+and the client can read it back as the array it is.
+
+Args:
+  tab_id: The OID of the table.
+  alias: What the row is called where the expression is used.
+  use_attnums: As on msar.build_record_id_expr.
+*/
+DECLARE
+  attnums smallint[] := msar.get_selectable_pkey_attnums(tab_id);
+BEGIN
+  IF attnums IS NULL THEN
+    RETURN NULL;
+  END IF;
+  IF cardinality(attnums) = 1 THEN
+    RETURN CASE
+      WHEN alias IS NULL THEN quote_ident(msar.column_ref_name(tab_id, attnums[1], use_attnums))
+      ELSE format('%I.%I', alias, msar.column_ref_name(tab_id, attnums[1], use_attnums))
+    END;
+  END IF;
+  RETURN format('(%s)::text', msar.build_record_id_expr(tab_id, alias, use_attnums));
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_record_id_filter(tab_id oid, rec_id jsonb) RETURNS jsonb AS $$/*
+Build the filter picking out the one record a name belongs to.
+
+Written as an equality per key column rather than by comparing the whole name at once, so that the
+primary key's own index is what finds the record.
+
+Args:
+  tab_id: The OID of the table.
+  rec_id: The name of the record: the key's value, or a JSON array of them in the key's order.
+*/
+DECLARE
+  attnums smallint[] := msar.record_naming_attnums(tab_id);
+  filter jsonb := NULL;
+  part jsonb;
+  idx integer;
+BEGIN
+  IF cardinality(attnums) = 1 THEN
+    RETURN jsonb_build_object(
+      'type', 'equal', 'args', jsonb_build_array(
+        jsonb_build_object('type', 'attnum', 'value', attnums[1]),
+        jsonb_build_object('type', 'literal', 'value', rec_id #>> '{}')
+      )
+    );
+  END IF;
+  IF jsonb_typeof(rec_id) <> 'array' OR jsonb_array_length(rec_id) <> cardinality(attnums) THEN
+    RAISE EXCEPTION
+      'A record of % is named by % values, and % were given.',
+      tab_id::regclass, cardinality(attnums),
+      CASE WHEN jsonb_typeof(rec_id) = 'array' THEN jsonb_array_length(rec_id)::text ELSE '1' END
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  FOR idx IN 1 .. cardinality(attnums) LOOP
+    part := jsonb_build_object(
+      'type', 'equal', 'args', jsonb_build_array(
+        jsonb_build_object('type', 'attnum', 'value', attnums[idx]),
+        jsonb_build_object('type', 'literal', 'value', rec_id ->> (idx - 1))
+      )
+    );
+    -- Folded in pairs because the template for `and` takes two arguments and no more.
+    filter := CASE
+      WHEN filter IS NULL THEN part
+      ELSE jsonb_build_object('type', 'and', 'args', jsonb_build_array(filter, part))
+    END;
+  END LOOP;
+  RETURN filter;
+END;
+$$ LANGUAGE plpgsql STABLE;
+
+
 CREATE OR REPLACE FUNCTION
 msar.sanitize_direction(direction text) RETURNS text AS $$/*
 */
@@ -5713,6 +5915,8 @@ CREATE OR REPLACE FUNCTION msar.build_record_summary_query_from_template(
 
   Args:
     tab_id: The OID of the table for which to generate a record summary query.
+    key_col_id: (optional) The column to key the summaries by. Without one they are keyed by what
+      names a record of the table, which is its primary key however many columns that is.
     template: A JSON array that represents the record summary template (described in detail below).
 
   Example template:
@@ -5744,18 +5948,21 @@ DECLARE
   expr text;
   base_sch_name text := msar.get_relation_schema_name(tab_id);
   base_tab_name text := msar.get_relation_name(tab_id);
-  base_key_col_name text := msar.get_column_name(tab_id, key_col_id);
+  -- Keyed by one named column where somebody has said which -- a summary fetched for a foreign
+  -- key is keyed by the column that key points at -- and otherwise by whatever names a record of
+  -- this table, which may be more than one column.
+  base_key_expr text := CASE
+    WHEN key_col_id IS NULL THEN msar.build_record_key_expr(tab_id, base_alias)
+    WHEN pg_catalog.has_column_privilege(tab_id, key_col_id, 'SELECT')
+      THEN format('%I.%I', base_alias, msar.get_column_name(tab_id, key_col_id))
+  END;
   template_part jsonb;
   join_clauses text[] := ARRAY[]::text[];
   join_section text;
 BEGIN
-  IF key_col_id IS NULL THEN
-    -- If we don't have a key column, then we can't generate a record summary query.
-    RETURN msar.build_empty_record_summary_query();
-  END IF;
-
-  IF NOT pg_catalog.has_column_privilege(tab_id, key_col_id, 'SELECT') THEN
-    -- If we don't have permission to select the key column, then we can't generate a record
+  IF base_key_expr IS NULL THEN
+    -- Without a readable primary key there is nothing to name the summarised records by, so
+    -- there is nothing to summarise them for.
     RETURN msar.build_empty_record_summary_query();
   END IF;
 
@@ -5880,7 +6087,7 @@ BEGIN
 
   RETURN concat(
     E'SELECT \n',
-    '  ', base_alias, '.', quote_ident(base_key_col_name), E' AS key, \n',
+    '  ', base_key_expr, E' AS key, \n',
     '  ', expr, E' AS summary \n',
     'FROM ',
     quote_ident(base_sch_name), '.', quote_ident(base_tab_name),
@@ -5920,13 +6127,14 @@ Return text for an SQL query that will summarize records from a table.
 Args:
   tab_id: the OID of the table for which we're getting summaries.
   key_col_id: (optional) This is a column attnum in the table. When given, this column will be used
-    as the key in the summary. If not given, the table's PK column will be used.
+    as the key in the summary. If not given, what names a record of the table is used, which is
+    its primary key however many columns that is.
   table_record_summary_templates: (optional) A JSON object that maps table OIDs to record summary
     templates.
 */
 SELECT msar.build_record_summary_query_from_template(
   tab_id,
-  COALESCE(key_col_id, msar.get_selectable_pkey_attnum(tab_id)),
+  key_col_id,
   COALESCE(
     NULLIF(table_record_summary_templates -> tab_id::text, 'null'::jsonb),
     msar.auto_generate_record_summary_template(tab_id)
@@ -6051,8 +6259,8 @@ Args:
 */
 WITH fkey_map_cte AS (SELECT * FROM msar.get_fkey_map_table(tab_id))
 SELECT concat(
-  format(E'\nLEFT JOIN summary_cte_self ON %1$I.', cte_name)
-  || quote_ident(msar.get_selectable_pkey_attnum(tab_id)::text)
+  E'\nLEFT JOIN summary_cte_self ON '
+  || msar.build_record_key_expr(tab_id, cte_name, true)
   || ' = summary_cte_self.key' ,
   string_agg(
     format(
@@ -6094,7 +6302,7 @@ $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 CREATE OR REPLACE FUNCTION
 msar.build_self_summary_json_expr(tab_id oid) RETURNS TEXT AS $$/*
 */
-SELECT CASE WHEN quote_ident(msar.get_selectable_pkey_attnum(tab_id)::text) IS NOT NULL THEN
+SELECT CASE WHEN msar.build_record_key_expr(tab_id) IS NOT NULL THEN
   $j$
   COALESCE(
     jsonb_object_agg(
@@ -6486,7 +6694,7 @@ BEGIN
     ),
     /* %8 */ msar.build_record_summary_query_for_table(
       tab_id,
-      msar.get_selectable_pkey_attnum(tab_id),
+      null,
       table_record_summary_templates
     ),
     /* %9 */ msar.build_linked_record_summaries_ctes(tab_id),
@@ -6520,27 +6728,20 @@ Get single record from a table. Only columns to which the user has access are re
 
 Args:
   tab_id: The OID of the table whose record we'll get.
-  rec_id: The id value of the record.
+  rec_id: The name of the record: the primary key's value, or -- where the key is made of more
+    than one column -- a JSON array of the key's values in the key's own order.
   joined_columns: (optional) A jsonb list defining columns joined via a simple many-to-many linkage.
     See msar.get_joined_columns_expr_json for more details.
   return_record_summaries : Whether to return a summary for the record listed.
   table_record_summary_templates: A JSON object that maps table OIDs to record summary
     templates.
-
-The table must have a single primary key column.
 */
 SELECT msar.list_records_from_table(
   tab_id,
   null,
   null,
   null,
-  jsonb_build_object(
-    'type', 'equal',
-    'args', jsonb_build_array(
-      jsonb_build_object('type', 'attnum', 'value', msar.get_pk_column(tab_id)),
-      jsonb_build_object('type', 'literal', 'value', rec_id)
-    )
-  ),
+  msar.build_record_id_filter(tab_id, to_jsonb(rec_id)),
   null,
   joined_columns,
   return_record_summaries,
@@ -6555,35 +6756,36 @@ Delete records from table by id.
 
 Args:
   tab_id: The OID of the table whose record we'll delete.
-  rec_ids: An array of primary key values
-
-The table must have a single primary key column.
+  rec_ids: An array of record names, each of them as described on msar.build_record_id_filter.
 */
 DECLARE
-  pk_id integer;
+  filter jsonb := NULL;
+  rec_id jsonb;
   ids_deleted jsonb;
 BEGIN
-  SELECT msar.get_pk_column(tab_id) INTO pk_id;
+  -- One record's filter ORed with the next, so that a key of several columns is handled by the
+  -- same code that handles a key of one.
+  FOR rec_id IN SELECT jsonb_array_elements(rec_ids) LOOP
+    filter := CASE
+      WHEN filter IS NULL THEN msar.build_record_id_filter(tab_id, rec_id)
+      ELSE jsonb_build_object(
+        'type', 'or',
+        'args', jsonb_build_array(filter, msar.build_record_id_filter(tab_id, rec_id))
+      )
+    END;
+  END LOOP;
+  IF filter IS NULL THEN
+    RETURN '[]'::jsonb;
+  END IF;
   EXECUTE format(
     $d$
     WITH delete_cte AS (DELETE FROM %1$I.%2$I %3$s RETURNING *)
-    SELECT coalesce(json_agg(%4$I), '[]') FROM delete_cte
+    SELECT coalesce(jsonb_agg(%4$s), '[]') FROM delete_cte
     $d$,
     msar.get_relation_schema_name(tab_id),
     msar.get_relation_name(tab_id),
-    msar.build_where_clause(
-      tab_id, jsonb_build_object(
-        'type', 'element_in_json_array_untyped', 'args', jsonb_build_array(
-          jsonb_build_object(
-            'type', 'format_data', 'args', jsonb_build_array(
-              jsonb_build_object('type', 'attnum', 'value', pk_id)
-            )
-          ),
-          jsonb_build_object('type', 'literal', 'value', rec_ids)
-        )
-      )
-    ),
-    msar.get_column_name(tab_id, pk_id)
+    msar.build_where_clause(tab_id, filter),
+    msar.build_record_id_expr(tab_id, 'delete_cte')
   ) INTO ids_deleted;
   PERFORM msar.announce_change(tab_id, 'delete', ids_deleted);
   RETURN ids_deleted;
@@ -6669,17 +6871,21 @@ insert.
 
 */
 DECLARE
-  rec_created_id text;
+  rec_created_id jsonb;
   rec_created jsonb;
 BEGIN
   EXECUTE format(
     $q$
-    WITH insert_cte AS (%1$s RETURNING %2$I)
-    SELECT *
+    WITH insert_cte AS (%1$s RETURNING %2$s AS rec_id)
+    SELECT rec_id
     FROM insert_cte
     $q$,
     /* %1 */ msar.build_single_insert_expr(tab_id, rec_def),
-    /* %2 */ msar.get_column_name(tab_id, msar.get_pk_column(tab_id))
+    -- Asked for by way of record_naming_attnums so that a table whose key cannot be read refuses
+    -- with that rather than with a query missing the piece that would have named the new record.
+    /* %2 */ CASE
+      WHEN msar.record_naming_attnums(tab_id) IS NOT NULL THEN msar.build_record_id_expr(tab_id)
+    END
   ) INTO rec_created_id;
   rec_created := msar.get_record_from_table(
     tab_id,
@@ -6727,10 +6933,8 @@ Modify (update/patch) a record in a table.
 
 Args:
   tab_id: The OID of the table whose record we'll delete.
-  rec_id: The primary key value of the record we'll modify.
+  rec_id: The name of the record we'll modify, as described on msar.build_record_id_filter.
   rec_patch: A JSON object defining the parts of the record to patch.
-
-Only tables with a single primary key column are supported.
 
 The `rec_def` object's form is defined by the record being updated.  It should have keys
 corresponding to the attnums of desired columns and values corresponding to values we should set.
@@ -6742,14 +6946,7 @@ BEGIN
   EXECUTE format(
     $p$ %1$s %2$s $p$,
     msar.build_update_expr(tab_id, rec_def),
-    msar.build_where_clause(
-      tab_id, jsonb_build_object(
-        'type', 'equal', 'args', jsonb_build_array(
-          jsonb_build_object('type', 'literal', 'value', rec_id),
-          jsonb_build_object('type', 'attnum', 'value', msar.get_pk_column(tab_id))
-        )
-      )
-    )
+    msar.build_where_clause(tab_id, msar.build_record_id_filter(tab_id, to_jsonb(rec_id)))
   );
   GET DIAGNOSTICS num_updated = ROW_COUNT;
   IF num_updated = 0 THEN

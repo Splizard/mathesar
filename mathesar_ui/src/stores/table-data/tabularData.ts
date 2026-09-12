@@ -12,7 +12,7 @@ import { _ } from 'svelte-i18n';
 import { States } from '@mathesar/api/rest/utils/requestUtils';
 import { api } from '@mathesar/api/rpc';
 import type { RawColumnWithMetadata } from '@mathesar/api/rpc/columns';
-import type { FileManifest, ResultValue } from '@mathesar/api/rpc/records';
+import type { FileManifest } from '@mathesar/api/rpc/records';
 import { parseFileReference } from '@mathesar/components/file-attachments/fileUtils';
 import { parseCellId } from '@mathesar/components/sheet/cellIds';
 import type { SelectedCellData } from '@mathesar/components/sheet/selection';
@@ -32,6 +32,7 @@ import type {
 } from '@mathesar/stores/table-data';
 import { toast } from '@mathesar/stores/toast';
 import { castColumnIdToNumber } from '@mathesar/utils/columnUtils';
+import type { RecordName } from '@mathesar/utils/recordName';
 import { orderProcessedColumns } from '@mathesar/utils/tables';
 import { ImmutableSet, defined } from '@mathesar-component-library';
 
@@ -52,15 +53,13 @@ import {
 import { RecordsData } from './records';
 
 /**
- * Whether one of this table's columns can stand for a whole record.
+ * Whether this table's records can be named.
  *
- * Mirrors `msar.get_selectable_pkey_attnum`, which answers with nothing for a key made of more
- * than one column -- and a query built around nothing raises "null values cannot be formatted as
- * an SQL identifier" rather than saying what is wrong. Asked here so that what cannot be done is
- * not offered.
+ * Mirrors `msar.get_selectable_pkey_attnums`: a primary key of any number of columns will do, and
+ * nothing at all will not. Asked here so that what cannot be done is not offered.
  */
 function countsAsAnId(columns: RawColumnWithMetadata[]): boolean {
-  return columns.filter((column) => column.primary_key).length === 1;
+  return columns.some((column) => column.primary_key);
 }
 
 function getSelectedCellData(
@@ -154,15 +153,10 @@ export class TabularData {
   selectedCellData: Readable<SelectedCellData>;
 
   /**
-   * Whether a record of this table can be pointed at by one value.
-   *
-   * Not the same question as whether the table has a primary key. A key made of two columns is a
-   * key, and Postgres is happy with it, but everything Mathesar does to one record at a time --
-   * reading it, changing it, deleting it, linking to it -- names the record by a single column,
-   * and the server has nothing to put there for a table keyed on two. So a table like that is
-   * read as a sheet and nothing else is offered for it.
+   * Whether a record of this table can be named, which is what everything done to one record at a
+   * time needs. A primary key of any number of columns will do.
    */
-  hasSingleColumnPrimaryKey: Readable<boolean>;
+  hasPrimaryKey: Readable<boolean>;
 
   canSelectRecords: Readable<boolean>;
 
@@ -222,8 +216,10 @@ export class TabularData {
     this.processedColumns = derived(
       [this.columnsDataStore.columns, this.constraintsDataStore],
       ([columns, constraintsData]) => {
-        // A cell only offers to open the record it belongs to when there is a record to open.
-        const canOpenRecords = countsAsAnId(columns);
+        // A key cell offers to open the record it belongs to, which it can only do where it is
+        // the whole of the key: one cell of a key made of two names half a record.
+        const canOpenRecords =
+          columns.filter((column) => column.primary_key).length === 1;
         return orderProcessedColumns(
           new Map(
             columns.map((column, columnIndex) => [
@@ -244,10 +240,7 @@ export class TabularData {
       },
     );
 
-    this.hasSingleColumnPrimaryKey = derived(
-      this.columnsDataStore.columns,
-      countsAsAnId,
-    );
+    this.hasPrimaryKey = derived(this.columnsDataStore.columns, countsAsAnId);
 
     this.canSelectRecords = derived(
       this.table.currentAccess.currentRolePrivileges,
@@ -264,17 +257,14 @@ export class TabularData {
 
     // TODO: We should be able to insert without a primary key column
     this.canInsertRecords = derived(
-      [
-        this.hasSingleColumnPrimaryKey,
-        this.table.currentAccess.currentRolePrivileges,
-      ],
+      [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
       ([hasId, tableCurrentRolePrivileges]) =>
         isWritableSchema && hasId && tableCurrentRolePrivileges.has('INSERT'),
     );
 
     this.canUpdateRecords = derived(
       [
-        this.hasSingleColumnPrimaryKey,
+        this.hasPrimaryKey,
         this.table.currentAccess.currentRolePrivileges,
         this.processedColumns,
       ],
@@ -288,10 +278,7 @@ export class TabularData {
     );
 
     this.canDeleteRecords = derived(
-      [
-        this.hasSingleColumnPrimaryKey,
-        this.table.currentAccess.currentRolePrivileges,
-      ],
+      [this.hasPrimaryKey, this.table.currentAccess.currentRolePrivileges],
       ([hasId, tableCurrentRolePrivileges]) =>
         isWritableSchema && hasId && tableCurrentRolePrivileges.has('DELETE'),
     );
@@ -473,12 +460,17 @@ export class TabularData {
     return get(this.processedColumns).get(columnSelectionId);
   }
 
-  getRecordIdFromRowId(rowId: string): ResultValue | undefined {
+  /**
+   * What the record in this row is called: the value of its primary key, or the values of the
+   * key's columns in attnum order where the key is made of more than one.
+   */
+  getRecordIdFromRowId(rowId: string): RecordName | undefined {
     const row = get(this.recordsData.selectableRowsMap).get(rowId);
     if (!row) return undefined;
-    const pkColumn = get(this.columnsDataStore.pkColumn);
-    if (!pkColumn) return undefined;
-    return row.record[pkColumn.id];
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    if (pkColumns.length === 0) return undefined;
+    if (pkColumns.length === 1) return row.record[pkColumns[0].id];
+    return pkColumns.map((column) => row.record[column.id]);
   }
 
   async addNewRecord() {

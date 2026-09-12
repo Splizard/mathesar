@@ -1,4 +1,5 @@
 import type { Table } from '@mathesar/models/Table';
+import { recordNameToText } from '@mathesar/utils/recordName';
 import Url64 from '@mathesar/utils/Url64';
 
 export function getDatabasePageUrl(databaseId: number): string {
@@ -128,7 +129,8 @@ export function getRecordPageUrl(
   tableId: number,
   recordId: unknown,
 ): string {
-  return `${getTablePageUrl(databaseId, schemaId, tableId)}${String(recordId)}`;
+  const name = encodeURIComponent(recordNameToText(recordId));
+  return `${getTablePageUrl(databaseId, schemaId, tableId)}${name}`;
 }
 
 export function getRecordPageUrlByTable(table: Table, recordId: unknown) {

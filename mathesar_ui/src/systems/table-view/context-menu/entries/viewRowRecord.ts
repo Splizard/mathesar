@@ -6,6 +6,7 @@ import { getRecordPageUrlByTable } from '@mathesar/routes/urls';
 import type { TabularData } from '@mathesar/stores/table-data';
 import { currentTablesMap } from '@mathesar/stores/tables';
 import RecordStore from '@mathesar/systems/record-view/RecordStore';
+import type { RecordName } from '@mathesar/utils/recordName';
 import {
   type ModalController,
   buttonMenuEntry,
@@ -13,7 +14,7 @@ import {
 } from '@mathesar-component-library';
 
 export function* viewRowRecord(p: {
-  recordId: unknown;
+  recordId: RecordName | undefined;
   tabularData: TabularData;
   modalRecordView: ModalController<RecordStore> | undefined;
 }) {
@@ -33,7 +34,7 @@ export function* viewRowRecord(p: {
       if (!containingTable) return;
       const recordStore = new RecordStore({
         table: containingTable,
-        recordPk: String(p.recordId),
+        recordPk: p.recordId,
       });
       p.modalRecordView.open(recordStore);
     },

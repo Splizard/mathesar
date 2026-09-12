@@ -23,7 +23,7 @@
 
   const tabularData = getTabularDataStoreFromContext();
 
-  $: ({ table, meta, isLoading, hasSingleColumnPrimaryKey } = $tabularData);
+  $: ({ table, meta, isLoading, hasPrimaryKey } = $tabularData);
   $: ({ currentRolePrivileges } = table.currentAccess);
   $: ({ sorting, grouping, hiddenColumns, sheetState } = meta);
 
@@ -61,7 +61,7 @@
 
   <ModificationStatus requestState={$sheetState} />
 
-  {#if !$isLoading && !$hasSingleColumnPrimaryKey}
+  {#if !$isLoading && !$hasPrimaryKey}
     <div class="no-pk-warning">
       <Tooltip allowHover>
         <div slot="trigger">

@@ -28,7 +28,7 @@ TODO: Resolve code duplication between this file and RecordPageContent.svelte.
   $: ({ currentRolePrivileges } = table.currentAccess);
   $: canUpdateTableRecords = $currentRolePrivileges.has('UPDATE');
   $: ({ processedColumns } = tableStructure);
-  $: ({ recordPk, summary, fieldValues } = record);
+  $: ({ recordPkText, summary, fieldValues } = record);
   $: fieldPropsObjects = [...$processedColumns.values()]
     .filter((c) => !c.isUserTrackingColumn)
     .map((c) => ({
@@ -117,7 +117,7 @@ TODO: Resolve code duplication between this file and RecordPageContent.svelte.
   {#await getJoinableTablesResult(table.oid) then joinableTablesResult}
     <Widgets
       {joinableTablesResult}
-      {recordPk}
+      recordPk={recordPkText}
       recordSummary={$summary}
       isInModal
     />
