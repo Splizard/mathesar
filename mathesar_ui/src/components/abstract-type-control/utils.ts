@@ -85,7 +85,7 @@ export function constructDisplayForm(
   displayFormValues: FormBuildConfiguration['values'];
 } {
   const displayOptionsConfig =
-    selectedAbstractType.getDisplayConfig?.() ?? undefined;
+    selectedAbstractType.getDisplayConfig?.(selectedDbType) ?? undefined;
   let displayForm;
   if (displayOptionsConfig) {
     const displayFormValues =

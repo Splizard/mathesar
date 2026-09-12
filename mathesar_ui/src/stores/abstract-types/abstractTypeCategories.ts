@@ -43,7 +43,7 @@ import Geometry from './type-configs/geometry';
 import Json from './type-configs/json';
 import Money from './type-configs/money';
 import Network from './type-configs/network';
-import Number from './type-configs/number';
+import Number, { canHoldUnixTime } from './type-configs/number';
 import { plainType } from './type-configs/plain';
 import { numberRangeType, timeRangeType } from './type-configs/range';
 import Text from './type-configs/text';
@@ -723,6 +723,7 @@ export function abstractTypeToColumnSaveSpec(
 export function mergeMetadataOnTypeChange(
   newAbstractType: AbstractType,
   metadata: ColumnMetadata | null,
+  newDbType?: DbType,
 ) {
   let result = metadata ?? {};
 
@@ -758,6 +759,22 @@ export function mergeMetadataOnTypeChange(
     result = {
       ...result,
       user_display_field: null,
+    };
+  }
+
+  // Only a whole number counts from the Unix epoch. Without this, a column
+  // changed from Integer to Decimal would go on being shown as a date with no
+  // way left to say otherwise: the option is only offered where it applies.
+  if (
+    metadata?.num_unix_time != null &&
+    !(
+      newAbstractType.identifier === abstractTypeCategory.Number &&
+      (newDbType === undefined || canHoldUnixTime(newDbType))
+    )
+  ) {
+    result = {
+      ...result,
+      num_unix_time: null,
     };
   }
 

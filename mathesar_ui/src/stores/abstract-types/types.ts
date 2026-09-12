@@ -78,7 +78,8 @@ export interface AbstractTypeConfiguration {
   cellInfo: CellInfo;
   /** The options of the type, when the selected DB type takes any */
   getDbConfig?: (selectedDbType?: DbType) => AbstractTypeDbConfig | undefined;
-  getDisplayConfig?: () => AbstractTypeDisplayConfig;
+  /** The display options of the type, which may depend on the selected DB type */
+  getDisplayConfig?: (selectedDbType?: DbType) => AbstractTypeDisplayConfig;
   getEnabledState?: () =>
     | { enabled: false; cause: string | string[] | UntypedComponentWithProps }
     | { enabled: true };

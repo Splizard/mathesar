@@ -45,7 +45,7 @@
 <div class="presets" class:is-relative={isRelative}>
   {#each presets as { keyword, label } (keyword)}
     <Button
-      appearance={value?.trim() === keyword ? 'primary' : 'plain'}
+      appearance={String(value ?? '').trim() === keyword ? 'primary' : 'plain'}
       on:click={() => {
         value = getCanonicalValue(keyword);
         dispatch('change', value);

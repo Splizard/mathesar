@@ -1,4 +1,5 @@
 import { DEFAULT_COLUMN_WIDTH_PX } from '@mathesar/geometry';
+import type { UnixTimeUnit } from '@mathesar/utils/date-time/types';
 
 export type BooleanInputType = 'checkbox' | 'dropdown';
 
@@ -71,6 +72,13 @@ export interface RequiredColumnMetadata {
 
   num_grouping: NumberGrouping;
 
+  /**
+   * The unit a whole number counts from the Unix epoch in, when that is what
+   * the column holds. When set, the column is shown as a date and a time
+   * (formatted by `date_format` and `time_format`) rather than as a number.
+   */
+  num_unix_time: UnixTimeUnit | null;
+
   /** The currency symbol to show for a money type e.g. "$", "€", "NZD", etc. */
   mon_currency_symbol: string;
 
@@ -119,6 +127,7 @@ export const defaultColumnMetadata: RequiredColumnMetadata = {
   num_max_frac_digits: 20,
   num_format: null,
   num_grouping: 'auto',
+  num_unix_time: null,
   mon_currency_symbol: '$',
   mon_currency_location: 'after-minus',
   time_format: '24hr',

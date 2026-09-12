@@ -27,6 +27,9 @@ class ColumnMetaDataRecord(TypedDict):
         num_max_frac_digits: Maximum digits shown after the decimal point.
         num_grouping: Specifies how grouping separators are displayed for numeric values.
         num_format: Specifies the locale-specific format for displaying numeric values.
+        num_unix_time: The unit of a whole number counting from the Unix epoch, when that is what
+            the column holds. If non-null, the column is shown as a date and a time rather than as
+            a number, formatted by `date_format` and `time_format`.
         mon_currency_symbol: The currency symbol shown for money value.
         mon_currency_location: Where the currency symbol should be shown.
         time_format: A string representing the format of time values.
@@ -53,6 +56,7 @@ class ColumnMetaDataRecord(TypedDict):
     num_max_frac_digits: Optional[int]
     num_grouping: Optional[str]
     num_format: Optional[str]
+    num_unix_time: Optional[Literal["seconds", "milliseconds", "microseconds", "nanoseconds"]]
     mon_currency_symbol: Optional[str]
     mon_currency_location: Optional[Literal["after-minus", "end-with-space"]]
     time_format: Optional[str]
@@ -85,6 +89,9 @@ class ColumnMetaDataBlob(TypedDict):
         num_max_frac_digits: Maximum digits shown after the decimal point.
         num_grouping: Specifies how grouping separators are displayed for numeric values.
         num_format: Specifies the locale-specific format for displaying numeric values.
+        num_unix_time: The unit of a whole number counting from the Unix epoch, when that is what
+            the column holds. If non-null, the column is shown as a date and a time rather than as
+            a number, formatted by `date_format` and `time_format`.
         mon_currency_symbol: The currency symbol shown for money value.
         mon_currency_location: Where the currency symbol should be shown.
         time_format: A string representing the format of time values.
@@ -109,6 +116,7 @@ class ColumnMetaDataBlob(TypedDict):
     num_max_frac_digits: Optional[int]
     num_grouping: Optional[str]
     num_format: Optional[str]
+    num_unix_time: Optional[Literal["seconds", "milliseconds", "microseconds", "nanoseconds"]]
     mon_currency_symbol: Optional[str]
     mon_currency_location: Optional[Literal["after-minus", "end-with-space"]]
     time_format: Optional[str]

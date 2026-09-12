@@ -53,6 +53,14 @@ CREATE TABLE IF NOT EXISTS presentation_schema.columns (
     CHECK (num_grouping IN ('always', 'auto', 'never')),
   num_format text CONSTRAINT num_format_known
     CHECK (num_format IN ('english', 'german', 'french', 'hindi', 'swiss')),
+
+  -- The unit of a whole number counting from the Unix epoch, when that is what the column holds.
+  --
+  -- Null, and it is shown as a number. Set, and it is an instant, shown as a date and a time like
+  -- any other, using this column's date_format and time_format.
+  num_unix_time text CONSTRAINT num_unix_time_known
+    CHECK (num_unix_time IN ('seconds', 'milliseconds', 'microseconds', 'nanoseconds')),
+
   mon_currency_symbol text,
   mon_currency_location text CONSTRAINT mon_currency_location_known
     CHECK (mon_currency_location IN ('after-minus', 'end-with-space')),
@@ -92,6 +100,10 @@ CREATE TABLE IF NOT EXISTS presentation_schema.columns (
 -- CREATE above, and these do nothing. Adding an option to Mathesar means a line in the table and a
 -- line here, and nothing else: the option list is read off the table itself.
 ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS display_position smallint;
+
+ALTER TABLE presentation_schema.columns ADD COLUMN IF NOT EXISTS num_unix_time text
+  CONSTRAINT num_unix_time_known
+  CHECK (num_unix_time IN ('seconds', 'milliseconds', 'microseconds', 'nanoseconds'));
 
 
 CREATE OR REPLACE FUNCTION

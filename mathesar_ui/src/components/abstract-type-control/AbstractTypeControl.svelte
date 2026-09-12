@@ -77,7 +77,11 @@
     selectedDbType = type;
     selectedAbstractType = abstractType;
     typeOptions = {};
-    metadata = mergeMetadataOnTypeChange(selectedAbstractType, metadata);
+    metadata = mergeMetadataOnTypeChange(
+      selectedAbstractType,
+      metadata,
+      selectedDbType,
+    );
   }
 
   function cancel() {

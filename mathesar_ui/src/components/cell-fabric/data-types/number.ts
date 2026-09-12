@@ -3,6 +3,7 @@ import {
   type RawColumnWithMetadata,
   getColumnMetadataValue,
 } from '@mathesar/api/rpc/columns';
+import { isUnixTimeColumn } from '@mathesar/stores/abstract-types/type-configs/number';
 import {
   StringifiedNumberFormatter,
   assertExhaustive,
@@ -14,6 +15,7 @@ import NumberCell from './components/number/NumberCell.svelte';
 import NumberCellInput from './components/number/NumberCellInput.svelte';
 import type { NumberCellExternalProps } from './components/typeDefinitions';
 import type { CellComponentFactory } from './typeDefinitions';
+import unixTime from './unixTime';
 
 // prettier-ignore
 const localeMap = new Map<NumberFormat, string>([
@@ -112,11 +114,13 @@ function getProps(
   };
 }
 
+/** Number cells, which show dates when the column's values are Unix times */
 const numberType: CellComponentFactory = {
   get(
     column: RawColumnWithMetadata,
     config?: Config,
-  ): ComponentAndProps<NumberCellExternalProps> {
+  ): ComponentAndProps<NumberCellExternalProps> | ComponentAndProps {
+    if (isUnixTimeColumn(column.metadata)) return unixTime.get(column, config);
     return {
       component: NumberCell,
       props: getProps(column, config),
@@ -126,7 +130,12 @@ const numberType: CellComponentFactory = {
   getInput(
     column: RawColumnWithMetadata,
     config?: Config,
-  ): ComponentAndProps<NumberCellExternalProps['formatterOptions']> {
+  ):
+    | ComponentAndProps<NumberCellExternalProps['formatterOptions']>
+    | ComponentAndProps {
+    if (isUnixTimeColumn(column.metadata)) {
+      return unixTime.getInput(column, config);
+    }
     return {
       component: NumberCellInput,
       props: getFormatterOptions(column, config),
@@ -134,6 +143,9 @@ const numberType: CellComponentFactory = {
   },
 
   getDisplayFormatter(column: RawColumnWithMetadata, config?: Config) {
+    if (isUnixTimeColumn(column.metadata)) {
+      return unixTime.getDisplayFormatter(column, config);
+    }
     return (v) => getProps(column, config).formatForDisplay(String(v));
   },
 };

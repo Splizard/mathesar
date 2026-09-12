@@ -9642,6 +9642,30 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION  test_column_presentation_checks_a_value() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  PERFORM msar.set_column_presentation(
+    'pres'::regclass::oid, 1, '{"num_unix_time": "nanoseconds"}'::jsonb
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '1' ->> 'num_unix_time',
+    'nanoseconds',
+    'a column can say what unit it counts from the Unix epoch in'
+  );
+  -- The option list is read off the table, so a value out of range is Postgres's to refuse.
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.set_column_presentation(
+      'pres'::regclass::oid, 1, '{"num_unix_time": "fortnights"}'::jsonb
+    )$i$,
+    '23514',
+    NULL,
+    'and a unit that is not one of them is refused'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION  test_column_presentation_survives_a_rename() RETURNS SETOF TEXT AS $f$
 BEGIN
   PERFORM __setup_pres();

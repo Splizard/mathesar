@@ -1,2 +1,4 @@
 export type { default as DateTimeSpecification } from './DateTimeSpecification';
 export type { default as DateTimeFormatter } from './DateTimeFormatter';
+export type { default as UnixTimeFormatter } from './UnixTimeFormatter';
+export type { UnixTimeUnit } from './UnixTimeFormatter';
