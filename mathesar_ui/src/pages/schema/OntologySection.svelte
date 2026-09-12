@@ -16,6 +16,7 @@
   import { confirmDelete } from '@mathesar/stores/confirmation';
   import { modal } from '@mathesar/stores/modal';
   import { toast } from '@mathesar/stores/toast';
+  import CompositeTypeModal from '@mathesar/systems/ontology/CompositeTypeModal.svelte';
   import DomainTypeModal from '@mathesar/systems/ontology/DomainTypeModal.svelte';
   import EnumTypeModal from '@mathesar/systems/ontology/EnumTypeModal.svelte';
   import {
@@ -42,6 +43,7 @@
 
   const enumModal = modal.spawnModalController();
   const domainModal = modal.spawnModalController();
+  const compositeModal = modal.spawnModalController();
   /** The type the modal is open on, or undefined for one being made */
   let editing: RawSchemaType | undefined = undefined;
 
@@ -61,6 +63,7 @@
   const modals: Partial<Record<RawSchemaType['kind'], ModalController>> = {
     enum: enumModal,
     domain: domainModal,
+    composite: compositeModal,
   };
 
   function edit(kind: RawSchemaType['kind'], type: RawSchemaType | undefined) {
@@ -118,6 +121,9 @@
         <ButtonMenuItem on:click={() => edit('domain', undefined)}>
           {$_('new_domain')}
         </ButtonMenuItem>
+        <ButtonMenuItem on:click={() => edit('composite', undefined)}>
+          {$_('new_composite')}
+        </ButtonMenuItem>
       </DropdownMenu>
     {/if}
   </svelte:fragment>
@@ -134,7 +140,7 @@
             <div class="title">
               <NameWithIcon icon={icons[type.kind]}>{type.name}</NameWithIcon>
               <span class="kind">{kindLabel(type)}</span>
-              {#if canEdit && type.kind !== 'composite'}
+              {#if canEdit}
                 <span class="actions">
                   <Button
                     appearance="plain"
@@ -169,28 +175,26 @@
                 {/each}
               </div>
             {/if}
-            {#if type.fields}
+            {#if type.fields?.length}
               <ul class="details">
                 {#each type.fields as field}
                   <li><span class="name">{field.name}</span> {field.type}</li>
                 {/each}
               </ul>
             {/if}
-            {#if type.kind !== 'composite'}
-              <p class="description used-by">
-                {#if type.used_by.length === 0}
-                  {$_('type_used_by_nothing')}
-                {:else}
-                  {$_('type_used_by', {
-                    values: {
-                      columns: type.used_by
-                        .map((user) => `${user.table_name}.${user.column_name}`)
-                        .join(', '),
-                    },
-                  })}
-                {/if}
-              </p>
-            {/if}
+            <p class="description used-by">
+              {#if type.used_by.length === 0}
+                {$_('type_used_by_nothing')}
+              {:else}
+                {$_('type_used_by', {
+                  values: {
+                    columns: type.used_by
+                      .map((user) => `${user.table_name}.${user.column_name}`)
+                      .join(', '),
+                  },
+                })}
+              {/if}
+            </p>
             {#if type.kind === 'domain'}
               <ul class="details">
                 {#if type.over !== type.base_type}
@@ -235,6 +239,13 @@
   controller={domainModal}
   {schema}
   type={editing?.kind === 'domain' ? editing : undefined}
+  onSaved={reload}
+/>
+
+<CompositeTypeModal
+  controller={compositeModal}
+  {schema}
+  type={editing?.kind === 'composite' ? editing : undefined}
   onSaved={reload}
 />
 

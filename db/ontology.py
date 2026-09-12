@@ -73,6 +73,42 @@ def alter_domain_type(conn, type_oid, patch):
     ).fetchone()[0]
 
 
+def create_composite_type(conn, schema_oid, name, fields, description=None):
+    """
+    Create a composite type: a type whose values are a record of named fields.
+
+    Args:
+        conn: a psycopg connection
+        schema_oid: The OID of the schema to create the type in.
+        name: The name to give it.
+        fields: Its fields, in order; see msar.composite_fields_given.
+        description: A comment to put on the type.
+
+    Returns:
+        The OID of the new type.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'create_composite_type', schema_oid, name, json.dumps(fields), description
+    ).fetchone()[0]
+
+
+def alter_composite_type(conn, type_oid, patch):
+    """
+    Change a composite type's name, its description, or its fields.
+
+    Args:
+        conn: a psycopg connection
+        type_oid: The OID of the composite type.
+        patch: A dict of the fields to change; see msar.alter_composite_type.
+
+    Returns:
+        The OID of the type.
+    """
+    return db_conn.exec_msar_func(
+        conn, 'alter_composite_type', type_oid, json.dumps(patch)
+    ).fetchone()[0]
+
+
 def drop_type(conn, type_oid, cascade=False):
     """
     Drop a type the database defines for itself, returning its qualified name.

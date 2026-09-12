@@ -140,3 +140,75 @@ def test_types_patch_domain(rf, monkeypatch):
         type_oid=4242, patch=patch, database_id=11, request=_request(rf)
     ) == 4242
     assert call == {'conn': 'conn', 'type_oid': 4242, 'patch': patch}
+
+
+def test_types_add_composite(rf, monkeypatch):
+    call = {}
+    fields = [
+        {'name': 'street', 'type': {'name': 'text'}},
+        {'name': 'postcode', 'type': {'name': 'character varying', 'options': {'length': 10}}},
+    ]
+
+    def mock_create_composite_type(conn, schema_oid, name, _fields, description):
+        call.update(
+            conn=conn, schema_oid=schema_oid, name=name,
+            fields=_fields, description=description
+        )
+        return 4242
+
+    monkeypatch.setattr(types, 'connect', _mock_connect)
+    monkeypatch.setattr(types, 'create_composite_type', mock_create_composite_type)
+    assert types.add_composite(
+        schema_oid=2200,
+        name='Address',
+        fields=fields,
+        description='Where to send it',
+        database_id=11,
+        request=_request(rf),
+    ) == 4242
+    assert call == {
+        'conn': 'conn', 'schema_oid': 2200, 'name': 'Address',
+        'fields': fields, 'description': 'Where to send it',
+    }
+
+
+def test_types_add_composite_without_a_description(rf, monkeypatch):
+    call = {}
+
+    def mock_create_composite_type(conn, schema_oid, name, fields, description):
+        call.update(description=description)
+        return 4242
+
+    monkeypatch.setattr(types, 'connect', _mock_connect)
+    monkeypatch.setattr(types, 'create_composite_type', mock_create_composite_type)
+    types.add_composite(
+        schema_oid=2200,
+        name='Address',
+        fields=[{'name': 'street', 'type': {'name': 'text'}}],
+        database_id=11,
+        request=_request(rf),
+    )
+    assert call == {'description': None}
+
+
+def test_types_patch_composite(rf, monkeypatch):
+    call = {}
+    patch = {
+        'name': 'Home',
+        'fields': [
+            {'name': 'road', 'was': 'street'},
+            {'name': 'country', 'type': {'name': 'text'}},
+        ],
+    }
+
+    def mock_alter_composite_type(conn, type_oid, _patch):
+        call.update(conn=conn, type_oid=type_oid, patch=_patch)
+        # Changing a composite type never replaces it, so the OID is the one asked about.
+        return 4242
+
+    monkeypatch.setattr(types, 'connect', _mock_connect)
+    monkeypatch.setattr(types, 'alter_composite_type', mock_alter_composite_type)
+    assert types.patch_composite(
+        type_oid=4242, patch=patch, database_id=11, request=_request(rf)
+    ) == 4242
+    assert call == {'conn': 'conn', 'type_oid': 4242, 'patch': patch}

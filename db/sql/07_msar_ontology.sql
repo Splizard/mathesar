@@ -936,3 +936,180 @@ BEGIN
   RETURN typ_id;
 END;
 $$ LANGUAGE plpgsql STRICT;
+
+
+----------------------------------------------------------------------------------------------------
+-- COMPOSITE TYPES
+----------------------------------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION
+msar.composite_fields_given(fields jsonb) RETURNS TABLE (ord integer, name_ text, typ jsonb, was text)
+AS $$/*
+Read a list of a composite type's fields as it is given to us, in the order given.
+
+Each element is an object of the form
+
+  {"name": <str>, "type": <type>, "was": <str or null>}
+
+where "was" names the field this one stands for and the type is as msar.build_type_text takes it. A
+field with no "was" is one being added, which is the only kind that gives a type, and a field the
+list leaves out altogether is one being dropped: saying which field each one was is the only way to
+tell a field being renamed from one being dropped and another added, which are different things to
+do to the records holding the type's values.
+
+Args:
+  fields: The list of fields.
+*/
+SELECT ord::integer, entry ->> 'name', entry -> 'type', entry ->> 'was'
+FROM jsonb_array_elements(fields) WITH ORDINALITY AS x(entry, ord);
+$$ LANGUAGE SQL IMMUTABLE STRICT;
+
+
+CREATE OR REPLACE FUNCTION msar.composite_fields_sql(fields jsonb) RETURNS text AS $$/*
+Return the given fields as the list a CREATE TYPE takes, in the order given.
+
+Args:
+  fields: The list of fields, as described in msar.composite_fields_given.
+*/
+SELECT string_agg(format('%I %s', name_, msar.build_type_text(typ)), ', ' ORDER BY ord)
+FROM msar.composite_fields_given(fields);
+$$ LANGUAGE SQL STRICT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.create_composite_type(sch_id regnamespace, typ_name text, fields jsonb,
+                           description text DEFAULT null)
+  RETURNS oid AS $$/*
+Create a composite type: a type whose values are a record of named fields.
+
+The name is used as given. A name already taken is an error rather than something to work around,
+since somebody asking for a type by name wants that name.
+
+Args:
+  sch_id: The OID of the schema to create the type in.
+  typ_name: The name to give it.
+  fields: Its fields, in order, as described in msar.composite_fields_given.
+  description: A comment to put on the type.
+*/
+DECLARE
+  sch_name text := sch_id::regnamespace::text;
+  typ_id oid;
+BEGIN
+  EXECUTE format(
+    'CREATE TYPE %s.%I AS (%s)', sch_name, typ_name, msar.composite_fields_sql(fields)
+  );
+  typ_id := (
+    SELECT oid FROM pg_catalog.pg_type WHERE typnamespace = sch_id AND typname = typ_name
+  );
+  IF description IS NOT NULL THEN
+    EXECUTE format('COMMENT ON TYPE %s.%I IS %L', sch_name, typ_name, description);
+  END IF;
+  RETURN typ_id;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.set_composite_fields(typ_id oid, fields jsonb) RETURNS void AS $$/*
+Make the composite type's fields the ones given: keep the named ones, add the new ones, drop the
+rest.
+
+The type of a field the type already has is not among what can change. Postgres refuses to change
+one while any column anywhere holds the type -- through an array of it, or another type of it, or a
+domain over it -- because the values are written into every one of those records and it will not
+rewrite them. Where it would be allowed there is no record to lose, and dropping the field and
+adding one of the type wanted comes to the same thing, so that is the one way offered.
+
+A field is added at the end, Postgres having no way to put one anywhere else, and the fields are
+kept in the order it gives them.
+
+Args:
+  typ_id: The OID of the composite type.
+  fields: The fields it is to have, as described in msar.composite_fields_given.
+*/
+DECLARE
+  typ_name text := typ_id::regtype::text;
+  rel_id oid := (SELECT typrelid FROM pg_catalog.pg_type WHERE oid = typ_id);
+  unknown text;
+  given record;
+BEGIN
+  SELECT string_agg(quote_literal(was), ', ') INTO unknown
+  FROM msar.composite_fields_given(fields)
+  WHERE was IS NOT NULL AND NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute
+    WHERE attrelid = rel_id AND attname = was AND attnum > 0 AND NOT attisdropped
+  );
+  IF unknown IS NOT NULL THEN
+    RAISE EXCEPTION 'The field % is not one of %''s fields.', unknown, typ_name
+      USING ERRCODE = 'undefined_column';
+  END IF;
+  FOR given IN
+    SELECT attname FROM pg_catalog.pg_attribute
+    WHERE attrelid = rel_id AND attnum > 0 AND NOT attisdropped
+      AND attname NOT IN (SELECT was FROM msar.composite_fields_given(fields) WHERE was IS NOT NULL)
+    ORDER BY attnum
+  LOOP
+    EXECUTE format('ALTER TYPE %s DROP ATTRIBUTE %I', typ_name, given.attname);
+  END LOOP;
+  -- The renames come in the order asked for, which is enough for every case but two fields trading
+  -- names: the first of those two runs into the name the second is about to give up, and Postgres
+  -- refuses and says so, there being no name to rename it to in the meantime.
+  FOR given IN
+    SELECT was, name_ FROM msar.composite_fields_given(fields)
+    WHERE was IS NOT NULL AND name_ <> was ORDER BY ord
+  LOOP
+    EXECUTE format(
+      'ALTER TYPE %s RENAME ATTRIBUTE %I TO %I', typ_name, given.was, given.name_
+    );
+  END LOOP;
+  FOR given IN
+    SELECT name_, typ FROM msar.composite_fields_given(fields) WHERE was IS NULL ORDER BY ord
+  LOOP
+    EXECUTE format(
+      'ALTER TYPE %s ADD ATTRIBUTE %I %s',
+      typ_name, given.name_, msar.build_type_text(given.typ)
+    );
+  END LOOP;
+END;
+$$ LANGUAGE plpgsql STRICT;
+
+
+CREATE OR REPLACE FUNCTION msar.alter_composite_type(typ_id oid, patch jsonb) RETURNS oid AS $$/*
+Change a composite type's name, its description, or its fields.
+
+Args:
+  typ_id: The OID of the composite type.
+  patch: An object of the form
+    {
+      "name": <str>,
+      "description": <str or null>,
+      "fields": [<field>, ...]
+    }
+  where every key is optional. A description of null takes it off, and the fields are as described
+  in msar.composite_fields_given.
+
+Returns:
+  The OID of the type, which changing it never replaces.
+*/
+DECLARE
+  typ_name text := typ_id::regtype::text;
+BEGIN
+  IF patch ? 'fields' THEN
+    PERFORM msar.set_composite_fields(typ_id, patch -> 'fields');
+  END IF;
+  IF patch ? 'description' THEN
+    EXECUTE format(
+      'COMMENT ON TYPE %s IS %s',
+      typ_name,
+      COALESCE(quote_literal(patch ->> 'description'), 'NULL')
+    );
+  END IF;
+  -- Last, so that everything above is done to the type under the name it was asked about.
+  IF patch ->> 'name' IS NOT NULL AND patch ->> 'name' <> (
+    SELECT typname FROM pg_catalog.pg_type WHERE oid = typ_id
+  ) THEN
+    EXECUTE format('ALTER TYPE %s RENAME TO %I', typ_name, patch ->> 'name');
+  END IF;
+  RETURN typ_id;
+END;
+$$ LANGUAGE plpgsql STRICT;

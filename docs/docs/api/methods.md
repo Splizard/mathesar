@@ -296,12 +296,16 @@
       - patch_enum
       - add_domain
       - patch_domain
+      - add_composite
+      - patch_composite
       - delete
       - EnumValue
       - EnumPatch
       - DomainSpec
       - DomainPatch
       - DomainRule
+      - CompositeField
+      - CompositePatch
 
 ## Users
 

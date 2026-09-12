@@ -11,6 +11,7 @@
   import {
     type FamilyOption,
     type KindOption,
+    type Modifiers,
     type TypeChoice,
     chooseKind,
     getAllowedAbstractTypesForNewColumn,
@@ -23,7 +24,10 @@
     withModifiers,
   } from '@mathesar/stores/abstract-types';
   import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
-  import type { AbstractTypeDbConfig } from '@mathesar/stores/abstract-types/types';
+  import type {
+    AbstractTypeCategoryIdentifier,
+    AbstractTypeDbConfig,
+  } from '@mathesar/stores/abstract-types/types';
   import {
     FormBuilder,
     LabeledInput,
@@ -32,21 +36,23 @@
   } from '@mathesar-component-library';
   import type { FormValues } from '@mathesar-component-library/types';
 
-  import { type RuleSubject, getRuleSubject } from './domainRules';
-
-  /** The type the domain is to be over, as a column's type is given */
-  export let over: { name: string; options: ColumnTypeOptions };
-  /** What rules the type can be given, which is the caller's reason to ask */
-  export let subject: RuleSubject | undefined = undefined;
+  /** The type that has been picked, as a column's type is given */
+  export let value: { name: string; options: ColumnTypeOptions };
+  /** What kind of values it holds, for a caller that cares what they are like */
+  export let abstractType: AbstractTypeCategoryIdentifier =
+    getDefaultTypeChoice().abstractType.identifier;
+  /** Whether it holds ranges of those values, arrays of them, or both */
+  export let modifiers: Modifiers = { isRange: false, isArray: false };
   /** Whether what has been picked is a type that could be asked for */
   export let isValid = true;
   export let disabled = false;
 
-  let value: TypeChoice = getDefaultTypeChoice();
+  let choice: TypeChoice = getDefaultTypeChoice();
 
-  // A domain is a type with rules on top of another type, so what it can be
-  // over is what a column can be of -- barring the ones that are already a rule
-  // about their values, or are filled in for the column rather than chosen.
+  // A type the database is being asked to define is over, or made of, what a
+  // column can be of -- barring the ones that are themselves a rule about their
+  // values, which would have to be picked and not just named, and the ones
+  // filled in for a column rather than chosen.
   $: families = groupByFamily(
     getAllowedAbstractTypesForNewColumn().filter(
       (type) =>
@@ -56,19 +62,20 @@
         type.identifier !== abstractTypeCategory.File,
     ),
   );
-  $: selected = getKindOf(value);
+  $: selected = getKindOf(choice);
   $: selectedFamily = families.find((f) => f.family === selected.family);
   $: selectedKind = selectedFamily?.kinds.find((k) => k.kind === selected.kind);
 
-  $: spec = getColumnSaveSpec(value);
-  // The length, the precision and the like, which a domain has to be given here
-  // because there is no altering them afterwards: Postgres cannot change the
-  // type a domain is over, and a column of the domain would have nowhere to go.
+  $: spec = getColumnSaveSpec(choice);
+  // The length, the precision and the like, which have to be settled here
+  // because there is no altering them afterwards: Postgres will not change what
+  // a domain is over, nor the type of a field of a composite type while
+  // anything holds one.
   //
   // The form is built on its own variables' defaults rather than on a column's
-  // settings, there being no column and nothing set: a domain over text is over
-  // text until somebody asks for a length.
-  $: dbOptionsConfig = value.abstractType.getDbConfig?.(spec.dbOptions.type);
+  // settings, there being no column and nothing set: text is text until
+  // somebody asks for a length.
+  $: dbOptionsConfig = choice.abstractType.getDbConfig?.(spec.dbOptions.type);
   $: dbForm = dbOptionsConfig ? makeForm(dbOptionsConfig.form, {}) : undefined;
   $: dbFormValues = getFormValueStore(dbForm);
   // Mentioning the values is what makes this run again when one is typed, the
@@ -78,7 +85,7 @@
   // The options are taken as arguments rather than read from the enclosing
   // scope so that a length or a precision being typed is a change this sees:
   // what a reactive statement watches is what its own line mentions.
-  function getOver(
+  function getValue(
     dbType: DbType,
     typeOptions: ColumnTypeOptions,
     config: AbstractTypeDbConfig | undefined,
@@ -92,13 +99,14 @@
       options: { ...typeOptions, ...(resolved?.typeOptions ?? {}) },
     };
   }
-  $: over = getOver(
+  $: value = getValue(
     spec.dbOptions.type,
     spec.dbOptions.typeOptions,
     dbOptionsConfig,
     $dbFormValues,
   );
-  $: subject = getRuleSubject(value.abstractType.identifier, selected);
+  $: abstractType = choice.abstractType.identifier;
+  $: modifiers = selected;
 
   function isKindDisabled(option?: KindOption) {
     return option ? isAbstractTypeDisabled(option.abstractType) : false;
@@ -106,7 +114,7 @@
 
   function selectKind(option: KindOption | undefined) {
     if (!option) return;
-    value = chooseKind(option, { modifiers: selected }) ?? value;
+    choice = chooseKind(option, { modifiers: selected }) ?? choice;
   }
 
   function selectFamily(option: FamilyOption | undefined) {
@@ -165,7 +173,7 @@
   {selected}
   {disabled}
   on:change={(e) => {
-    value = withModifiers(value, e.detail) ?? value;
+    choice = withModifiers(choice, e.detail) ?? choice;
   }}
 />
 

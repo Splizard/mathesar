@@ -10735,7 +10735,9 @@ END;
 $$ LANGUAGE plpgsql;
 
 
-CREATE OR REPLACE FUNCTION __domain_info(nam text) RETURNS jsonb AS $$
+-- What msar.list_schema_types says about the type of the given name, there being one description of
+-- a type and this being it.
+CREATE OR REPLACE FUNCTION __type_info(nam text) RETURNS jsonb AS $$
 SELECT type_info
 FROM jsonb_array_elements(msar.list_schema_types('public'::regnamespace)) AS x(type_info)
 WHERE type_info ->> 'name' = nam;
@@ -10747,7 +10749,7 @@ DECLARE
   info jsonb;
 BEGIN
   PERFORM __setup_domain_editing();
-  info := __domain_info('dom_email');
+  info := __type_info('dom_email');
   RETURN NEXT is(info ->> 'kind', 'domain', 'a domain can be made');
   RETURN NEXT is(info ->> 'over', 'text', 'over the type it was asked to be over');
   RETURN NEXT is(info ->> 'description', 'An address to write to', 'with its description');
@@ -10786,7 +10788,7 @@ BEGIN
   );
   RETURN NEXT is(
     (SELECT jsonb_agg(rule_obj ->> 'name' ORDER BY rule_obj ->> 'name')
-     FROM jsonb_array_elements(__domain_info('dom_email') -> 'constraints') AS x(rule_obj)),
+     FROM jsonb_array_elements(__type_info('dom_email') -> 'constraints') AS x(rule_obj)),
     '["matches", "max_length", "not_blank"]'::jsonb,
     'a rule named is kept, one left out is dropped, and a new one is added'
   );
@@ -10808,7 +10810,7 @@ BEGIN
   ]} $j$::jsonb);
   RETURN NEXT is(
     (SELECT jsonb_agg(rule_obj ->> 'definition' ORDER BY rule_obj ->> 'name')
-     FROM jsonb_array_elements(__domain_info('dom_email') -> 'constraints') AS x(rule_obj)),
+     FROM jsonb_array_elements(__type_info('dom_email') -> 'constraints') AS x(rule_obj)),
     '["CHECK ((length(VALUE) <= 200))", "CHECK ((length(VALUE) <= 50))"]'::jsonb,
     'a rule can be given twice over, each time about its own value'
   );
@@ -10855,7 +10857,7 @@ BEGIN
   PERFORM msar.alter_domain_type('dom_email'::regtype::oid, $j$ {
     "name": "dom_address", "description": null, "not_null": false, "default": null
   } $j$::jsonb);
-  info := __domain_info('dom_address');
+  info := __type_info('dom_address');
   RETURN NEXT isnt(info, NULL, 'a domain can be renamed');
   RETURN NEXT is(info ->> 'description', NULL, 'have its description taken off');
   RETURN NEXT is((info ->> 'not_null')::boolean, false, 'be let hold nothing');
@@ -10891,7 +10893,7 @@ BEGIN
     "default": "0",
     "rules": [{"rule": "at_least", "value": "0"}, {"rule": "at_most", "value": "100"}]
   } $j$::jsonb);
-  info := __domain_info('dom_score');
+  info := __type_info('dom_score');
   RETURN NEXT is(info ->> 'over', 'numeric(5,2)', 'a domain can be over a type with options');
   RETURN NEXT is(info ->> 'default_value', '0', 'keeping a default Postgres writes down bare');
   RETURN NEXT is(
@@ -10924,6 +10926,177 @@ BEGIN
   RETURN NEXT is(
     msar.default_as_value($q$'a::text'::text$q$), 'a::text',
     'and a value that reads like a cast keeps all of itself'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_composite_editing() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM msar.create_composite_type('public'::regnamespace, 'comp_addr', $j$ [
+    {"name": "street", "type": {"name": "text"}},
+    {"name": "postcode", "type": {"name": "character varying", "options": {"length": 10}}},
+    {"name": "number", "type": {"name": "integer"}}
+  ] $j$::jsonb, 'Where to send it');
+  CREATE TABLE composite_people (id integer PRIMARY KEY, home comp_addr);
+  INSERT INTO composite_people
+    VALUES (1, ROW('Main St', '1234AB', 5)), (2, ROW('Side St', '9999ZZ', 7));
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_created_with_its_fields() RETURNS SETOF TEXT AS $f$
+DECLARE
+  info jsonb;
+BEGIN
+  PERFORM __setup_composite_editing();
+  info := __type_info('comp_addr');
+  RETURN NEXT is(info ->> 'kind', 'composite', 'a composite type can be made');
+  RETURN NEXT is(info ->> 'description', 'Where to send it', 'with its description');
+  RETURN NEXT is(
+    info -> 'fields',
+    $j$[
+      {"name": "street", "type": "text"},
+      {"name": "postcode", "type": "character varying(10)"},
+      {"name": "number", "type": "integer"}
+    ]$j$::jsonb,
+    'and its fields, in the order asked for and with the options each was asked for'
+  );
+  RETURN NEXT is(
+    (SELECT jsonb_agg(user_ ->> 'column_name') FROM jsonb_array_elements(info -> 'used_by') AS x(user_)),
+    '["home"]'::jsonb,
+    'and it says which column holds it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_fields_kept_renamed_and_dropped() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_composite_editing();
+  PERFORM msar.alter_composite_type('comp_addr'::regtype::oid, $j$ {
+    "fields": [
+      {"name": "road", "was": "street"},
+      {"name": "postcode", "was": "postcode"},
+      {"name": "country", "type": {"name": "text"}}
+    ]
+  } $j$::jsonb);
+  RETURN NEXT is(
+    __type_info('comp_addr') -> 'fields',
+    $j$[
+      {"name": "road", "type": "text"},
+      {"name": "postcode", "type": "character varying(10)"},
+      {"name": "country", "type": "text"}
+    ]$j$::jsonb,
+    'a field can be renamed, another dropped and another added, all at once'
+  );
+  RETURN NEXT results_eq(
+    $q$SELECT (home).road, (home).postcode, (home).country FROM composite_people ORDER BY id$q$,
+    $q$VALUES
+      ('Main St'::text, '1234AB'::character varying(10), NULL::text),
+      ('Side St'::text, '9999ZZ'::character varying(10), NULL::text)$q$,
+    'and every record keeps what the fields it kept said, the new one saying nothing yet'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_field_must_be_one_it_has() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_composite_editing();
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_composite_type(
+      'comp_addr'::regtype::oid, '{"fields": [{"name": "x", "was": "nowhere"}]}'::jsonb
+    )$q$,
+    'The field ''nowhere'' is not one of comp_addr''s fields.',
+    'a field said to be one the type has must be one it has'
+  );
+  RETURN NEXT is(
+    jsonb_array_length(__type_info('comp_addr') -> 'fields'), 3,
+    'and a refusal leaves every field where it was'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_fields_trading_names_is_refused() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_composite_editing();
+  -- Renaming in the order asked for is enough for every case but this one, where the first rename
+  -- runs into the name the second is about to give up.
+  RETURN NEXT throws_like(
+    $q$SELECT msar.alter_composite_type('comp_addr'::regtype::oid, $j$ {
+      "fields": [
+        {"name": "postcode", "was": "street"},
+        {"name": "street", "was": "postcode"},
+        {"name": "number", "was": "number"}
+      ]
+    } $j$::jsonb)$q$,
+    '%"postcode" of relation "comp_addr" already exists%',
+    'two fields cannot trade names, there being no name to hold one in the meantime'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_renamed_and_described() RETURNS SETOF TEXT AS $f$
+DECLARE
+  info jsonb;
+BEGIN
+  PERFORM __setup_composite_editing();
+  PERFORM msar.alter_composite_type(
+    'comp_addr'::regtype::oid, '{"name": "comp_home", "description": null}'::jsonb
+  );
+  info := __type_info('comp_home');
+  RETURN NEXT is(info ->> 'name', 'comp_home', 'a composite type can be renamed');
+  RETURN NEXT is(info ->> 'description', NULL, 'and have its description taken off');
+  RETURN NEXT is(
+    jsonb_array_length(info -> 'fields'), 3, 'keeping its fields through both'
+  );
+  RETURN NEXT results_eq(
+    $q$SELECT (home).street FROM composite_people ORDER BY id$q$,
+    $q$VALUES ('Main St'::text), ('Side St'::text)$q$,
+    'and every record holding it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_of_types_with_options() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM msar.create_composite_type('public'::regnamespace, 'comp_line', $j$ [
+    {"name": "amount", "type": {"name": "numeric", "options": {"precision": 8, "scale": 2}}},
+    {"name": "tags", "type": {"name": "text", "options": {"array": true}}},
+    {"name": "at", "type": {"name": "timestamp with time zone", "options": {"precision": 3}}}
+  ] $j$::jsonb);
+  RETURN NEXT is(
+    __type_info('comp_line') -> 'fields',
+    $j$[
+      {"name": "amount", "type": "numeric(8,2)"},
+      {"name": "tags", "type": "text[]"},
+      {"name": "at", "type": "timestamp(3) with time zone"}
+    ]$j$::jsonb,
+    'a field can be of a type with options, or of an array of one'
+  );
+  RETURN NEXT is(
+    msar.drop_type('comp_line'::regtype::oid), 'comp_line', 'and the type drops by name'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_composite_with_no_fields_left() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_composite_editing();
+  PERFORM msar.alter_composite_type('comp_addr'::regtype::oid, '{"fields": []}'::jsonb);
+  RETURN NEXT is(
+    __type_info('comp_addr') -> 'fields', '[]'::jsonb,
+    'every field can be dropped, a composite type with none being a record of nothing'
+  );
+  RETURN NEXT results_eq(
+    $q$SELECT count(*)::integer FROM composite_people$q$,
+    $q$VALUES (2)$q$,
+    'and the records that held it are still there with nothing left in them'
   );
 END;
 $f$ LANGUAGE plpgsql;

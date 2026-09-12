@@ -14,6 +14,11 @@
   } from '@mathesar/components/form';
   import type { Schema } from '@mathesar/models/Schema';
   import {
+    type Modifiers,
+    getDefaultTypeChoice,
+  } from '@mathesar/stores/abstract-types';
+  import type { AbstractTypeCategoryIdentifier } from '@mathesar/stores/abstract-types/types';
+  import {
     Checkbox,
     ControlledModal,
     Help,
@@ -24,16 +29,17 @@
     portalToWindowFooter,
   } from '@mathesar-component-library';
 
-  import DomainBaseTypeInput from './DomainBaseTypeInput.svelte';
   import {
     type DomainRuleEntry,
     type RuleSubject,
     getApiRules,
     getRuleEntries,
     getRuleEntriesError,
+    getRuleSubject,
     getRuleSubjectOf,
   } from './domainRules';
   import DomainRulesInput from './DomainRulesInput.svelte';
+  import TypeChoiceInput from './TypeChoiceInput.svelte';
 
   export let controller: ModalController;
   export let schema: Schema;
@@ -57,6 +63,10 @@
   let subject: RuleSubject | undefined = undefined;
   /** Whether the type picked for a domain being made could be asked for */
   let overIsValid = true;
+  /** What the values of the type being picked are like, and how many of them */
+  let overAbstractType: AbstractTypeCategoryIdentifier =
+    getDefaultTypeChoice().abstractType.identifier;
+  let overModifiers: Modifiers = { isRange: false, isArray: false };
 
   function reset(_type: RawSchemaType | undefined) {
     // The whole form, so that what the database said about the last attempt goes
@@ -77,7 +87,9 @@
   // and a column of the domain would have nowhere to go while it did. So which
   // rules it can be given is settled by the type it was made over, and the
   // input for that type is only shown while there is one to pick.
-  $: if (type) subject = getRuleSubjectOf(type);
+  $: subject = type
+    ? getRuleSubjectOf(type)
+    : getRuleSubject(overAbstractType, overModifiers);
 
   /**
    * A default which is an expression rather than a value is left alone: it is
@@ -145,9 +157,10 @@
         <p class="over">{type.over}</p>
         <p class="help">{$_('domain_over_is_fixed')}</p>
       {:else}
-        <DomainBaseTypeInput
-          bind:over
-          bind:subject
+        <TypeChoiceInput
+          bind:value={over}
+          bind:abstractType={overAbstractType}
+          bind:modifiers={overModifiers}
           bind:isValid={overIsValid}
         />
       {/if}

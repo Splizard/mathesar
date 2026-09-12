@@ -559,6 +559,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        types.add_composite,
+        "types.add_composite",
+        [user_is_authenticated]
+    ),
+    (
         types.add_domain,
         "types.add_domain",
         [user_is_authenticated]
@@ -571,6 +576,11 @@ METHODS = [
     (
         types.delete,
         "types.delete",
+        [user_is_authenticated]
+    ),
+    (
+        types.patch_composite,
+        "types.patch_composite",
         [user_is_authenticated]
     ),
     (

@@ -9,8 +9,10 @@ from typing import Optional, TypedDict, Union
 from modernrpc.core import REQUEST_KEY
 
 from db.ontology import (
+    alter_composite_type,
     alter_domain_type,
     alter_enum_type,
+    create_composite_type,
     create_domain_type,
     create_enum_type,
     drop_type,
@@ -224,6 +226,101 @@ def patch_domain(
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         return alter_domain_type(conn, type_oid, patch)
+
+
+class CompositeField(TypedDict):
+    """
+    A field of a composite type, either one it already has or one it is being given.
+
+    Saying which field each one was is the only way to tell a field being renamed from one being
+    dropped and another added, which are different things to do to the records holding the type's
+    values: a rename leaves every record saying what it said, and a drop takes that part of a
+    record away.
+
+    The type of a field the composite type already has is not among what can be changed. Postgres
+    refuses to change one while any column anywhere holds the type, because the values are written
+    into each of those records and it will not rewrite them; where it would be allowed there is no
+    record to lose, and dropping the field and adding one of the type wanted comes to the same
+    thing.
+
+    Attributes:
+        name: The name the field is to have.
+        was: The name of the field this one stands for, or null for a field being added.
+        type: The type of its values, as a column's type is given: an object with a `name` and the
+            `options` that go with it, such as a length or a precision. Only for a field being
+            added.
+    """
+    name: str
+    was: Optional[str]
+    type: Optional[dict]
+
+
+class CompositePatch(TypedDict):
+    """
+    The parts of a composite type which can be changed.
+
+    Attributes:
+        name: A new name for the type.
+        description: A new description, or null to take the description off.
+        fields: The fields it is to have: the ones it keeps, each saying which field it was, along
+            with the ones it is being given. Any field left out is dropped, along with that part of
+            every record holding the type's values. A field is added at the end, Postgres having no
+            way to put one anywhere else.
+    """
+    name: Optional[str]
+    description: Optional[str]
+    fields: Optional[list[CompositeField]]
+
+
+@mathesar_rpc_method(name="types.add_composite", auth="login")
+def add_composite(
+    *,
+    schema_oid: int,
+    name: str,
+    fields: list[CompositeField],
+    description: Optional[str] = None,
+    database_id: int,
+    **kwargs,
+) -> int:
+    """
+    Add a composite type to a schema: a type whose values are a record of named fields.
+
+    Args:
+        schema_oid: The OID of the schema to add it to.
+        name: The name to give it, which no other type in the schema may have.
+        fields: Its fields, in order, each giving the type of its values.
+        description: A description of the type.
+        database_id: The Django id of the database containing the schema.
+
+    Returns:
+        The OID of the new type.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return create_composite_type(conn, schema_oid, name, fields, description)
+
+
+@mathesar_rpc_method(name="types.patch_composite", auth="login")
+def patch_composite(
+    *, type_oid: int, patch: CompositePatch, database_id: int, **kwargs
+) -> int:
+    """
+    Change a composite type's name, its description, or its fields.
+
+    Renaming a field and adding one leave every record holding the type's values where it is.
+    Dropping a field takes its part of each of those records away.
+
+    Args:
+        type_oid: The OID of the composite type.
+        patch: The parts of it to change.
+        database_id: The Django id of the database containing the type.
+
+    Returns:
+        The OID of the type, which changing it never replaces.
+    """
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return alter_composite_type(conn, type_oid, patch)
 
 
 @mathesar_rpc_method(name="types.delete", auth="login")

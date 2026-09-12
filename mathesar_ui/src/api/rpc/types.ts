@@ -49,6 +49,24 @@ export interface DomainSpec {
   description?: string | null;
 }
 
+/**
+ * A field of a composite type, either one it already has or one it is being
+ * given.
+ *
+ * Saying which field each one was is the only way to tell a field being renamed
+ * from one being dropped and another added, which are different things to do to
+ * the records holding the type's values. The type of a field the composite type
+ * already has is not among what can change: Postgres refuses to change one
+ * while any column anywhere holds the type, and where it would be allowed there
+ * is no record to lose, so dropping the field and adding one of the type wanted
+ * comes to the same thing.
+ */
+export type CompositeField =
+  /** A field the type already has, under the name it is to have */
+  | { name: string; was: string }
+  /** A field it is being given, and the type of its values */
+  | { name: string; type: { name: string; options?: ColumnTypeOptions } };
+
 export const types = {
   add_enum: rpcMethodTypeContainer<
     {
@@ -95,6 +113,30 @@ export const types = {
         not_null?: boolean;
         default?: string | null;
         rules?: DomainRule[];
+      };
+    },
+    RawSchemaType['oid']
+  >(),
+
+  add_composite: rpcMethodTypeContainer<
+    {
+      database_id: RawDatabase['id'];
+      schema_oid: RawSchema['oid'];
+      name: RawSchemaType['name'];
+      fields: CompositeField[];
+      description?: RawSchemaType['description'];
+    },
+    RawSchemaType['oid']
+  >(),
+
+  patch_composite: rpcMethodTypeContainer<
+    {
+      database_id: RawDatabase['id'];
+      type_oid: RawSchemaType['oid'];
+      patch: {
+        name?: RawSchemaType['name'];
+        description?: RawSchemaType['description'];
+        fields?: CompositeField[];
       };
     },
     RawSchemaType['oid']
