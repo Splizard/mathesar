@@ -162,19 +162,94 @@ export const typeFamilies: TypeFamily[] = [
     identifier: 'binary',
     name: 'Binary',
     icon: iconUiTypeBinary,
-    kinds: [kind(t.Binary)],
+    kinds: [
+      {
+        identifier: 'bytes',
+        name: 'Bytes',
+        abstractType: t.Binary,
+        dbTypes: [DB_TYPES.BYTEA],
+      },
+      {
+        identifier: 'bits',
+        name: 'Bits',
+        abstractType: t.Binary,
+        dbTypes: [DB_TYPES.BIT_VARYING, DB_TYPES.BIT],
+      },
+    ],
   },
   {
     identifier: 'network',
     name: 'IP',
     icon: iconUiTypeNetwork,
-    kinds: [kind(t.Network)],
+    kinds: [
+      {
+        identifier: 'ipAddress',
+        name: 'IP Address',
+        abstractType: t.Network,
+        dbTypes: [DB_TYPES.INET],
+      },
+      {
+        identifier: 'ipNetwork',
+        name: 'IP Network',
+        abstractType: t.Network,
+        dbTypes: [DB_TYPES.CIDR],
+      },
+      {
+        identifier: 'macAddress',
+        name: 'MAC Address',
+        abstractType: t.Network,
+        dbTypes: [DB_TYPES.MACADDR, DB_TYPES.MACADDR8],
+      },
+    ],
   },
   {
     identifier: 'geometry',
     name: '2D',
     icon: iconUiTypeGeometry,
-    kinds: [kind(t.Geometry)],
+    kinds: [
+      {
+        identifier: 'point',
+        name: 'Point',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.POINT],
+      },
+      {
+        identifier: 'line',
+        name: 'Line',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.LINE],
+      },
+      {
+        identifier: 'segment',
+        name: 'Segment',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.LSEG],
+      },
+      {
+        identifier: 'rectangle',
+        name: 'Rectangle',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.BOX],
+      },
+      {
+        identifier: 'path',
+        name: 'Path',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.PATH],
+      },
+      {
+        identifier: 'polygon',
+        name: 'Polygon',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.POLYGON],
+      },
+      {
+        identifier: 'circle',
+        name: 'Circle',
+        abstractType: t.Geometry,
+        dbTypes: [DB_TYPES.CIRCLE],
+      },
+    ],
   },
   {
     identifier: 'databaseTable',

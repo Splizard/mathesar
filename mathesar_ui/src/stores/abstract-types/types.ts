@@ -76,7 +76,8 @@ export interface AbstractTypeConfiguration {
   getIcon: (args?: AbstractTypeIconArgs) => IconProps | IconProps[];
   allowSettingDefaultValue?: boolean;
   cellInfo: CellInfo;
-  getDbConfig?: (selectedDbType?: DbType) => AbstractTypeDbConfig;
+  /** The options of the type, when the selected DB type takes any */
+  getDbConfig?: (selectedDbType?: DbType) => AbstractTypeDbConfig | undefined;
   getDisplayConfig?: () => AbstractTypeDisplayConfig;
   getEnabledState?: () =>
     | { enabled: false; cause: string | string[] | UntypedComponentWithProps }

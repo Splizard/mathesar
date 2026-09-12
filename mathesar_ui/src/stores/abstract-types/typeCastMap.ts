@@ -21,6 +21,14 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
   ],
 
   [DB_TYPES.BIT]: [
+    DB_TYPES.BIT_VARYING,
+    DB_TYPES.CHARACTER_VARYING,
+    DB_TYPES.CHARACTER,
+    DB_TYPES.TEXT,
+  ],
+
+  [DB_TYPES.BIT_VARYING]: [
+    DB_TYPES.BIT,
     DB_TYPES.CHARACTER_VARYING,
     DB_TYPES.CHARACTER,
     DB_TYPES.TEXT,
@@ -37,6 +45,13 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.REAL,
     DB_TYPES.SMALLINT,
     DB_TYPES.TEXT,
+  ],
+
+  [DB_TYPES.BOX]: [
+    DB_TYPES.CIRCLE,
+    DB_TYPES.LSEG,
+    DB_TYPES.POINT,
+    DB_TYPES.POLYGON,
   ],
 
   [DB_TYPES.BYTEA]: [
@@ -108,8 +123,11 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
   [DB_TYPES.CIDR]: [
     DB_TYPES.CHARACTER_VARYING,
     DB_TYPES.CHARACTER,
+    DB_TYPES.INET,
     DB_TYPES.TEXT,
   ],
+
+  [DB_TYPES.CIRCLE]: [DB_TYPES.BOX, DB_TYPES.POINT, DB_TYPES.POLYGON],
 
   [DB_TYPES.DATE]: [
     DB_TYPES.CHARACTER_VARYING,
@@ -144,6 +162,7 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
   [DB_TYPES.INET]: [
     DB_TYPES.CHARACTER_VARYING,
     DB_TYPES.CHARACTER,
+    DB_TYPES.CIDR,
     DB_TYPES.TEXT,
   ],
 
@@ -202,11 +221,16 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.TEXT,
   ],
 
+  [DB_TYPES.LSEG]: [DB_TYPES.POINT],
+
   [DB_TYPES.MACADDR]: [
     DB_TYPES.CHARACTER_VARYING,
     DB_TYPES.CHARACTER,
+    DB_TYPES.MACADDR8,
     DB_TYPES.TEXT,
   ],
+
+  [DB_TYPES.MACADDR8]: [DB_TYPES.MACADDR],
 
   [DB_TYPES.MSAR__EMAIL]: [
     DB_TYPES.CHARACTER_VARYING,
@@ -305,6 +329,17 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.CHARACTER_VARYING,
     DB_TYPES.CHARACTER,
     DB_TYPES.TEXT,
+  ],
+
+  [DB_TYPES.PATH]: [DB_TYPES.POLYGON],
+
+  [DB_TYPES.POINT]: [DB_TYPES.BOX],
+
+  [DB_TYPES.POLYGON]: [
+    DB_TYPES.BOX,
+    DB_TYPES.CIRCLE,
+    DB_TYPES.PATH,
+    DB_TYPES.POINT,
   ],
 
   [DB_TYPES.REAL]: [

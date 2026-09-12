@@ -14,13 +14,11 @@ import type {
 import type { DbType } from '@mathesar/AppTypes';
 import {
   iconUiTypeArray,
-  iconUiTypeBinary,
   iconUiTypeComposite,
   iconUiTypeDatabaseTable,
   iconUiTypeGeometry,
   iconUiTypeJsonArray,
   iconUiTypeJsonObject,
-  iconUiTypeNetwork,
   iconUiTypeXml,
 } from '@mathesar/icons';
 import { getDefaultFileStorageBackend } from '@mathesar/utils/preloadData';
@@ -31,6 +29,7 @@ import {
   isCurrentTimeDefault,
 } from './currentTimeDefaults';
 import { DB_TYPES } from './dbTypes';
+import Binary from './type-configs/binary';
 import Boolean from './type-configs/boolean';
 import CreatedAt from './type-configs/createdAt';
 import Date from './type-configs/date';
@@ -43,6 +42,7 @@ import Fallback from './type-configs/fallback';
 import File from './type-configs/file/file';
 import Json from './type-configs/json';
 import Money from './type-configs/money';
+import Network from './type-configs/network';
 import Number from './type-configs/number';
 import { plainType } from './type-configs/plain';
 import { numberRangeType, timeRangeType } from './type-configs/range';
@@ -88,16 +88,8 @@ const simpleAbstractTypeCategories: AbstractTypeConfigurationPartialMap = {
   [abstractTypeCategory.Json]: Json,
   [abstractTypeCategory.File]: File,
   [abstractTypeCategory.Enum]: Enum,
-  [abstractTypeCategory.Binary]: plainType(
-    iconUiTypeBinary,
-    'Binary',
-    DB_TYPES.BYTEA,
-  ),
-  [abstractTypeCategory.Network]: plainType(
-    iconUiTypeNetwork,
-    'IP',
-    DB_TYPES.INET,
-  ),
+  [abstractTypeCategory.Binary]: Binary,
+  [abstractTypeCategory.Network]: Network,
   [abstractTypeCategory.Geometry]: plainType(
     iconUiTypeGeometry,
     '2D',

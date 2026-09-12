@@ -103,6 +103,17 @@ describe('type families', () => {
       'Created At',
       'Updated At',
     ]);
+    expect(kindsOf('Binary')).toEqual(['Bytes', 'Bits']);
+    expect(kindsOf('IP')).toEqual(['IP Address', 'IP Network', 'MAC Address']);
+    expect(kindsOf('2D')).toEqual([
+      'Point',
+      'Line',
+      'Segment',
+      'Rectangle',
+      'Path',
+      'Polygon',
+      'Circle',
+    ]);
   });
 
   test('leave out kinds with none of their DB types allowed', () => {
@@ -156,6 +167,14 @@ describe('kinds', () => {
     expect(kindOf(DB_TYPES.ARRAY, DB_TYPES.INT4RANGE)).toBe('other');
     expect(kindOf(DB_TYPES.TEXT)).toBe('text');
     expect(kindOf(DB_TYPES.TSVECTOR)).toBe('other');
+    expect(kindOf(DB_TYPES.BYTEA)).toBe('bytes');
+    expect(kindOf(DB_TYPES.BIT)).toBe('bits');
+    expect(kindOf(DB_TYPES.BIT_VARYING)).toBe('bits');
+    expect(kindOf(DB_TYPES.ARRAY, DB_TYPES.INET)).toBe('ipAddress array');
+    expect(kindOf(DB_TYPES.CIDR)).toBe('ipNetwork');
+    expect(kindOf(DB_TYPES.MACADDR8)).toBe('macAddress');
+    expect(kindOf(DB_TYPES.LSEG)).toBe('segment');
+    expect(kindOf(DB_TYPES.BOX)).toBe('rectangle');
   });
 
   test('can hold ranges of their values, arrays of them, or both', () => {
@@ -301,6 +320,27 @@ describe('kinds', () => {
     expect(canCastDbType(DB_TYPES.INT4RANGE, DB_TYPES.DATERANGE)).toBe(false);
   });
 
+  test('can change between the kinds of their family that PostgreSQL converts', () => {
+    expect(canCastDbType(DB_TYPES.INET, DB_TYPES.CIDR)).toBe(true);
+    expect(canCastDbType(DB_TYPES.CIDR, DB_TYPES.INET)).toBe(true);
+    expect(canCastDbType(DB_TYPES.MACADDR, DB_TYPES.MACADDR8)).toBe(true);
+    expect(canCastDbType(DB_TYPES.INET, DB_TYPES.MACADDR)).toBe(false);
+    expect(canCastDbType(DB_TYPES.BIT, DB_TYPES.BIT_VARYING)).toBe(true);
+    expect(canCastDbType(DB_TYPES.BYTEA, DB_TYPES.BIT)).toBe(false);
+    expect(canCastDbType(DB_TYPES.POINT, DB_TYPES.BOX)).toBe(true);
+    expect(canCastDbType(DB_TYPES.POLYGON, DB_TYPES.CIRCLE)).toBe(true);
+    expect(canCastDbType(DB_TYPES.BOX, DB_TYPES.LSEG)).toBe(true);
+    expect(canCastDbType(DB_TYPES.POINT, DB_TYPES.LINE)).toBe(false);
+    // Only the kinds it can change to are offered
+    const groups = groupByFamily(
+      getAllowedAbstractTypesForDbTypeAndItsTargetTypes(DB_TYPES.BOX, null),
+      ({ dbType }) => canCastDbType(DB_TYPES.BOX, dbType),
+    );
+    expect(
+      groups.find((g) => g.family.name === '2D')?.kinds.map((k) => k.name),
+    ).toEqual(['Point', 'Segment', 'Rectangle', 'Polygon', 'Circle']);
+  });
+
   test('make new columns of arrays', () => {
     expect(
       getColumnSaveSpec(choiceOf(DB_TYPES.ARRAY, DB_TYPES.UUID)).dbOptions,
@@ -331,6 +371,28 @@ describe('kind options', () => {
     expect(dbTypeFor(DB_TYPES.INTEGER, { integerDataSize: 'bigInt' })).toBe(
       DB_TYPES.BIGINT,
     );
+  });
+
+  test('say how many bits and how big a MAC address is', () => {
+    expect(dbTypeFor(DB_TYPES.BIT_VARYING, {})).toBe(DB_TYPES.BIT_VARYING);
+    expect(
+      dbTypeFor(DB_TYPES.BIT_VARYING, { fixedLength: true, length: 8 }),
+    ).toBe(DB_TYPES.BIT);
+    expect(dbTypeFor(DB_TYPES.BIT, {})).toBe(DB_TYPES.BIT);
+    expect(dbTypeFor(DB_TYPES.BIT, { fixedLength: false })).toBe(
+      DB_TYPES.BIT_VARYING,
+    );
+    expect(dbTypeFor(DB_TYPES.MACADDR, {})).toBe(DB_TYPES.MACADDR);
+    expect(dbTypeFor(DB_TYPES.MACADDR8, {})).toBe(DB_TYPES.MACADDR8);
+    expect(dbTypeFor(DB_TYPES.MACADDR, { macAddressSize: 'eui64' })).toBe(
+      DB_TYPES.MACADDR8,
+    );
+    // The kinds without options have none
+    for (const dbType of [DB_TYPES.BYTEA, DB_TYPES.INET, DB_TYPES.POINT]) {
+      expect(
+        getAbstractTypeForDbType(dbType, null).getDbConfig?.(dbType),
+      ).toBeUndefined();
+    }
   });
 
   test('choose the type of ranges, keeping multiranges', () => {

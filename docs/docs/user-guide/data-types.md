@@ -22,9 +22,9 @@ Every PostgreSQL type belongs to exactly one family and kind, and a kind can cov
 | [Composite](#composite) | | composite types |
 | [JSON](#json) | JSON, JSON List, Map | `json`, `jsonb`, `mathesar_types.mathesar_json_array`, `mathesar_types.mathesar_json_object` |
 | [XML](#xml) | | `xml` |
-| [Binary](#binary) | | `bytea`, `bit`, `bit varying` |
-| [IP](#ip) | | `inet`, `cidr`, `macaddr`, `macaddr8` |
-| [2D](#2d) | | `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle` |
+| [Binary](#binary) | Bytes, Bits | `bytea`, `bit`, `bit varying` |
+| [IP](#ip) | IP Address, IP Network, MAC Address | `inet`, `cidr`, `macaddr`, `macaddr8` |
+| [2D](#2d) | Point, Line, Segment, Rectangle, Path, Polygon, Circle | `point`, `line`, `lseg`, `box`, `path`, `polygon`, `circle` |
 | [Database Table](#database-table) | | `regclass` |
 
 ### Ranges and arrays
@@ -118,17 +118,26 @@ A value made of named fields, as a PostgreSQL [composite type](https://www.postg
 
 - [`xml`](https://www.postgresql.org/docs/17/datatype-xml.html)
 
+Binary, IP, and 2D values are all shown and edited as the text PostgreSQL writes for them, such as `\xdeadbeef`, `192.168.0.1/24`, and `(1,2)`.
+
 ### Binary
 
-- [`bytea`](https://www.postgresql.org/docs/17/datatype-binary.html) **(default)**, [`bit`, and `bit varying`](https://www.postgresql.org/docs/17/datatype-bit.html), shown and edited as PostgreSQL writes them (e.g. `\xdeadbeef`).
+- **Bytes**: [`bytea`](https://www.postgresql.org/docs/17/datatype-binary.html) **(default)**, any sequence of bytes.
+- **Bits**: [`bit varying`](https://www.postgresql.org/docs/17/datatype-bit.html) **(default)**, or `bit` when you set a fixed number of bits, which every value must then have exactly.
 
 ### IP
 
-- [`inet`](https://www.postgresql.org/docs/17/datatype-net-types.html) **(default)**, `cidr`, `macaddr`, and `macaddr8`.
+- **IP Address**: [`inet`](https://www.postgresql.org/docs/17/datatype-net-types.html) **(default)**, an IPv4 or IPv6 address, with the netmask of its network where it has one.
+- **IP Network**: `cidr`, a network. An address with bits beyond its netmask isn't one, so changing such a column to IP Network raises.
+- **MAC Address**: `macaddr` **(default)**, a MAC-48 address, or `macaddr8`, an EUI-64 one, as the MAC address size chooses. A MAC-48 address becomes the EUI-64 one for it (`ff:fe` in the middle), and only those EUI-64 addresses become MAC-48 ones again.
 
 ### 2D
 
-- [`point`](https://www.postgresql.org/docs/17/datatype-geometric.html) **(default)**, `line`, `lseg`, `box`, `path`, `polygon`, and `circle`, shown and edited as PostgreSQL writes them (e.g. `(1,2)`). Most have no notion of equality, so 2D columns can only be filtered by whether they're empty.
+- **Point**: [`point`](https://www.postgresql.org/docs/17/datatype-geometric.html) **(default)**, **Line**: `line`, **Segment**: `lseg`, **Rectangle**: `box`, **Path**: `path`, **Polygon**: `polygon`, and **Circle**: `circle`.
+
+Mathesar can change a 2D column between the kinds PostgreSQL converts between: a shape becomes the point at its centre, the rectangle around it, the polygon of it, and so on. A Line column can't be changed to another kind, and an open path isn't a polygon, so changing such a column to Polygon raises.
+
+Most of these types have no notion of equality, so 2D columns can only be filtered by whether they're empty.
 
 ### Database Table
 
