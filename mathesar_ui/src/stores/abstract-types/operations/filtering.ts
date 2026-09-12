@@ -191,6 +191,14 @@ const filterResponse: AbstractTypeFilterDefinitionResponse[] = [
     hasParams: true,
   },
   {
+    id: 'in_network',
+    name: 'is in network',
+    uiTypeParameterMap: {
+      [abstractTypeCategory.Network]: [abstractTypeCategory.Network],
+    },
+    hasParams: true,
+  },
+  {
     id: 'email_domain_equals',
     name: 'email domain is',
     uiTypeParameterMap: {

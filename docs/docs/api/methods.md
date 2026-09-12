@@ -297,6 +297,7 @@
       - delete
       - patch_self
       - patch_other
+      - current_ip_address
       - replace_own
       - revoke
       - UserInfo

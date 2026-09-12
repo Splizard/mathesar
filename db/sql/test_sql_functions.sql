@@ -5153,6 +5153,44 @@ $$ LANGUAGE plpgsql;
 
 -- msar.build_expr ---------------------------------------------------------------------------------
 
+CREATE OR REPLACE FUNCTION test_filter_by_network() RETURNS SETOF TEXT AS $f$
+DECLARE
+  rel_id oid;
+  in_10_8 jsonb;
+BEGIN
+  CREATE TABLE devices (id integer PRIMARY KEY, addr inet, subnet cidr);
+  INSERT INTO devices VALUES
+    (1, '10.1.2.3', '10.1.0.0/16'), (2, '192.168.1.5', '192.168.1.0/24'), (3, NULL, NULL);
+  rel_id := 'devices'::regclass::oid;
+  in_10_8 := jsonb_build_object(
+    'type', 'in_network', 'args', jsonb_build_array(
+      jsonb_build_object('type', 'attnum', 'value', 2),
+      jsonb_build_object('type', 'literal', 'value', '10.0.0.0/8'))
+  );
+  RETURN NEXT is(
+    msar.build_expr(rel_id, in_10_8),
+    '(devices.addr) <<= (''10.0.0.0/8'')::inet',
+    'an address is in a network'
+  );
+  RETURN NEXT results_eq(
+    format('SELECT id FROM devices %s ORDER BY id', msar.build_where_clause(rel_id, in_10_8)),
+    $v$VALUES (1)$v$
+  );
+  RETURN NEXT results_eq(
+    format('SELECT id FROM devices %s ORDER BY id', msar.build_where_clause(
+      rel_id,
+      jsonb_build_object(
+        'type', 'in_network', 'args', jsonb_build_array(
+          jsonb_build_object('type', 'attnum', 'value', 3),
+          jsonb_build_object('type', 'literal', 'value', '192.168.0.0/16')))
+    )),
+    $v$VALUES (2)$v$,
+    'and so is a network, which is one of addresses'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_build_expr() RETURNS SETOF TEXT AS $$
 DECLARE
   rel_id oid;

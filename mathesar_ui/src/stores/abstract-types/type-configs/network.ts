@@ -70,7 +70,7 @@ const networkType: AbstractTypeConfiguration = {
   getIcon: () => ({ ...iconUiTypeNetwork, label: 'IP' }),
   defaultDbType: DB_TYPES.INET,
   cellInfo: {
-    type: 'string',
+    type: 'network',
   },
   getDbConfig: getNetworkDbConfig,
 };

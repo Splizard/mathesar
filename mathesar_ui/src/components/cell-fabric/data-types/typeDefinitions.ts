@@ -24,7 +24,8 @@ export type SimpleCellDataTypes =
   | 'uuid'
   | 'composite'
   | 'enum'
-  | 'databaseTable';
+  | 'databaseTable'
+  | 'network';
 
 /**
  * Types whose cells hold values of other types, so are made from the cells of

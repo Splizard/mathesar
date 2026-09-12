@@ -129,6 +129,24 @@ def list_() -> list[UserInfo]:
     return [UserInfo.from_model(user) for user in users]
 
 
+@mathesar_rpc_method(name='users.current_ip_address', auth="login")
+def current_ip_address(**kwargs) -> Optional[str]:
+    """
+    The IP address the caller's request came from, to fill an IP column in with.
+
+    Behind a proxy this is the first address of the `X-Forwarded-For` header, which the
+    caller could have set themselves; it's only ever offered as a value to write, never
+    used to decide anything, so it's no more to be trusted than what they could type.
+
+    Returns:
+        The address, or `null` when the request carries none.
+    """
+    request = kwargs.get(REQUEST_KEY)
+    forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR', '')
+    address = forwarded_for.split(',')[0].strip() or request.META.get('REMOTE_ADDR')
+    return address or None
+
+
 @mathesar_rpc_method(name='users.patch_self', auth="login")
 def patch_self(
     *,

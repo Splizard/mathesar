@@ -85,6 +85,7 @@ function individualFilterToSqlExpr(
     email_domain_equals: cmp('equal', [fn('email_domain'), value()]),
     equal: cmp('equal'),
     greater_or_equal: cmp('greater_or_equal'),
+    in_network: cmp('in_network'),
     greater: cmp('greater'),
     json_array_contains: cmp('json_array_contains'),
     json_array_length_equals: arrayLengthCmp('equal'),

@@ -29,7 +29,8 @@ export interface SqlComparison {
     | 'contains_case_insensitive'
     | 'contains'
     | 'starts_with_case_insensitive'
-    | 'json_array_contains';
+    | 'json_array_contains'
+    | 'in_network';
   args: [SqlExpr, SqlExpr];
 }
 export interface SqlFunction {

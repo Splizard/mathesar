@@ -4739,6 +4739,8 @@ INSERT INTO msar.expr_templates VALUES
   ('starts_with_case_insensitive', 'starts_with(lower(%s), lower(%s))'),
   ('contains', 'strpos((%s), (%s))::boolean'),
   ('starts_with', 'starts_with((%s), (%s))'),
+  -- IP specific filters
+  ('in_network', '(%s) <<= (%s)::inet'),
   -- json(b) filters and expressions
   ('json_array_length', 'jsonb_array_length((%s)::jsonb)'),
   ('json_array_contains', '(%s)::jsonb @> (%s)::jsonb'),

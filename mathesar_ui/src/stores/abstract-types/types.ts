@@ -123,6 +123,7 @@ export type FilterId =
   | 'contains_case_insensitive'
   | 'email_domain_contains'
   | 'email_domain_equals'
+  | 'in_network'
   | 'equal'
   | 'greater_or_equal'
   | 'greater'

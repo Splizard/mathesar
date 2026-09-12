@@ -9,6 +9,7 @@ import duration from './duration';
 import enumFactory from './enum';
 import file from './file';
 import money from './money';
+import network from './network';
 import number from './number';
 import string from './string';
 import time from './time';
@@ -39,6 +40,7 @@ const simpleDataTypeComponentFactories: Record<
   composite: compositeReadOnly,
   enum: enumFactory,
   databaseTable,
+  network,
 };
 
 const compoundDataTypeComponentFactories: Record<

@@ -29,6 +29,9 @@ export const users = {
 
   patch_self: rpcMethodTypeContainer<BaseUser, User>(),
 
+  /** The IP address the caller's request came from, or null when there's none */
+  current_ip_address: rpcMethodTypeContainer<void, string | null>(),
+
   patch_other: rpcMethodTypeContainer<
     Partial<Omit<User, 'id'>> & { user_id: User['id'] },
     User
