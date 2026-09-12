@@ -2314,9 +2314,11 @@ CREATE OR REPLACE FUNCTION test_copy_table_structure_constraints() RETURNS SETOF
 BEGIN
   PERFORM __setup_copy_structure();
   RETURN NEXT results_eq(
+    -- The kinds copy_table_structure copies, named rather than left to whatever else the
+    -- catalogue holds: Postgres 18 writes a row here for every NOT NULL as well.
     $q$SELECT contype::text, pg_get_constraintdef(oid)
     FROM pg_catalog.pg_constraint
-    WHERE conrelid = 'tab_create_schema.likeness'::regclass AND contype <> 'p'
+    WHERE conrelid = 'tab_create_schema.likeness'::regclass AND contype = ANY('{c,u,f,x}')
     ORDER BY contype, 2$q$,
     $v$VALUES
       ('c', 'CHECK ((assigned = ANY (ARRAY[''a''::text, ''b''::text])))'),

@@ -3566,7 +3566,11 @@ BEGIN
     __msar.get_qualified_relation_name(tab_id),
     variadic con_create_defs
   );
-  RETURN array_agg(oid) FROM pg_catalog.pg_constraint WHERE conrelid=tab_id;
+  -- The kinds Mathesar knows how to describe, which are the ones it could have been asked to
+  -- add. Postgres 18 writes a row here for every NOT NULL too, and those are not constraints
+  -- anybody asked about.
+  RETURN array_agg(oid) FROM pg_catalog.pg_constraint
+  WHERE conrelid=tab_id AND msar.get_constraint_type_api_code(contype::char) IS NOT NULL;
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
