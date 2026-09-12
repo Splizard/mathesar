@@ -8,11 +8,21 @@ import { type Readable, derived, readable } from 'svelte/store';
  */
 export const compactWidth = 820;
 
+/**
+ * How tall the window has to be before a table gets the full treatment.
+ *
+ * The panes above and below a table cost about a fifth of a phone's landscape screen and nothing
+ * of a desktop's, so a window can be wide enough for them and still not have the room. A big
+ * phone on its side is wide -- wider than some laptops -- and 400-odd pixels tall, which is where
+ * the panes are worth the least and cost the most.
+ */
+export const compactHeight = 560;
+
 /** Which of the three ways a table can be laid out suits the room there is */
 export type TableLayout =
   /** The spreadsheet, with the panes above and below it */
   | 'sheet'
-  /** The spreadsheet and nothing else, the panes being more than the screen can spare */
+  /** The spreadsheet and one slim row of controls, the panes being more than the screen can spare */
   | 'compactSheet'
   /** A list of records to pick one from, a spreadsheet being unreadable this narrow */
   | 'recordList';
@@ -26,9 +36,10 @@ export type TableLayout =
  */
 export function chooseTableLayout(room: {
   width: number;
+  height: number;
   isPortrait: boolean;
 }): TableLayout {
-  if (room.width > compactWidth) return 'sheet';
+  if (room.width > compactWidth && room.height > compactHeight) return 'sheet';
   return room.isPortrait ? 'recordList' : 'compactSheet';
 }
 
@@ -50,15 +61,25 @@ function fromMediaQuery(query: string): Readable<boolean> {
   });
 }
 
-export const windowWidth = readable(
-  typeof window === 'undefined' ? compactWidth + 1 : window.innerWidth,
-  (set) => {
+/** How big the window is, watched together so that a turned phone is one change rather than two */
+function windowSize(read: () => number, fallback: number): Readable<number> {
+  return readable(typeof window === 'undefined' ? fallback : read(), (set) => {
     if (typeof window === 'undefined') return undefined;
-    const update = () => set(window.innerWidth);
+    const update = () => set(read());
     update();
     window.addEventListener('resize', update);
     return () => window.removeEventListener('resize', update);
-  },
+  });
+}
+
+export const windowWidth = windowSize(
+  () => window.innerWidth,
+  compactWidth + 1,
+);
+
+export const windowHeight = windowSize(
+  () => window.innerHeight,
+  compactHeight + 1,
 );
 
 /**
@@ -70,6 +91,7 @@ export const windowWidth = readable(
 export const isPortrait = fromMediaQuery('(orientation: portrait)');
 
 export const tableLayout: Readable<TableLayout> = derived(
-  [windowWidth, isPortrait],
-  ([width, portrait]) => chooseTableLayout({ width, isPortrait: portrait }),
+  [windowWidth, windowHeight, isPortrait],
+  ([width, height, portrait]) =>
+    chooseTableLayout({ width, height, isPortrait: portrait }),
 );

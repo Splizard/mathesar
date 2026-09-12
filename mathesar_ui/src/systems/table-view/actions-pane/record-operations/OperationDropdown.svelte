@@ -34,12 +34,12 @@
 >
   <svelte:fragment slot="trigger">
     <Icon {...icon} />
-    <span class="responsive-button-label with-badge">
-      {label}
-      {#if badgeCount > 0}
-        <BadgeCount value={badgeCount} />
-      {/if}
-    </span>
+    <span class="responsive-button-label">{label}</span>
+    <!-- Outside the label, which a narrow screen does without: how many of something is
+    applied is the part that still has to be readable once the word for it is gone. -->
+    {#if badgeCount > 0}
+      <BadgeCount value={badgeCount} />
+    {/if}
   </svelte:fragment>
   <svelte:fragment slot="content" let:close>
     {#if applied}
@@ -59,11 +59,6 @@
 </Dropdown>
 
 <style lang="scss">
-  .with-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sm5);
-  }
   .columns {
     min-width: 10rem;
     --Menu__min-width: 100%;

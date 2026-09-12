@@ -21,10 +21,9 @@
 >
   <svelte:fragment slot="trigger">
     <Icon {...iconTableLink} />
-    <span class="responsive-button-label with-badge">
-      {$_('join')}
-      <BadgeCount value={$joining.simpleManyToMany.size} />
-    </span>
+    <span class="responsive-button-label">{$_('join')}</span>
+    <!-- Outside the label, for the same reason as in OperationDropdown. -->
+    <BadgeCount value={$joining.simpleManyToMany.size} />
   </svelte:fragment>
   <div slot="content" class="content">
     <Join />
@@ -32,11 +31,6 @@
 </Dropdown>
 
 <style lang="scss">
-  .with-badge {
-    display: inline-flex;
-    align-items: center;
-    gap: var(--sm5);
-  }
   .content {
     padding: var(--sm3) var(--sm5) var(--sm1) var(--sm5);
   }

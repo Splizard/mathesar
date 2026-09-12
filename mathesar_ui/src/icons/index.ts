@@ -7,6 +7,7 @@ import {
   faArrowUp,
   faArrowsLeftRight,
   faBackspace,
+  faBars,
   faBook,
   faBookmark,
   faCalendarDay,
@@ -185,6 +186,7 @@ export const iconExport: IconProps = { data: faDownload };
 export const iconImportData: IconProps = { data: faUpload };
 export const iconInferColumnType: IconProps = { data: faMicroscope };
 export const iconMoreActions: IconProps = { data: faEllipsisV };
+export const iconTableActions: IconProps = { data: faBars };
 export const iconMoveColumnsToNewLinkedTable = { data: faLink };
 export const iconMoveColumnsToExistingLinkedTable = { data: faLink };
 export const iconManageAccess = { data: faUser };

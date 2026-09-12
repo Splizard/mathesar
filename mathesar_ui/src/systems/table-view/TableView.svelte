@@ -4,7 +4,13 @@
   import { _ } from 'svelte-i18n';
 
   import type { ColumnMetadata } from '@mathesar/api/rpc/_common/columnDisplayOptions';
-  import { ImmutableMap, Spinner } from '@mathesar/component-library';
+  import {
+    Button,
+    Icon,
+    ImmutableMap,
+    Spinner,
+    iconClose,
+  } from '@mathesar/component-library';
   import { Sheet } from '@mathesar/components/sheet';
   import { SheetClipboardHandler } from '@mathesar/components/sheet/clipboard';
   import { contextMenuContext } from '@mathesar/contexts/contextMenuContext';
@@ -42,6 +48,7 @@
   import ImportModal from './import/ImportModal.svelte';
   import RecordSummaryList from './RecordSummaryList.svelte';
   import StatusPane from './StatusPane.svelte';
+  import TableInspector from './table-inspector/TableInspector.svelte';
   import WithTableInspector from './table-inspector/WithTableInspector.svelte';
   import { getCustomizedColumnWidths } from './tableViewUtils';
 
@@ -59,8 +66,6 @@
   export let sheetElement: HTMLElement | undefined = undefined;
   /** How much room there is, and so which of the three layouts the table has */
   export let layout: TableLayout = 'sheet';
-  /** Whether the panes above and below the table are showing, which the corner button turns on */
-  export let showPanes = false;
 
   $: ({ currentRoleOwns } = table.currentAccess);
   $: usesVirtualList = context !== 'widget';
@@ -127,7 +132,15 @@
    */
   $: effectiveLayout =
     layout === 'recordList' && !$hasPrimaryKey ? 'compactSheet' : layout;
-  $: supportsTableInspector = context === 'page' && effectiveLayout === 'sheet';
+  $: supportsTableInspector = context === 'page';
+  /**
+   * Whether the inspector covers the table rather than sitting beside it.
+   *
+   * Beside it, it takes a third of the width and leaves the rest to the table. On a screen with
+   * no room to divide, a third of it is too little for either, so the inspector takes the screen
+   * while it is open and gives it back when it is closed.
+   */
+  $: inspectorIsOverlay = effectiveLayout !== 'sheet';
   $: sheetColumns = (() => {
     const columns: Array<{ column: { id: string; name: string } }> = [
       { column: { id: ID_ROW_CONTROL_COLUMN, name: 'ROW_CONTROL' } },
@@ -217,7 +230,7 @@
   <WithTableInspector
     {context}
     {table}
-    {showTableInspector}
+    showTableInspector={showTableInspector && !inspectorIsOverlay}
     bind:activeTabId={$tableInspectorTab}
   >
     <div class="sheet-area">
@@ -268,13 +281,7 @@
           restrictWidthToRowWidth={!usesVirtualList}
           bind:sheetElement
         >
-          <Header
-            {hasNewColumnButton}
-            {columnOrder}
-            {table}
-            hasPaneToggle={effectiveLayout === 'compactSheet'}
-            bind:showPanes
-          />
+          <Header {hasNewColumnButton} {columnOrder} {table} />
           <Body {usesVirtualList} />
         </Sheet>
       {:else if $isLoading}
@@ -284,8 +291,23 @@
       {/if}
     </div>
   </WithTableInspector>
-  {#if effectiveLayout === 'sheet' || showPanes}
+  {#if effectiveLayout === 'sheet'}
     <StatusPane {context} />
+  {/if}
+  {#if showTableInspector && inspectorIsOverlay}
+    <div class="inspector-over-table">
+      <div class="bar">
+        <span class="what">{table.name}</span>
+        <Button
+          appearance="secondary"
+          aria-label={$_('close')}
+          on:click={() => tableInspectorVisible.set(false)}
+        >
+          <Icon {...iconClose} />
+        </Button>
+      </div>
+      <TableInspector {table} bind:activeTabId={$tableInspectorTab} />
+    </div>
   {/if}
 </div>
 
@@ -301,6 +323,7 @@
 <style>
   .table-view {
     --status-bar-padding: 0;
+    position: relative;
     height: 100%;
     display: grid;
     grid-template: 1fr auto / 1fr;
@@ -316,5 +339,29 @@
     text-align: center;
     font-size: 2rem;
     padding: 2rem;
+  }
+  /* Over the table rather than beside it, there being no room beside it. */
+  .inspector-over-table {
+    position: absolute;
+    inset: 0;
+    z-index: 3;
+    background: var(--color-bg-base);
+    display: grid;
+    grid-template: auto 1fr / 1fr;
+    overflow: hidden;
+  }
+  /* A line of its own for the way out, rather than a button laid over the tabs. */
+  .inspector-over-table .bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--sm3);
+    padding: var(--sm4) var(--sm3);
+  }
+  .inspector-over-table .what {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-weight: var(--font-weight-bold);
   }
 </style>

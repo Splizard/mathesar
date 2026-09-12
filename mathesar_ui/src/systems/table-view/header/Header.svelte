@@ -1,6 +1,5 @@
 <script lang="ts">
   import { first } from 'iter-tools';
-  import { _ } from 'svelte-i18n';
 
   import {
     SheetCellResizer,
@@ -9,7 +8,6 @@
     SheetHeader,
   } from '@mathesar/components/sheet';
   import SheetOriginCell from '@mathesar/components/sheet/cells/SheetOriginCell.svelte';
-  import { iconMoreActions } from '@mathesar/icons';
   import type { Table } from '@mathesar/models/Table';
   import {
     ID_ADD_NEW_COLUMN,
@@ -19,7 +17,6 @@
     isJoinedColumn,
   } from '@mathesar/stores/table-data';
   import { updateTable } from '@mathesar/stores/tables';
-  import { Icon } from '@mathesar-component-library';
 
   import { Draggable, Droppable } from './drag-and-drop';
   import HeaderCell from './header-cell/HeaderCell.svelte';
@@ -30,9 +27,6 @@
   export let hasNewColumnButton = false;
   export let columnOrder: string[];
   export let table: Table;
-  /** Whether the corner of the sheet is where the panes around the table are fetched from */
-  export let hasPaneToggle = false;
-  export let showPanes = false;
 
   $: columnOrder = columnOrder ?? [];
   $: ({ selection, processedColumns, displayedColumns } = $tabularData);
@@ -113,21 +107,6 @@
       locationOfFirstDraggedColumn={0}
       columnLocation={-1}
     />
-    {#if hasPaneToggle}
-      <!-- The corner of the sheet is otherwise empty, and on a screen with no room for the pane
-      above the table it is where the pane is fetched from. -->
-      <button
-        type="button"
-        class="pane-toggle"
-        aria-label={$_('table_actions')}
-        aria-expanded={showPanes}
-        on:click={() => {
-          showPanes = !showPanes;
-        }}
-      >
-        <Icon {...iconMoreActions} />
-      </button>
-    {/if}
   </SheetOriginCell>
 
   {#each [...$displayedColumns] as [columnId, columnFabric] (columnId)}
@@ -166,23 +145,3 @@
     </SheetColumnCreationCell>
   {/if}
 </SheetHeader>
-
-<style lang="scss">
-  .pane-toggle {
-    position: absolute;
-    inset: 0;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border: none;
-    background: transparent;
-    color: var(--color-fg-subtle-1);
-    cursor: pointer;
-    /* Over the droppable, which has nothing to drop onto it on a screen this size. */
-    z-index: 1;
-  }
-
-  .pane-toggle[aria-expanded='true'] {
-    color: var(--color-fg-base);
-  }
-</style>
