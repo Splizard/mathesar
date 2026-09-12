@@ -24,6 +24,7 @@
     withModifiers,
   } from '@mathesar/stores/abstract-types';
   import { abstractTypeCategory } from '@mathesar/stores/abstract-types/constants';
+  import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
   import type {
     AbstractTypeCategoryIdentifier,
     AbstractTypeDbConfig,
@@ -49,6 +50,23 @@
 
   let choice: TypeChoice = getDefaultTypeChoice();
 
+  /**
+   * Whether the choice is of a type there is a name to ask for.
+   *
+   * Mathesar holds a marker rather than a name for the types a database defines
+   * for itself, which one it is being the column's business and not the type
+   * list's. A type being defined here is asked for by name, so a marker is no
+   * answer -- including as the type of an array's items, which is what would
+   * otherwise slip through once the family itself has been left out.
+   */
+  function namesARealType(candidate: TypeChoice): boolean {
+    const markers: DbType[] = [DB_TYPES.ENUM, DB_TYPES.COMPOSITE];
+    return (
+      !markers.includes(candidate.dbType) &&
+      !(candidate.itemType && markers.includes(candidate.itemType))
+    );
+  }
+
   // A type the database is being asked to define is over, or made of, what a
   // column can be of -- barring the ones that are themselves a rule about their
   // values, which would have to be picked and not just named, and the ones
@@ -61,6 +79,7 @@
         type.identifier !== abstractTypeCategory.Composite &&
         type.identifier !== abstractTypeCategory.File,
     ),
+    namesARealType,
   );
   $: selected = getKindOf(choice);
   $: selectedFamily = families.find((f) => f.family === selected.family);

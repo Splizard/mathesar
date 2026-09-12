@@ -43,7 +43,7 @@
           Postgres holds it as, which is not ours to change: it will not change
           one while anything holds the type, and a field of another type is a
           field taken off and another put on. -->
-          <code>{entry.held}</code>
+          <code title={entry.held}>{entry.held}</code>
         {/if}
         <Button
           appearance="plain"
@@ -114,10 +114,14 @@
     min-width: 0;
   }
   code {
-    flex: 1 1 auto;
+    /* Shrinks to an ellipsis rather than breaking a type name across lines,
+    the name input having the room it gives up. */
+    flex: 0 1 auto;
     min-width: 0;
     font-size: var(--sm2);
-    word-break: break-word;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
   .type {
     margin-top: var(--sm3);
