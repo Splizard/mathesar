@@ -12,17 +12,23 @@ import type {
   FormattedInputProps,
 } from '@mathesar-component-library/types';
 
-import FormattedInputCell from './components/formatted-input/FormattedInputCell.svelte';
+import DurationCell from './components/duration/DurationCell.svelte';
+import DurationInput from './components/duration/DurationInput.svelte';
 import type { FormattedInputCellExternalProps } from './components/typeDefinitions';
 import type { CellComponentFactory } from './typeDefinitions';
+
+function getSpecification(column: RawColumnWithMetadata) {
+  const defaults = DurationSpecification.getDefaults();
+  return new DurationSpecification({
+    max: column.metadata?.duration_max ?? defaults.max,
+    min: column.metadata?.duration_min ?? defaults.min,
+  });
+}
 
 function getProps(
   column: RawColumnWithMetadata,
 ): FormattedInputCellExternalProps {
-  const defaults = DurationSpecification.getDefaults();
-  const max = column.metadata?.duration_max ?? defaults.max;
-  const min = column.metadata?.duration_min ?? defaults.min;
-  const durationSpecification = new DurationSpecification({ max, min });
+  const durationSpecification = getSpecification(column);
   const formatter = new DurationFormatter(durationSpecification);
   return {
     useTabularNumbers: true,
@@ -39,14 +45,20 @@ function getProps(
   };
 }
 
+/** A duration is an amount of a unit, shown as the column's formatting says */
 const durationType: CellComponentFactory = {
-  get: (
-    column: RawColumnWithMetadata,
-  ): ComponentAndProps<FormattedInputCellExternalProps> => ({
-    component: FormattedInputCell,
-    props: getProps(column),
+  get: (column: RawColumnWithMetadata): ComponentAndProps => ({
+    component: DurationCell,
+    props: {
+      specification: getSpecification(column),
+      formatValue: getProps(column).formatForDisplay,
+    },
   }),
-  getInput: (
+  getInput: (column: RawColumnWithMetadata): ComponentAndProps => ({
+    component: DurationInput,
+    props: { specification: getSpecification(column) },
+  }),
+  getSimpleInput: (
     column: RawColumnWithMetadata,
   ): ComponentAndProps<FormattedInputProps<string>> => ({
     component: FormattedInput,
