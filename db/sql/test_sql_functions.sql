@@ -1336,6 +1336,84 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION __setup_violations() RETURNS SETOF TEXT AS $$
+BEGIN
+  CREATE TABLE viol (c text);
+  INSERT INTO viol (c) VALUES
+    ('fine'),
+    ('  spaces both  '),
+    ('trailing   '),
+    ('has' || chr(10) || 'break'),          -- a break as well, so trimming won't save it
+    ('  both  ' || chr(10) || 'ways  '),
+    (NULL),                                 -- a check constraint passes on null, so this isn't one
+    ('');
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_check_pattern_violations_counts() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_violations();
+  RETURN NEXT is(
+    msar.check_pattern_violations('viol'::regclass::oid, '[1]'::jsonb, 'text_box'),
+    '{"violations": 4, "repairable": 2}'::jsonb,
+    'the two breaks are violations that trimming cannot repair'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_repair_check_pattern_fixes_what_it_can() RETURNS SETOF TEXT AS $f$
+DECLARE
+  changed integer;
+BEGIN
+  PERFORM __setup_violations();
+  changed := msar.repair_check_pattern('viol'::regclass::oid, '[1]'::jsonb, 'text_box');
+  RETURN NEXT is(changed, 2, 'only the repairable rows are touched');
+  RETURN NEXT is(
+    msar.check_pattern_violations('viol'::regclass::oid, '[1]'::jsonb, 'text_box'),
+    '{"violations": 2, "repairable": 0}'::jsonb,
+    'and the ones with line breaks are left'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM viol WHERE c = 'spaces both'),
+    1,
+    'a trimmed value keeps what it said'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM viol WHERE c LIKE '%' || chr(10) || '%'),
+    2,
+    'a value with a line break is left exactly as it was'
+  );
+  RETURN NEXT is((SELECT count(*)::integer FROM viol WHERE c IS NULL), 1, 'nulls untouched');
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_repair_then_constrain() RETURNS SETOF TEXT AS $f$
+BEGIN
+  -- The point of the repair: a column that wouldn't take the constraint, takes it afterwards.
+  CREATE TABLE repairable (c text);
+  INSERT INTO repairable (c) VALUES ('  a  '), ('b'), (NULL);
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.add_constraints(
+      'repairable'::regclass::oid,
+      $j$[{"name": "k", "type": "c", "pattern": "text_box", "columns": [1]}]$j$
+    )$i$,
+    '23514'
+  );
+  PERFORM msar.repair_check_pattern('repairable'::regclass::oid, '[1]'::jsonb, 'text_box');
+  RETURN NEXT lives_ok(
+    $i$SELECT msar.add_constraints(
+      'repairable'::regclass::oid,
+      $j$[{"name": "k", "type": "c", "pattern": "text_box", "columns": [1]}]$j$
+    )$i$,
+    'accepted once repaired'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_add_constraint_duplicate_name() RETURNS SETOF TEXT AS $f$
 DECLARE
   con_create_arr jsonb := '[{"name": "myuniqcons", "type": "u", "columns": [2]}]';

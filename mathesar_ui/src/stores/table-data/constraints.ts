@@ -241,6 +241,34 @@ export class ConstraintsDataStore
     await this.fetch();
   }
 
+  /** How far a column is from satisfying a check pattern. */
+  async checkPatternViolations(
+    column: RawColumnWithMetadata,
+    pattern: CheckPattern,
+  ): Promise<{ violations: number; repairable: number }> {
+    return api.constraints
+      .check_pattern_violations({
+        ...this.apiContext,
+        column_attnum: column.id,
+        pattern,
+      })
+      .run();
+  }
+
+  /** Put right the rows a check pattern's repair can fix. Returns how many changed. */
+  async repairCheckPattern(
+    column: RawColumnWithMetadata,
+    pattern: CheckPattern,
+  ): Promise<number> {
+    return api.constraints
+      .repair_check_pattern({
+        ...this.apiContext,
+        column_attnum: column.id,
+        pattern,
+      })
+      .run();
+  }
+
   destroy(): void {
     this.promise?.cancel();
     this.promise = undefined;

@@ -4,6 +4,7 @@
 
   import { RichText } from '@mathesar/components/rich-text';
   import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
+  import { confirm } from '@mathesar/stores/confirmation';
   import type {
     ColumnsDataStore,
     ConstraintsDataStore,
@@ -48,43 +49,54 @@
       c.columns.includes(column.column.id),
   );
 
-  async function toggleSingleLine() {
-    isRequestingToggleSingleLine = true;
-    try {
-      const newIsSingleLine = !isSingleLine;
-      await constraintsDataStore.setCheckPatternOfColumn(
+  /**
+   * Trimming a value's surroundings keeps what it says, so it can be offered.
+   * Removing a line break doesn't, so those rows are reported and left for
+   * someone to decide about.
+   */
+  async function offerToRepair() {
+    const columnName = column.column.name;
+    const { violations, repairable } =
+      await constraintsDataStore.checkPatternViolations(
         column.column,
         'text_box',
-        newIsSingleLine,
       );
-      toast.success(
-        newIsSingleLine
-          ? $_('column_will_be_single_line', {
-              values: { columnName: column.column.name },
-            })
-          : $_('column_will_not_be_single_line', {
-              values: { columnName: column.column.name },
-            }),
-      );
-      dispatch('close');
-    } catch (error) {
-      // A check violation here means the column already holds values the
-      // constraint forbids, which is worth saying plainly rather than passing
-      // the database's own wording along.
-      const message = getErrorMessage(error);
-      const isViolation = /check constraint|23514/i.test(message);
+    if (repairable === 0) {
       toast.error(
-        isViolation
-          ? $_('single_line_existing_values_dont_fit', {
-              values: { columnName: column.column.name },
-            })
-          : `${$_('unable_to_update_single_line_column', {
-              values: { columnName: column.column.name },
-            })} ${message}.`,
+        $_('single_line_values_need_fixing', {
+          values: { columnName, violations },
+        }),
       );
-    } finally {
-      isRequestingToggleSingleLine = false;
+      return;
     }
+    const confirmed = await confirm({
+      title: $_('single_line_offer_to_trim', {
+        values: { columnName, violations, repairable },
+      }),
+      proceedButton: { label: $_('trim_and_restrict') },
+    });
+    if (!confirmed) return;
+
+    const repaired = await constraintsDataStore.repairCheckPattern(
+      column.column,
+      'text_box',
+    );
+    const remaining = violations - repaired;
+    if (remaining > 0) {
+      toast.error(
+        $_('single_line_some_need_fixing', {
+          values: { columnName, repaired, remaining },
+        }),
+      );
+      return;
+    }
+    await constraintsDataStore.setCheckPatternOfColumn(
+      column.column,
+      'text_box',
+      true,
+    );
+    toast.success($_('column_will_be_single_line', { values: { columnName } }));
+    dispatch('close');
   }
 
   async function toggleAllowNull() {
@@ -117,6 +129,44 @@
       toast.error(`${errorInfo} ${getErrorMessage(error)}.`);
     } finally {
       isRequestingToggleAllowNull = false;
+    }
+  }
+
+  async function toggleSingleLine() {
+    isRequestingToggleSingleLine = true;
+    try {
+      const newIsSingleLine = !isSingleLine;
+      await constraintsDataStore.setCheckPatternOfColumn(
+        column.column,
+        'text_box',
+        newIsSingleLine,
+      );
+      toast.success(
+        newIsSingleLine
+          ? $_('column_will_be_single_line', {
+              values: { columnName: column.column.name },
+            })
+          : $_('column_will_not_be_single_line', {
+              values: { columnName: column.column.name },
+            }),
+      );
+      dispatch('close');
+    } catch (error) {
+      // A check violation means the column already holds values the constraint
+      // forbids. Rather than pass the database's wording along, find out how
+      // many and how much of it can be put right.
+      const message = getErrorMessage(error);
+      if (!/check constraint|23514/i.test(message)) {
+        toast.error(
+          `${$_('unable_to_update_single_line_column', {
+            values: { columnName: column.column.name },
+          })} ${message}.`,
+        );
+        return;
+      }
+      await offerToRepair();
+    } finally {
+      isRequestingToggleSingleLine = false;
     }
   }
 

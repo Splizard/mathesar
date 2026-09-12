@@ -9,6 +9,8 @@ from db.constraints import (
     get_constraints_for_table,
     create_constraint,
     drop_constraint_via_oid,
+    check_pattern_violations,
+    repair_check_pattern,
 )
 from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.rpc.utils import connect
@@ -176,6 +178,15 @@ def list_(*, table_oid: int, database_id: int, **kwargs) -> list[ConstraintInfo]
         return [ConstraintInfo.from_dict(con) for con in con_info]
 
 
+def _check_pattern(pattern):
+    """Reject a pattern name that isn't one of ours, before it reaches the database."""
+    if pattern not in CHECK_PATTERNS:
+        raise ValueError(
+            f"Unknown check constraint pattern: {pattern!r}. "
+            f"Use one of: {', '.join(sorted(CHECK_PATTERNS))}."
+        )
+
+
 def _checked_constraint_defs(constraint_def_list):
     """
     Return the given constraint definitions, having rejected any check constraint that doesn't name
@@ -240,3 +251,76 @@ def delete(*, table_oid: int, constraint_oid: int, database_id: int, **kwargs) -
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
         return drop_constraint_via_oid(table_oid, constraint_oid, conn)
+
+
+class CheckPatternViolations(TypedDict):
+    """
+    How far a column is from satisfying a check pattern.
+
+    Attributes:
+        violations: The number of rows that break the pattern. Rows holding null don't count,
+                    a check constraint passing on null.
+        repairable: How many of those could be put right without changing what they say, e.g. by
+                    trimming the surroundings of a text box's value. The remainder have to be
+                    dealt with by someone.
+    """
+    violations: int
+    repairable: int
+
+
+@mathesar_rpc_method(name="constraints.check_pattern_violations", auth="login")
+def list_check_pattern_violations(
+    *,
+    table_oid: int,
+    column_attnum: int,
+    pattern: str,
+    database_id: int, **kwargs
+) -> CheckPatternViolations:
+    """
+    Count the rows that would stop a check pattern being applied to a column.
+
+    Applying a pattern fails outright while any row breaks it, so this is how a caller finds out
+    what it's up against before offering to do anything about it.
+
+    Args:
+        table_oid: The OID of the table.
+        column_attnum: The attnum of the column the pattern would go on.
+        pattern: The name of the pattern. One of `CHECK_PATTERNS`.
+        database_id: The Django id of the database containing the table.
+
+    Returns:
+        The number of violating rows, and how many of those are repairable.
+    """
+    _check_pattern(pattern)
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return check_pattern_violations(table_oid, column_attnum, pattern, conn)
+
+
+@mathesar_rpc_method(name="constraints.repair_check_pattern", auth="login")
+def repair(
+    *,
+    table_oid: int,
+    column_attnum: int,
+    pattern: str,
+    database_id: int, **kwargs
+) -> int:
+    """
+    Put right the rows a check pattern's repair can fix, leaving the rest alone.
+
+    This changes data, so it is only ever worth calling once someone has been told how many rows it
+    would touch and has said to go ahead.
+
+    Args:
+        table_oid: The OID of the table.
+        column_attnum: The attnum of the column to repair.
+        pattern: The name of the pattern. One of `CHECK_PATTERNS`.
+        database_id: The Django id of the database containing the table.
+
+    Returns:
+        The number of rows changed.
+    """
+    _check_pattern(pattern)
+    user = kwargs.get(REQUEST_KEY).user
+    with connect(database_id, user) as conn:
+        return repair_check_pattern(table_oid, column_attnum, pattern, conn)

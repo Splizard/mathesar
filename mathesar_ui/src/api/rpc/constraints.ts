@@ -103,6 +103,27 @@ export const constraints = {
     RawConstraint[]
   >(),
 
+  check_pattern_violations: rpcMethodTypeContainer<
+    {
+      database_id: number;
+      table_oid: number;
+      column_attnum: number;
+      pattern: CheckPattern;
+    },
+    { violations: number; repairable: number }
+  >(),
+
+  repair_check_pattern: rpcMethodTypeContainer<
+    {
+      database_id: number;
+      table_oid: number;
+      column_attnum: number;
+      pattern: CheckPattern;
+    },
+    /** The number of rows changed */
+    number
+  >(),
+
   add: rpcMethodTypeContainer<
     {
       database_id: number;

@@ -667,15 +667,34 @@ Args:
 */
 DECLARE
   col text;
-  expression text;
 BEGIN
   col := (msar.get_column_names(tab_id, columns))[1];
   IF col IS NULL THEN
     RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
       USING ERRCODE = 'invalid_parameter_value';
   END IF;
+  RETURN __msar.build_check_expression_for(pattern, col);
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+__msar.build_check_expression_for(pattern text, val text) RETURNS text AS $$/*
+The check patterns themselves, written against an arbitrary value expression.
+
+Taking the value as an expression rather than a column name lets the same definition serve both the
+constraint on a column and the question of whether a repaired value would satisfy it, so the two
+can't disagree about what the pattern means.
+
+Args:
+  pattern: The name of the pattern.
+  val: A SQL expression for the value to test, already quoted or parenthesized as needed.
+*/
+DECLARE
+  expression text;
+BEGIN
   expression := CASE pattern
-    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', col)
+    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', val)
   END;
   IF expression IS NULL THEN
     RAISE EXCEPTION 'Unknown check constraint pattern: %', pattern
@@ -683,7 +702,110 @@ BEGIN
   END IF;
   RETURN expression;
 END;
-$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
+$$ LANGUAGE plpgsql IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_check_repair(pattern text, val text) RETURNS text AS $$/*
+An expression for the nearest value that satisfies the pattern, where there is one worth having.
+
+Only changes that keep the meaning of the value belong here. Trimming a text box's surroundings
+does; deleting the line breaks that also disqualify it does not, so a value with one is left for
+someone to decide about rather than silently rewritten. Null where a pattern has no such repair.
+
+Args:
+  pattern: The name of the pattern.
+  val: A SQL expression for the value to repair.
+*/
+SELECT CASE pattern
+  WHEN 'text_box' THEN format('btrim(%s)', val)
+END;
+$$ LANGUAGE SQL IMMUTABLE RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.check_pattern_violations(tab_id oid, columns jsonb, pattern text) RETURNS jsonb AS $$/*
+Count the rows that would stop a check pattern being applied to a column.
+
+Returns {"violations": <int>, "repairable": <int>}, where repairable counts those that
+msar.build_check_repair could put right without changing what they say. A caller can use the two
+to decide between offering to fix the column and telling someone they have to.
+
+Rows where the value is null are not counted: a check constraint passes on null, as this does.
+
+Args:
+  tab_id: The OID of the table.
+  columns: A JSONB array holding the one column the pattern would go on.
+  pattern: The name of the pattern.
+*/
+DECLARE
+  col text;
+  expression text;
+  repair text;
+  repaired_expression text;
+  result jsonb;
+BEGIN
+  col := (msar.get_column_names(tab_id, columns))[1];
+  IF col IS NULL THEN
+    RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  expression := __msar.build_check_expression_for(pattern, col);
+  repair := msar.build_check_repair(pattern, col);
+  repaired_expression := CASE
+    WHEN repair IS NULL THEN 'false'
+    ELSE __msar.build_check_expression_for(pattern, format('(%s)', repair))
+  END;
+  EXECUTE format(
+    $q$SELECT jsonb_build_object(
+      'violations', count(*) FILTER (WHERE NOT (%2$s)),
+      'repairable', count(*) FILTER (WHERE NOT (%2$s) AND (%3$s))
+    ) FROM %1$s$q$,
+    __msar.get_qualified_relation_name(tab_id), expression, repaired_expression
+  ) INTO result;
+  RETURN result;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION
+msar.repair_check_pattern(tab_id oid, columns jsonb, pattern text) RETURNS integer AS $$/*
+Put right the rows that a check pattern's repair can fix, and return how many were changed.
+
+Only touches rows that both break the pattern and would satisfy it afterwards, so a value the
+repair can't salvage is left exactly as it was for someone to look at.
+
+Args:
+  tab_id: The OID of the table.
+  columns: A JSONB array holding the one column to repair.
+  pattern: The name of the pattern.
+*/
+DECLARE
+  col text;
+  expression text;
+  repair text;
+  repaired_expression text;
+  changed integer;
+BEGIN
+  col := (msar.get_column_names(tab_id, columns))[1];
+  IF col IS NULL THEN
+    RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  expression := __msar.build_check_expression_for(pattern, col);
+  repair := msar.build_check_repair(pattern, col);
+  IF repair IS NULL THEN
+    RETURN 0;
+  END IF;
+  repaired_expression := __msar.build_check_expression_for(pattern, format('(%s)', repair));
+  EXECUTE format(
+    'UPDATE %1$s SET %2$s = %3$s WHERE NOT (%4$s) AND (%5$s)',
+    __msar.get_qualified_relation_name(tab_id), col, repair, expression, repaired_expression
+  );
+  GET DIAGNOSTICS changed = ROW_COUNT;
+  RETURN changed;
+END;
+$$ LANGUAGE plpgsql;
 
 
 CREATE OR REPLACE FUNCTION

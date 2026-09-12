@@ -220,3 +220,58 @@ def test_constraints_create_non_check_unaffected(rf, monkeypatch, mocked_exec_ms
         table_oid=2254444, constraint_def_list=constraint_def_list, database_id=11, request=request
     )
     assert mocked_exec_msar_func.call_args_list[0][0][3] == json.dumps(constraint_def_list)
+
+
+def test_check_pattern_violations_counts(rf, monkeypatch, mocked_exec_msar_func):
+    request = rf.post('/api/rpc/v0', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(constraints, 'connect', mock_connect)
+    mocked_exec_msar_func.fetchone.return_value = [{'violations': 4, 'repairable': 2}]
+    result = constraints.list_check_pattern_violations(
+        table_oid=2254444, column_attnum=2, pattern='text_box', database_id=11, request=request
+    )
+    assert result == {'violations': 4, 'repairable': 2}
+    call_args = mocked_exec_msar_func.call_args_list[0][0]
+    assert call_args[2] == 2254444
+    assert call_args[3] == json.dumps([2])
+    assert call_args[4] == 'text_box'
+
+
+def test_check_pattern_methods_reject_unknown_pattern(rf, monkeypatch, mocked_exec_msar_func):
+    """Counting and repairing take a pattern name too, so they need the same guard as adding."""
+    request = rf.post('/api/rpc/v0', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(constraints, 'connect', mock_connect)
+    for method in (constraints.list_check_pattern_violations, constraints.repair):
+        with pytest.raises(RPCException, match='pattern'):
+            method(
+                table_oid=2254444, column_attnum=2, pattern='nonsense',
+                database_id=11, request=request,
+            )
+    assert not mocked_exec_msar_func.call_args_list
+
+
+def test_repair_check_pattern_returns_rows_changed(rf, monkeypatch, mocked_exec_msar_func):
+    request = rf.post('/api/rpc/v0', data={})
+    request.user = User(username='alice', password='pass1234')
+
+    @contextmanager
+    def mock_connect(_database_id, user):
+        yield True
+
+    monkeypatch.setattr(constraints, 'connect', mock_connect)
+    mocked_exec_msar_func.fetchone.return_value = [2]
+    changed = constraints.repair(
+        table_oid=2254444, column_attnum=2, pattern='text_box', database_id=11, request=request
+    )
+    assert changed == 2

@@ -127,6 +127,16 @@ METHODS = [
         "constraints.delete",
         [user_is_authenticated]
     ),
+    (
+        constraints.list_check_pattern_violations,
+        "constraints.check_pattern_violations",
+        [user_is_authenticated]
+    ),
+    (
+        constraints.repair,
+        "constraints.repair_check_pattern",
+        [user_is_authenticated]
+    ),
 
     (
         data_modeling.add_foreign_key_column,
