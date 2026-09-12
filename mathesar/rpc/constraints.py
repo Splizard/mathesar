@@ -75,9 +75,43 @@ class UniqueConstraint(TypedDict):
     deferrable: Optional[bool]
 
 
-CreatableConstraintInfo = list[Union[ForeignKeyConstraint, PrimaryKeyConstraint, UniqueConstraint]]
+CHECK_PATTERNS = frozenset({'text_box'})
 """
-Type alias for a list of creatable constraints which can be unique, primary key, or foreign key constraints.
+The check constraint patterns a caller may name. Mathesar recognizes a column's type by the
+constraint on it, so the expressions it writes are drawn from a fixed set rather than composed by
+the caller. The set itself lives in `msar.build_check_expression`, which also quotes the column
+names; this is the guard that keeps callers from reaching past it with SQL of their own.
+"""
+
+
+class CheckConstraint(TypedDict):
+    """
+    Information about a check constraint.
+
+    A check constraint is named, not written: the caller gives a pattern from `CHECK_PATTERNS` and
+    the column to apply it to, and the expression is composed in the database. Passing SQL directly
+    is not supported, so that this endpoint can't be used to run arbitrary statements.
+
+    Attributes:
+        type: The type of the constraint(`'c'` for check constraint).
+        pattern: The name of the check pattern to apply. One of `CHECK_PATTERNS`.
+        columns: List of columns to apply the pattern to.
+        name: The name of the constraint.
+        deferrable: Whether to postpone constraint checking until the end of the transaction.
+    """
+    type: str = 'c'
+    pattern: str
+    columns: list[int]
+    name: Optional[str]
+    deferrable: Optional[bool]
+
+
+CreatableConstraintInfo = list[
+    Union[ForeignKeyConstraint, PrimaryKeyConstraint, UniqueConstraint, CheckConstraint]
+]
+"""
+Type alias for a list of creatable constraints which can be unique, primary key, foreign key, or
+check constraints.
 """
 
 
@@ -92,6 +126,10 @@ class ConstraintInfo(TypedDict):
         columns: List of constrained columns.
         referent_table_oid: The OID of the referent table.
         referent_columns: List of referent column(s).
+        expression: The boolean expression of a check constraint, as PostgreSQL renders it back,
+                    and null for every other type of constraint.
+        validated: False for a constraint added with NOT VALID, whose pre-existing rows were
+                   never checked against it.
     """
     oid: int
     name: str
@@ -99,6 +137,8 @@ class ConstraintInfo(TypedDict):
     columns: list[int]
     referent_table_oid: Optional[int]
     referent_columns: Optional[list[int]]
+    expression: Optional[str]
+    validated: bool
 
     @classmethod
     def from_dict(cls, con_info):
@@ -108,7 +148,9 @@ class ConstraintInfo(TypedDict):
             type=con_info["type"],
             columns=con_info["columns"],
             referent_table_oid=con_info["referent_table_oid"],
-            referent_columns=con_info["referent_columns"]
+            referent_columns=con_info["referent_columns"],
+            expression=con_info["expression"],
+            validated=con_info["validated"]
         )
 
 
@@ -128,6 +170,31 @@ def list_(*, table_oid: int, database_id: int, **kwargs) -> list[ConstraintInfo]
     with connect(database_id, user) as conn:
         con_info = get_constraints_for_table(table_oid, conn)
         return [ConstraintInfo.from_dict(con) for con in con_info]
+
+
+def _checked_constraint_defs(constraint_def_list):
+    """
+    Return the given constraint definitions, having rejected any check constraint that doesn't name
+    a known pattern.
+
+    TypedDicts are annotations rather than runtime validation, so without this a caller could put an
+    `expression` key on a check constraint and have it interpolated into the `ALTER TABLE` statement
+    as SQL. Patterns are the only way in.
+    """
+    for con in constraint_def_list:
+        if con.get("type") != 'c':
+            continue
+        if "expression" in con:
+            raise ValueError(
+                "Check constraints are defined by pattern, not by expression. "
+                f"Use one of: {', '.join(sorted(CHECK_PATTERNS))}."
+            )
+        if con.get("pattern") not in CHECK_PATTERNS:
+            raise ValueError(
+                f"Unknown check constraint pattern: {con.get('pattern')!r}. "
+                f"Use one of: {', '.join(sorted(CHECK_PATTERNS))}."
+            )
+    return constraint_def_list
 
 
 @mathesar_rpc_method(name="constraints.add", auth="login")
@@ -150,7 +217,7 @@ def add(
     """
     user = kwargs.get(REQUEST_KEY).user
     with connect(database_id, user) as conn:
-        return create_constraint(table_oid, constraint_def_list, conn)
+        return create_constraint(table_oid, _checked_constraint_defs(constraint_def_list), conn)
 
 
 @mathesar_rpc_method(name="constraints.delete", auth="login")

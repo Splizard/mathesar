@@ -617,13 +617,22 @@ CREATE OR REPLACE FUNCTION msar.get_constraints_for_table(tab_id oid) RETURNS TA
   type text,
   columns smallint[],
   referent_table_oid oid,
-  referent_columns smallint[]
+  referent_columns smallint[],
+  expression text,
+  validated boolean
 )
 AS $$/*
 Return data describing the constraints set on a given table.
 
 Args:
   tab_id: The OID of the table.
+
+`expression` is the boolean expression of a CHECK constraint, as PostgreSQL renders it back to us,
+and is null for every other type. Note that the rendering normalizes whitespace, parentheses,
+identifier case and schema qualification, but preserves the order of an operator's operands and
+spells out casts, so two expressions that mean the same thing don't necessarily render alike.
+
+`validated` is false for a constraint added with NOT VALID, whose existing rows were never checked.
 */
 WITH constraints AS (
   SELECT
@@ -632,7 +641,9 @@ WITH constraints AS (
     msar.get_constraint_type_api_code(contype::char) AS type,
     conkey AS columns,
     confrelid AS referent_table_oid,
-    confkey AS referent_columns
+    confkey AS referent_columns,
+    CASE WHEN contype = 'c' THEN pg_catalog.pg_get_expr(conbin, conrelid) END AS expression,
+    convalidated AS validated
   FROM pg_catalog.pg_constraint
   WHERE conrelid = tab_id
 )
@@ -3079,11 +3090,57 @@ SELECT CASE
         ' ON DELETE ' || msar.get_fkey_action_from_char(con.fk_del_action),
         ' ON UPDATE ' || msar.get_fkey_action_from_char(con.fk_upd_action)
       )
+    WHEN con.type_ = 'c' THEN  -- It's a CHECK constraint
+      -- The expression is raw SQL, interpolated as given: there's no way to
+      -- parameterize an arbitrary boolean expression. See msar.add_constraints.
+      format(
+        '%sCHECK (%s)',
+        'CONSTRAINT ' || con.name_ || ' ',
+        con.expression
+      )
     ELSE
       NULL
   END
   || CASE WHEN con.deferrable_ THEN 'DEFERRABLE' ELSE '' END;
 $$ LANGUAGE SQL RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.build_check_expression(tab_id oid, pattern text, columns jsonb) RETURNS text AS $$/*
+Build the boolean expression of a CHECK constraint from a named pattern.
+
+Mathesar recognizes a column's type by the constraint on it, so the expressions it writes have to be
+drawn from a fixed set rather than composed by the caller: this function is that set. Callers name a
+pattern and the columns to apply it to, and never supply SQL. Keeping the registry here means the
+column names are quoted by msar.get_column_names, which also validates that they exist.
+
+The patterns:
+  'text_box': the value is trimmed of surrounding whitespace and holds no line break.
+
+Args:
+  tab_id: The OID of the table the constraint is for.
+  pattern: The name of the pattern to build.
+  columns: A JSONB array of the names or attnums of the columns to apply it to.
+*/
+DECLARE
+  col text;
+  expression text;
+BEGIN
+  col := (msar.get_column_names(tab_id, columns))[1];
+  IF col IS NULL THEN
+    RAISE EXCEPTION 'Check constraint pattern % needs a column', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  expression := CASE pattern
+    WHEN 'text_box' THEN format('%1$s = btrim(%1$s) AND %1$s !~ ''[\r\n]''', col)
+  END;
+  IF expression IS NULL THEN
+    RAISE EXCEPTION 'Unknown check constraint pattern: %', pattern
+      USING ERRCODE = 'invalid_parameter_value';
+  END IF;
+  RETURN expression;
+END;
+$$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION
@@ -3109,12 +3166,17 @@ The con_create_arr should have the form:
     "fkey_update_action": <str> (optional),
     "fkey_delete_action": <str> (optional),
     "fkey_match_type": <str> (optional),
+    "pattern": <str> (optional),
+    "expression": <str> (optional),
   },
   {
     ...
   }
 ]
 If the constraint type is "f", then we require fkey_relation_id.
+If the constraint type is "c", then we require either "pattern" (preferred: a named pattern from
+msar.build_check_expression, which composes the SQL itself) or "expression" (raw SQL, for internal
+callers that have already composed it).
 
 Numeric IDs are preferred over textual ones where both are accepted.
 */
@@ -3139,7 +3201,14 @@ SELECT array_agg(
     con_create_obj ->> 'fkey_update_action',
     con_create_obj ->> 'fkey_delete_action',
     con_create_obj ->> 'fkey_match_type',
-    null -- not yet implemented
+    -- The boolean expression for a CHECK constraint. Built from a named pattern where one is
+    -- given, so that callers above this layer need never compose SQL.
+    CASE
+      WHEN con_create_obj ? 'pattern' THEN msar.build_check_expression(
+        tab_id, con_create_obj ->> 'pattern', con_create_obj -> 'columns'
+      )
+      ELSE con_create_obj ->> 'expression'
+    END
   )::__msar.con_def
 ) FROM jsonb_array_elements(con_create_arr) AS x(con_create_obj);
 $$ LANGUAGE SQL;

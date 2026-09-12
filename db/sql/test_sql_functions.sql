@@ -1105,6 +1105,154 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION __setup_add_check() RETURNS SETOF TEXT AS $$
+BEGIN
+  CREATE TABLE add_check_con (id serial primary key, col1 text, col2 text[]);
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_add_constraints_check_single() RETURNS SETOF TEXT AS $f$
+DECLARE
+  con_create_arr jsonb := $j$[
+    {"name": "mycheckcons", "type": "c", "expression": "col1 = btrim(col1)"}
+  ]$j$;
+BEGIN
+  PERFORM __setup_add_check();
+  PERFORM msar.add_constraints('add_check_con'::regclass::oid, con_create_arr);
+  RETURN NEXT is(
+    (SELECT type FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE name = 'mycheckcons'),
+    'check'
+  );
+  -- The constraint has to actually bite.
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO add_check_con (col1) VALUES ('  untrimmed  ')$i$,
+    '23514'
+  );
+  RETURN NEXT lives_ok($i$INSERT INTO add_check_con (col1) VALUES ('trimmed')$i$);
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_add_constraints_check_expression_returned() RETURNS SETOF TEXT AS $f$
+DECLARE
+  con_create_arr jsonb := $j$[
+    {"name": "mycheckcons", "type": "c", "expression": "col1 <> ''"}
+  ]$j$;
+BEGIN
+  PERFORM __setup_add_check();
+  PERFORM msar.add_constraints('add_check_con'::regclass::oid, con_create_arr);
+  -- PostgreSQL renders the expression back to us, spelling out the cast of the literal.
+  RETURN NEXT is(
+    (SELECT expression FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE name = 'mycheckcons'),
+    $e$(col1 <> ''::text)$e$
+  );
+  -- Every other type of constraint reports a null expression.
+  RETURN NEXT is(
+    (SELECT expression FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE type = 'primary'),
+    NULL
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_add_constraints_check_array_elements() RETURNS SETOF TEXT AS $f$
+DECLARE
+  -- A CHECK can hold neither a subquery nor a set-returning function, so per-element validation
+  -- goes through array_to_string. It relies on the element pattern excluding the separator.
+  con_create_arr jsonb := $j$[
+    {"name": "mycheckcons", "type": "c",
+     "expression": "array_to_string(col2, chr(10)) ~ '^([^@\n]+@[^@\n]+(\n[^@\n]+@[^@\n]+)*)?$'"}
+  ]$j$;
+BEGIN
+  PERFORM __setup_add_check();
+  PERFORM msar.add_constraints('add_check_con'::regclass::oid, con_create_arr);
+  RETURN NEXT lives_ok(
+    $i$INSERT INTO add_check_con (col2) VALUES (ARRAY['a@b.com', 'c@d.org'])$i$
+  );
+  RETURN NEXT throws_ok(
+    $i$INSERT INTO add_check_con (col2) VALUES (ARRAY['a@b.com', 'nope'])$i$,
+    '23514'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_add_constraints_check_reports_validated() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_add_check();
+  INSERT INTO add_check_con (col1) VALUES ('  untrimmed  ');
+  -- Added NOT VALID directly: msar.add_constraints has no way to express it, but the listing
+  -- still has to report that the existing rows went unchecked.
+  ALTER TABLE add_check_con ADD CONSTRAINT notvalidcons CHECK (col1 = btrim(col1)) NOT VALID;
+  RETURN NEXT is(
+    (SELECT validated FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE name = 'notvalidcons'),
+    false
+  );
+  RETURN NEXT is(
+    (SELECT validated FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE type = 'primary'),
+    true
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_add_constraints_check_by_pattern() RETURNS SETOF TEXT AS $f$
+DECLARE
+  con_create_arr jsonb := $j$[
+    {"name": "mycheckcons", "type": "c", "pattern": "text_box", "columns": [2]}
+  ]$j$;
+BEGIN
+  PERFORM __setup_add_check();
+  PERFORM msar.add_constraints('add_check_con'::regclass::oid, con_create_arr);
+  RETURN NEXT is(
+    (SELECT expression FROM msar.get_constraints_for_table('add_check_con'::regclass::oid)
+     WHERE name = 'mycheckcons'),
+    $e$((col1 = btrim(col1)) AND (col1 !~ '[\r\n]'::text))$e$
+  );
+  RETURN NEXT throws_ok($i$INSERT INTO add_check_con (col1) VALUES ('  untrimmed  ')$i$, '23514');
+  RETURN NEXT throws_ok($i$INSERT INTO add_check_con (col1) VALUES ('two' || chr(10) || 'lines')$i$, '23514');
+  RETURN NEXT lives_ok($i$INSERT INTO add_check_con (col1) VALUES ('just right')$i$);
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_build_check_expression_quotes_columns() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE "needs quoting" ("a wEird ""name" text);
+  -- The column name reaches the expression quoted, so it survives being odd.
+  RETURN NEXT is(
+    msar.build_check_expression('"needs quoting"'::regclass::oid, 'text_box', '[1]'::jsonb),
+    $e$"a wEird ""name" = btrim("a wEird ""name") AND "a wEird ""name" !~ '[\r\n]'$e$
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_build_check_expression_rejects_unknown() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_add_check();
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.build_check_expression('add_check_con'::regclass::oid, 'nonsense', '[2]'::jsonb)$i$,
+    '22023'
+  );
+  -- An unknown pattern must not fall through to creating anything.
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.add_constraints(
+      'add_check_con'::regclass::oid,
+      $j$[{"type": "c", "pattern": "nonsense", "columns": [2]}]$j$
+    )$i$,
+    '22023'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_add_constraint_duplicate_name() RETURNS SETOF TEXT AS $f$
 DECLARE
   con_create_arr jsonb := '[{"name": "myuniqcons", "type": "u", "columns": [2]}]';

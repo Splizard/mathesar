@@ -5,6 +5,11 @@ interface BaseConstraint {
   name: string;
   /** Each number is a column attnum */
   columns: number[];
+  /**
+   * False for a constraint added with NOT VALID, whose pre-existing rows were
+   * never checked against it.
+   */
+  validated: boolean;
 }
 
 export interface PkConstraint extends BaseConstraint {
@@ -25,6 +30,14 @@ export interface FkConstraint extends BaseConstraint {
 
 export interface CheckConstraint extends BaseConstraint {
   type: 'check';
+  /**
+   * The boolean expression the constraint checks, as PostgreSQL renders it back
+   * to us. The rendering normalizes whitespace, parentheses, identifier case and
+   * schema qualification, but preserves the order of an operator's operands and
+   * spells out casts, so two expressions meaning the same thing don't
+   * necessarily render alike.
+   */
+  expression: string;
 }
 
 export interface ExcludeConstraint extends BaseConstraint {
@@ -55,7 +68,25 @@ export interface FkConstraintRecipe {
   fkey_columns: number[];
 }
 
-export type ConstraintRecipe = UniqueConstraintRecipe | FkConstraintRecipe;
+/**
+ * The check patterns the API accepts. Mathesar recognizes a column's type by the
+ * constraint on it, so the expression is composed in the database from one of a
+ * fixed set of patterns rather than written by the caller.
+ */
+export type CheckPattern = 'text_box';
+
+export interface CheckConstraintRecipe {
+  type: 'c';
+  name?: string | null;
+  pattern: CheckPattern;
+  /** Values are column attnums */
+  columns: number[];
+}
+
+export type ConstraintRecipe =
+  | UniqueConstraintRecipe
+  | FkConstraintRecipe
+  | CheckConstraintRecipe;
 
 export const constraints = {
   list: rpcMethodTypeContainer<
