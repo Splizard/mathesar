@@ -326,13 +326,18 @@
     position: relative;
     height: 100%;
     display: grid;
-    grid-template: 1fr auto / 1fr;
+    /* minmax(0, ...) rather than 1fr: a column of records holds lines that are not allowed to
+    wrap, so a long one asks for a track as wide as the sentence and the whole page follows it
+    off the side of the screen. The table is as wide as the room there is, and what will not fit
+    is cut short inside it. */
+    grid-template: 1fr auto / minmax(0, 1fr);
     gap: var(--sm3);
     overflow: hidden;
   }
   .sheet-area {
     position: relative;
     height: 100%;
+    min-width: 0;
     overflow-x: auto;
   }
   .loading-sheet {

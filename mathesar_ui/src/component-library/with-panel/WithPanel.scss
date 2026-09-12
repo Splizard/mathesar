@@ -40,6 +40,9 @@
 
   > .main {
     grid-area: main;
+    /* So that what is in it is cut short rather than made to fit: without this the track is at
+    least as wide as the widest thing that will not wrap, and the panel goes off the screen. */
+    min-width: 0;
   }
   > .panel {
     grid-area: panel;
