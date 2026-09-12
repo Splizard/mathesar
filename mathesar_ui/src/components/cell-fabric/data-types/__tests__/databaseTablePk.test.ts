@@ -55,7 +55,7 @@ const doesNot = column('bigint');
 
 function cap(col: RawColumnWithMetadata) {
   return getCellCap({
-    cellInfo: getCellInfo(col.type, col.metadata ?? null),
+    cellInfo: getCellInfo(col.type, col.metadata ?? null) ?? { type: 'string' },
     column: col,
     pkTargetTableId: 42,
   });
