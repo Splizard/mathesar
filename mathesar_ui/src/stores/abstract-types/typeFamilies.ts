@@ -20,6 +20,7 @@ import type { IconProps } from '@mathesar-component-library/types';
 
 import {
   abstractTypeToColumnSaveSpec,
+  defaultAbstractType,
   getAbstractTypeForDbType,
   getDbTypesForAbstractType,
   getDefaultDbType,
@@ -273,6 +274,14 @@ export interface TypeChoice {
   dbType: DbType;
   /** The type of the items of an array */
   itemType?: DbType;
+}
+
+/** The type a new column is of until something says otherwise */
+export function getDefaultTypeChoice(): TypeChoice {
+  return {
+    abstractType: defaultAbstractType,
+    dbType: getDefaultDbType(defaultAbstractType) ?? DB_TYPES.TEXT,
+  };
 }
 
 export interface Modifiers {

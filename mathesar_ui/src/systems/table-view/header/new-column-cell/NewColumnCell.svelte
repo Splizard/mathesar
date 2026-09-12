@@ -10,11 +10,10 @@
   import { iconAddNew } from '@mathesar/icons';
   import {
     type TypeChoice,
-    defaultAbstractType,
     getColumnSaveSpec,
-    getDefaultDbType,
+    getDefaultTypeChoice,
+    guessTypeFromColumnName,
   } from '@mathesar/stores/abstract-types';
-  import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { columnNameIsAvailable } from '@mathesar/utils/columnUtils';
   import {
@@ -32,11 +31,25 @@
 
   $: columnName = requiredField('', [columnNameIsAvailable($columns)]);
 
-  const columnType = requiredField<TypeChoice>({
-    abstractType: defaultAbstractType,
-    dbType: getDefaultDbType(defaultAbstractType) ?? DB_TYPES.TEXT,
-  });
+  const defaultType = getDefaultTypeChoice();
+  const columnType = requiredField<TypeChoice>(defaultType);
   $: form = makeForm({ columnName, columnType });
+
+  /**
+   * Until the type has been chosen here, the name is the only thing to go on,
+   * and a name like "price" or "created_at" says plainly enough what the column
+   * is for. Once somebody has chosen a type themselves it is not ours to move,
+   * even if they go back and change the name.
+   */
+  let hasChosenType = false;
+  $: if (!hasChosenType) {
+    columnType.set(guessTypeFromColumnName($columnName) ?? defaultType);
+  }
+
+  function reset() {
+    hasChosenType = false;
+    form.reset();
+  }
   $: ({ isSubmitting } = form);
 
   async function addColumn(closeDropdown: () => void) {
@@ -59,7 +72,7 @@
   triggerAppearance="plain"
   showArrow={false}
   ariaLabel={$_('new_column')}
-  on:close={form.reset}
+  on:close={reset}
   disabled={$isSubmitting}
 >
   <svelte:fragment slot="trigger">
@@ -73,7 +86,10 @@
     <Field field={columnName} label={$_('column_name')} layout="stacked" />
     <Field
       field={columnType}
-      input={{ component: ColumnTypeSelector }}
+      input={{
+        component: ColumnTypeSelector,
+        props: { onUserChoice: () => { hasChosenType = true; } },
+      }}
       label={$_('select_type')}
       layout="stacked"
     />

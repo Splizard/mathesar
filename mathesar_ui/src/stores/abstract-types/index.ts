@@ -15,6 +15,10 @@ export {
   recordTimestampColumnNames,
 } from './abstractTypeCategories';
 export {
+  getColumnNameWords,
+  guessTypeFromColumnName,
+} from './typeFromName';
+export {
   filterDefinitionMap,
   getEqualityFiltersForAbstractType,
   getFiltersForAbstractType,
@@ -30,6 +34,7 @@ export {
   type TypeFamily,
   chooseKind,
   getColumnSaveSpec,
+  getDefaultTypeChoice,
   getKindOf,
   getTypeFamily,
   groupByFamily,

@@ -11,6 +11,7 @@
     type TypeChoice,
     chooseKind,
     getAllowedAbstractTypesForNewColumn,
+    getDefaultTypeChoice,
     getKindOf,
     groupByFamily,
     isAbstractTypeDisabled,
@@ -18,8 +19,13 @@
   } from '@mathesar/stores/abstract-types';
   import { Select, SelectionList } from '@mathesar-component-library';
 
-  export let value: TypeChoice;
+  export let value: TypeChoice = getDefaultTypeChoice();
   export let disabled = false;
+  /**
+   * Called when the type is chosen here rather than set from outside, so that
+   * whoever is guessing at it can stop.
+   */
+  export let onUserChoice: (() => void) | undefined = undefined;
 
   // Families are offered, then the kinds of the chosen one, which can hold
   // ranges or arrays of their values
@@ -35,6 +41,7 @@
   function selectKind(option: KindOption | undefined) {
     if (!option) return;
     value = chooseKind(option, { modifiers: selected }) ?? value;
+    onUserChoice?.();
   }
 
   function selectFamily(option: FamilyOption | undefined) {
@@ -99,6 +106,7 @@
     {disabled}
     on:change={(e) => {
       value = withModifiers(value, e.detail) ?? value;
+      onUserChoice?.();
     }}
   />
 </div>
