@@ -73,6 +73,7 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.CHARACTER,
     DB_TYPES.DATE,
     DB_TYPES.DOUBLE_PRECISION,
+    DB_TYPES.ENUM,
     DB_TYPES.INTEGER,
     DB_TYPES.INTERVAL,
     DB_TYPES.JSON,
@@ -101,6 +102,7 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.CHARACTER,
     DB_TYPES.DATE,
     DB_TYPES.DOUBLE_PRECISION,
+    DB_TYPES.ENUM,
     DB_TYPES.INTEGER,
     DB_TYPES.INTERVAL,
     DB_TYPES.JSON,
@@ -156,6 +158,16 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.NUMERIC,
     DB_TYPES.REAL,
     DB_TYPES.SMALLINT,
+    DB_TYPES.TEXT,
+  ],
+
+  // A choice of values is text with only some values allowed, so it is read back as text and
+  // written from it. Which values a column may hold is the choice's business, and Postgres says so
+  // when a column holds one the choice doesn't offer.
+  [DB_TYPES.ENUM]: [
+    DB_TYPES.CHARACTER_VARYING,
+    DB_TYPES.CHARACTER,
+    DB_TYPES.ENUM,
     DB_TYPES.TEXT,
   ],
 
@@ -387,6 +399,7 @@ export const typeCastMap: Record<DbType, DbType[]> = addRangeCasts({
     DB_TYPES.CHARACTER,
     DB_TYPES.DATE,
     DB_TYPES.DOUBLE_PRECISION,
+    DB_TYPES.ENUM,
     DB_TYPES.INTEGER,
     DB_TYPES.INTERVAL,
     DB_TYPES.JSON,

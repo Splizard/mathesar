@@ -5,6 +5,7 @@ import {
   type RequiredColumnMetadata,
   getMetadataValue,
 } from './_common/columnDisplayOptions';
+import type { EnumValue } from './types';
 
 /**
  * See the [Postgres docs][1] for an explanation of `scale` and `precision`.
@@ -36,8 +37,14 @@ export interface ColumnTypeOptions {
   /** The actual PostgreSQL type name for enum and composite types. */
   original_type?: string | null;
 
-  /** An ordered list of valid enum labels. */
-  enum_values?: string[] | null;
+  /**
+   * An ordered list of the values an enum offers.
+   *
+   * Read back as the values themselves. Written as those, or as objects saying
+   * which of the enum's values each one was, which is how a value being renamed
+   * is told apart from one being dropped and another added.
+   */
+  enum_values?: (string | EnumValue)[] | null;
 
   /** The fields of a composite type, in order. */
   composite_fields?: { name: string; type: string }[] | null;

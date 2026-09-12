@@ -1661,6 +1661,9 @@ Each is described by a JSON object of the form:
     "kind": "enum" | "composite" | "domain",
     "description": <str or null>,
     "values": [<str>, ...],  -- enums: their labels, in order
+    "used_by": [  -- the columns holding its values, or arrays of them
+      {"table": <int>, "table_name": <str>, "attnum": <int>, "column_name": <str>}, ...
+    ],
     "fields": [{"name": <str>, "type": <str>}, ...],  -- composite types: their fields, in order
     "base_type": <str>,  -- domains: the type they're ultimately defined over, with its modifiers
     "over": <str>,  -- domains: the type they're directly defined over (maybe another domain)
@@ -1683,6 +1686,19 @@ FROM (
     'values', CASE WHEN t.typtype = 'e' THEN (
       SELECT jsonb_agg(enumlabel ORDER BY enumsortorder) FROM pg_catalog.pg_enum WHERE enumtypid = t.oid
     ) END,
+    'used_by', (
+      SELECT coalesce(jsonb_agg(
+        jsonb_build_object(
+          'table', att.attrelid::bigint,
+          'table_name', cls.relname,
+          'attnum', att.attnum,
+          'column_name', att.attname
+        ) ORDER BY cls.relname, att.attnum
+      ), '[]'::jsonb)
+      FROM pg_catalog.pg_attribute AS att JOIN pg_catalog.pg_class AS cls ON cls.oid = att.attrelid
+      WHERE att.atttypid IN (t.oid, t.typarray) AND att.attnum > 0 AND NOT att.attisdropped
+        AND cls.relkind = ANY('{r,p,f}')
+    ),
     'fields', CASE WHEN t.typtype = 'c' THEN (
       SELECT coalesce(jsonb_agg(
         jsonb_build_object('name', attname, 'type', format_type(atttypid, atttypmod)) ORDER BY attnum
@@ -4347,13 +4363,19 @@ Build an expression for casting a column in Mathesar, returning the text of that
 A value is cast to a domain (other than Mathesar's own) by casting it to the type the domain is
 defined over, and then to the domain, which checks the domain's constraints.
 
+A value is cast to an enum by way of its text, which is all an enum's values are. Whether the text
+is one of them is Postgres's to say, and it says so in a message naming the value and the type.
+
 Args:
   val: This is quite general, and isn't sanitized in any way. It can be either a literal or a column
        identifier, since we want to be able to produce a casting expression in either case.
   type_: This type name string must cast properly to a regtype.
   cast_options: Suggestions to be used while type casting.
 */
-SELECT CASE WHEN base.typ <> type_::regtype THEN
+SELECT CASE
+WHEN (SELECT typtype = 'e' FROM pg_catalog.pg_type WHERE oid = type_::regtype) THEN
+  format('(%s)::text::%s', val, type_::regtype)
+WHEN base.typ <> type_::regtype THEN
   format('(%s)::%s', msar.build_cast_expr(val, base.typ::text, cast_options), type_::regtype)
 ELSE
 msar.get_cast_function_name(type_::regtype) || '(' ||
@@ -4625,6 +4647,7 @@ DECLARE
   col RECORD;
   return_attnum_arr integer[];
   is_default_dynamic boolean;
+  new_type text;
 BEGIN
   FOR col IN
     SELECT
@@ -4632,7 +4655,8 @@ BEGIN
       (col_alter_obj -> 'not_null')::boolean AS not_null,
       (col_alter_obj ->> 'name')::text AS new_name,
       (col_alter_obj -> 'delete')::boolean AS delete_,
-      msar.build_type_text_complete(col_alter_obj -> 'type', format_type(pga.atttypid, null)) AS new_type,
+      col_alter_obj -> 'type' AS type_def,
+      format_type(pga.atttypid, null) AS old_type,
       COALESCE((col_alter_obj -> 'cast_options')::jsonb, '{}'::jsonb) AS cast_options,
       pg_catalog.pg_get_expr(adbin, tab_id) AS old_default,
       col_alter_obj -> 'default' AS new_default,
@@ -4661,10 +4685,23 @@ BEGIN
     -- is_default_possibly_dynamic check must happen before we drop the default.
     is_default_dynamic := msar.is_default_possibly_dynamic(tab_id, col.attnum);
 
-    IF col.new_type IS NOT NULL OR jsonb_typeof(col.new_default)='null' THEN
+    IF col.type_def ->> 'name' = '_enum' THEN
+      -- '_enum' is how an enum is named on the way out, in msar.get_column_info, where the name of
+      -- the type itself is of no interest to somebody choosing between a choice of values and a
+      -- date. On the way in it means the same thing: the values are what was asked for, and the
+      -- column gets them under a type of its own. A column that already has one keeps it, so its
+      -- type doesn't change and there is nothing here to retype.
+      new_type := msar.set_column_enum(
+        tab_id, col.attnum, col.type_def -> 'options' -> 'enum_values'
+      );
+    ELSE
+      new_type := msar.build_type_text_complete(col.type_def, col.old_type);
+    END IF;
+
+    IF new_type IS NOT NULL OR jsonb_typeof(col.new_default)='null' THEN
       PERFORM msar.drop_col_default(tab_id, col.attnum);
     END IF;
-    PERFORM msar.retype_column(tab_id, col.attnum, col.new_type, col.cast_options);
+    PERFORM msar.retype_column(tab_id, col.attnum, new_type, col.cast_options);
     IF col.new_default #>> '{}' IS NOT NULL THEN
       -- set new default
       IF col.new_default_is_dynamic THEN
@@ -4672,12 +4709,12 @@ BEGIN
       ELSE
         PERFORM msar.set_col_default(tab_id, col.attnum, col.new_default #>> '{}');
       END IF;
-    ELSEIF (col.new_default IS NULL OR jsonb_typeof(col.new_default)<>'null') AND col.new_type IS NOT NULL THEN
+    ELSEIF (col.new_default IS NULL OR jsonb_typeof(col.new_default)<>'null') AND new_type IS NOT NULL THEN
       -- preserve old default
       -- when a new_default is absent and col is retyped with a new_type.
       -- Note: We don't want to preserve old default for jsonb_typeof(col.new_default)='null'
       -- as we consider it as an intent to drop the default.
-      PERFORM msar.set_old_col_default(tab_id, col.attnum, col.old_default, col.new_type, is_default_dynamic, col.cast_options);
+      PERFORM msar.set_old_col_default(tab_id, col.attnum, col.old_default, new_type, is_default_dynamic, col.cast_options);
     END IF;
     IF col.updated_at_trigger IS NOT NULL THEN
       PERFORM msar.set_updated_at_column(tab_id, col.attnum, col.updated_at_trigger);

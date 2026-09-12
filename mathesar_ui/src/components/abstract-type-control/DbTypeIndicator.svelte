@@ -19,6 +19,10 @@
     <span>{itemType}[]</span>
   {:else if (type === DB_TYPES.ENUM || type === DB_TYPES.COMPOSITE) && originalType}
     <span>{originalType}</span>
+  {:else if type === DB_TYPES.ENUM}
+    <!-- A choice being made for a column that hasn't got one. The type is made
+    along with it, so there is no name to show yet. -->
+    {$_('choice_of_its_own')}
   {:else if domain}
     <span>{domain}</span>
     ({$_('domain_of')} <span>{type}</span>)

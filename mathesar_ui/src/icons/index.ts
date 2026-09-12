@@ -1,8 +1,10 @@
 import {
   faAlignLeft,
+  faArrowDown,
   faArrowLeft,
   faArrowRight,
   faArrowRightFromBracket,
+  faArrowUp,
   faArrowsLeftRight,
   faBackspace,
   faBook,
@@ -169,6 +171,11 @@ export const iconCopyFormattedContent: IconProps = { data: faCopy };
 export const iconCreateDatabase = { data: createDatabaseIcon };
 /** When you're deleting something significant or difficult to recover */
 export const iconDeleteMajor: IconProps = { data: faTrashAlt };
+
+/** Move something one place earlier in a list somebody is putting in order */
+export const iconMoveUp: IconProps = { data: faArrowUp };
+/** Move something one place later in such a list */
+export const iconMoveDown: IconProps = { data: faArrowDown };
 /** When you're deleting something smaller or more ephemeral */
 export const iconDeleteMinor: IconProps = { data: faTimes };
 export const iconEdit: IconProps = { data: faPencilAlt };

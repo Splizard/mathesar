@@ -16,6 +16,14 @@ export interface RawSchema {
   current_role_owns: boolean;
 }
 
+/** A column holding values of a type */
+export interface RawSchemaTypeUser {
+  table: number;
+  table_name: string;
+  attnum: number;
+  column_name: string;
+}
+
 /** A type defined in a schema: an enum, a composite type, or a domain */
 export interface RawSchemaType {
   oid: number;
@@ -24,6 +32,8 @@ export interface RawSchemaType {
   description: string | null;
   /** Enums: their labels, in order */
   values?: string[];
+  /** The columns holding the type's values, or arrays of them */
+  used_by: RawSchemaTypeUser[];
   /** Composite types: their fields, in order */
   fields?: { name: string; type: string }[];
   /** Domains: the type they're ultimately defined over */

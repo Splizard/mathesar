@@ -9389,7 +9389,9 @@ BEGIN
   COMMENT ON DOMAIN onto.phone IS 'A phone number';
   CREATE TABLE onto.not_a_type (id integer);
   RETURN NEXT is(
-    (SELECT jsonb_agg(t - 'oid') FROM jsonb_array_elements(msar.list_schema_types('onto')) AS t),
+    -- Who holds the values is test_schema_types_say_who_uses_them's business, not this one's.
+    (SELECT jsonb_agg(t - 'oid' - 'used_by')
+     FROM jsonb_array_elements(msar.list_schema_types('onto')) AS t),
     $j$[
       {"name": "address", "kind": "composite", "description": null,
        "fields": [{"name": "street", "type": "text"}, {"name": "city", "type": "text"}]},
@@ -10271,6 +10273,401 @@ BEGIN
      WHERE "table" = 'filt_invoices'::regclass),
     0,
     'with the row going once there is nothing left on it to say'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_enum_editing() RETURNS SETOF TEXT AS $$
+BEGIN
+  CREATE TYPE mood AS ENUM ('happy', 'cross', 'sad');
+  COMMENT ON TYPE mood IS 'How it went';
+  CREATE TABLE enum_days (
+    id integer PRIMARY KEY,
+    felt mood DEFAULT 'happy',
+    felt_all mood[]
+  );
+  INSERT INTO enum_days VALUES
+    (1, 'happy', '{happy,sad}'),
+    (2, 'cross', NULL),
+    (3, NULL, '{}');
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_values_added_and_renamed_in_place() RETURNS SETOF TEXT AS $f$
+DECLARE
+  old_id oid;
+  new_id oid;
+BEGIN
+  PERFORM __setup_enum_editing();
+  old_id := 'mood'::regtype::oid;
+  new_id := msar.set_enum_values(old_id, $j$[
+    {"value": "glad", "was": "happy"},
+    {"value": "fine"},
+    {"value": "cross", "was": "cross"},
+    {"value": "sad", "was": "sad"}
+  ]$j$::jsonb);
+  RETURN NEXT is(new_id, old_id, 'the type is the one it was: nothing had to be rewritten');
+  RETURN NEXT is(
+    msar.enum_labels(new_id),
+    '{glad,fine,cross,sad}'::text[],
+    'a value can be added where it is wanted, and one renamed'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_days),
+    '{glad,cross,NULL}'::text[],
+    'the records say what they said, under the name it now has'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt_all::text ORDER BY id) FROM enum_days WHERE felt_all IS NOT NULL),
+    '{"{glad,sad}","{}"}'::text[],
+    'and so do the arrays of them'
+  );
+  RETURN NEXT is(
+    (SELECT pg_get_expr(adbin, adrelid) FROM pg_attrdef
+     WHERE adrelid = 'enum_days'::regclass AND adnum = 2),
+    '''glad''::mood',
+    'the default follows the renaming too, being the value rather than its name'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_values_swapped_round() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  PERFORM msar.set_enum_values('mood'::regtype::oid, $j$[
+    {"value": "cross", "was": "happy"},
+    {"value": "happy", "was": "cross"},
+    {"value": "sad", "was": "sad"}
+  ]$j$::jsonb);
+  RETURN NEXT is(
+    msar.enum_labels('mood'::regtype::oid),
+    '{cross,happy,sad}'::text[],
+    'two values can hand their names to each other'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_days),
+    '{cross,happy,NULL}'::text[],
+    'and each record keeps the value it had, under its new name'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_values_reordered() RETURNS SETOF TEXT AS $f$
+DECLARE
+  old_id oid;
+  new_id oid;
+BEGIN
+  PERFORM __setup_enum_editing();
+  old_id := 'mood'::regtype::oid;
+  new_id := msar.set_enum_values(old_id, $j$[
+    {"value": "sad", "was": "sad"},
+    {"value": "cross", "was": "cross"},
+    {"value": "glad", "was": "happy"}
+  ]$j$::jsonb);
+  RETURN NEXT isnt(new_id, old_id, 'the order is written into the records, so the type is rebuilt');
+  RETURN NEXT is(
+    msar.enum_labels(new_id),
+    '{sad,cross,glad}'::text[],
+    'which puts the values in the order asked for'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_days),
+    '{glad,cross,NULL}'::text[],
+    'every record comes across, renamed where it was renamed'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt_all::text ORDER BY id) FROM enum_days),
+    '{"{glad,sad}",NULL,"{}"}'::text[],
+    'and so does every array, empty and absent being different things'
+  );
+  RETURN NEXT is(
+    (SELECT pg_get_expr(adbin, adrelid) FROM pg_attrdef
+     WHERE adrelid = 'enum_days'::regclass AND adnum = 2),
+    '''glad''::mood',
+    'the default is put back on'
+  );
+  RETURN NEXT is(
+    obj_description(new_id, 'pg_type'),
+    'How it went',
+    'and the type keeps its description'
+  );
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_type WHERE typname LIKE 'mood%'),
+    1,
+    'with nothing of the rebuilding left behind'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_value_nobody_uses_is_dropped() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  -- A value no record holds, which is what makes it one that can be dropped.
+  ALTER TYPE mood ADD VALUE 'numb';
+  PERFORM msar.set_enum_values('mood'::regtype::oid, $j$[
+    {"value": "happy", "was": "happy"},
+    {"value": "cross", "was": "cross"},
+    {"value": "sad", "was": "sad"}
+  ]$j$::jsonb);
+  RETURN NEXT is(
+    msar.enum_labels('mood'::regtype::oid),
+    '{happy,cross,sad}'::text[],
+    'a value no record holds can go'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_days),
+    '{happy,cross,NULL}'::text[],
+    'leaving the records as they were'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt_all::text ORDER BY id) FROM enum_days),
+    '{"{happy,sad}",NULL,"{}"}'::text[],
+    'and the arrays of them as they were'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_value_in_use_is_not_dropped() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "cross", "was": "cross"}, {"value": "sad", "was": "sad"}]'::jsonb)$q$,
+    '%''happy'' cannot be dropped while the column ''felt'' of public.enum_days holds it%',
+    'a value a record holds says which record would lose it'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "happy", "was": "happy"}, {"value": "sad", "was": "sad"}]'::jsonb)$q$,
+    '%''cross'' cannot be dropped while the column ''felt'' of public.enum_days holds it%',
+    'and so does one held only by a record of an array of them'
+  );
+  RETURN NEXT lives_ok(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "happy", "was": "happy"}, {"value": "cross", "was": "cross"},
+        {"value": "downcast", "was": "sad"}]'::jsonb)$q$,
+    'while renaming it is not dropping it, whoever holds it'
+  );
+  RETURN NEXT is(
+    msar.enum_labels('mood'::regtype::oid),
+    '{happy,cross,downcast}'::text[],
+    'and the choice still offers all three'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_values_are_checked() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid, '[]'::jsonb)$q$,
+    '%at least one value%',
+    'a choice of nothing is no choice'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid, '["happy", "happy"]'::jsonb)$q$,
+    '%''happy'' is offered twice%',
+    'the same value cannot be offered twice'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid, '[{"value": ""}]'::jsonb)$q$,
+    '%cannot be empty%',
+    'nor can a value be nothing at all'
+  );
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "glad", "was": "elated"}]'::jsonb)$q$,
+    '%''elated'' is not one of the choice%',
+    'and a value can only be renamed from one the choice has'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_type_created_and_dropped() RETURNS SETOF TEXT AS $f$
+DECLARE
+  typ_id oid;
+BEGIN
+  typ_id := msar.create_enum_type(
+    'public'::regnamespace, 'size', '["small", "large"]'::jsonb, 'How big'
+  );
+  RETURN NEXT is(msar.enum_labels(typ_id), '{small,large}'::text[], 'the values are as given');
+  RETURN NEXT is(obj_description(typ_id, 'pg_type'), 'How big', 'and so is the description');
+  RETURN NEXT is(
+    msar.alter_enum_type(typ_id, '{"name": "bigness", "description": null}'::jsonb),
+    typ_id,
+    'a rename leaves the type where it is'
+  );
+  RETURN NEXT is(typ_id::regtype::text, 'bigness', 'under its new name');
+  RETURN NEXT is(obj_description(typ_id, 'pg_type'), NULL, 'with its description taken off');
+  RETURN NEXT is(msar.drop_type(typ_id), 'bigness', 'and it can be dropped by name');
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_type WHERE typname = 'bigness'),
+    0,
+    'which leaves nothing of it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_enum_rewrite_blocked_by_a_dependent() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  CREATE DOMAIN strong_feeling AS mood CHECK (VALUE <> 'cross');
+  RETURN NEXT throws_like(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "sad", "was": "sad"}, {"value": "cross", "was": "cross"},
+        {"value": "happy", "was": "happy"}]'::jsonb)$q$,
+    '%type strong_feeling%',
+    'something we cannot take apart and put back together is named rather than broken'
+  );
+  RETURN NEXT lives_ok(
+    $q$SELECT msar.set_enum_values('mood'::regtype::oid,
+      '[{"value": "happy", "was": "happy"}, {"value": "cross", "was": "cross"},
+        {"value": "sad", "was": "sad"}, {"value": "fine"}]'::jsonb)$q$,
+    'while adding a value, which rewrites nothing, is no trouble to it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_given_a_choice_of_its_own() RETURNS SETOF TEXT AS $f$
+DECLARE
+  col_info jsonb;
+BEGIN
+  CREATE TABLE enum_tickets (id integer PRIMARY KEY, status text DEFAULT 'open');
+  INSERT INTO enum_tickets VALUES (1, 'open'), (2, 'shut');
+  PERFORM msar.alter_columns('enum_tickets'::regclass::oid, $j$[
+    {"attnum": 2, "type": {"name": "_enum", "options": {"enum_values": ["open", "shut", "held"]}}}
+  ]$j$::jsonb);
+  col_info := msar.get_column_info('enum_tickets'::regclass) -> 1;
+  RETURN NEXT is(col_info ->> 'type', '_enum', 'the column holds a choice of values');
+  RETURN NEXT is(
+    col_info -> 'type_options' ->> 'original_type',
+    'enum_tickets_status',
+    'under a type named for the table and the column, nobody having had to name it'
+  );
+  RETURN NEXT is(
+    col_info -> 'type_options' -> 'enum_values',
+    '["open", "shut", "held"]'::jsonb,
+    'offering what was asked for'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(status::text ORDER BY id) FROM enum_tickets),
+    '{open,shut}'::text[],
+    'with every record holding the value it held'
+  );
+  RETURN NEXT is(
+    col_info -> 'default' ->> 'value', 'open', 'and the default still standing'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_changes_the_choice_it_owns() RETURNS SETOF TEXT AS $f$
+BEGIN
+  CREATE TABLE enum_tickets (id integer PRIMARY KEY, status text);
+  INSERT INTO enum_tickets VALUES (1, 'open'), (2, 'shut');
+  PERFORM msar.alter_columns('enum_tickets'::regclass::oid, $j$[
+    {"attnum": 2, "type": {"name": "_enum", "options": {"enum_values": ["open", "shut"]}}}
+  ]$j$::jsonb);
+  PERFORM msar.alter_columns('enum_tickets'::regclass::oid, $j$[
+    {"attnum": 2, "type": {"name": "_enum", "options": {"enum_values": [
+      {"value": "open", "was": "open"}, {"value": "closed", "was": "shut"}, {"value": "held"}
+    ]}}}
+  ]$j$::jsonb);
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM pg_type
+     WHERE typnamespace = 'public'::regnamespace AND typtype = 'e'),
+    1,
+    'a column that has a choice of its own changes it rather than getting another'
+  );
+  RETURN NEXT is(
+    msar.enum_labels('enum_tickets_status'::regtype::oid),
+    '{open,closed,held}'::text[],
+    'to the values asked for'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(status::text ORDER BY id) FROM enum_tickets),
+    '{open,closed}'::text[],
+    'with the records following the renaming'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_of_a_shared_choice_gets_its_own() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_enum_editing();
+  CREATE TABLE enum_nights (id integer PRIMARY KEY, felt mood);
+  INSERT INTO enum_nights VALUES (1, 'cross');
+  PERFORM msar.alter_columns('enum_nights'::regclass::oid, $j$[
+    {"attnum": 2, "type": {"name": "_enum", "options": {"enum_values": [
+      {"value": "furious", "was": "cross"}, {"value": "sad", "was": "sad"}
+    ]}}}
+  ]$j$::jsonb);
+  RETURN NEXT is(
+    msar.enum_labels('mood'::regtype::oid),
+    '{happy,cross,sad}'::text[],
+    'a choice another column holds is left as it is'
+  );
+  RETURN NEXT is(
+    msar.enum_labels('enum_nights_felt'::regtype::oid),
+    '{furious,sad}'::text[],
+    'and the column asking for the change gets a choice of its own'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_nights),
+    '{furious}'::text[],
+    'holding what it held, renamed on the way across'
+  );
+  RETURN NEXT is(
+    (SELECT array_agg(felt::text ORDER BY id) FROM enum_days),
+    '{happy,cross,NULL}'::text[],
+    'while the other column is untouched'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_schema_types_say_who_uses_them() RETURNS SETOF TEXT AS $f$
+DECLARE
+  mood_info jsonb;
+BEGIN
+  PERFORM __setup_enum_editing();
+  CREATE TYPE size AS ENUM ('small', 'large');
+  mood_info := (
+    SELECT type_info FROM jsonb_array_elements(msar.list_schema_types('public'::regnamespace))
+      AS x(type_info)
+    WHERE type_info ->> 'name' = 'mood'
+  );
+  RETURN NEXT is(
+    (SELECT jsonb_agg(entry - 'table' ORDER BY entry ->> 'column_name')
+     FROM jsonb_array_elements(mood_info -> 'used_by') AS x(entry)),
+    $j$[
+      {"attnum": 2, "table_name": "enum_days", "column_name": "felt"},
+      {"attnum": 3, "table_name": "enum_days", "column_name": "felt_all"}
+    ]$j$::jsonb,
+    'a type says which columns hold its values, arrays of them included'
+  );
+  RETURN NEXT is(
+    mood_info -> 'used_by' -> 0 ->> 'table',
+    'enum_days'::regclass::oid::text,
+    'each by the table''s own OID'
+  );
+  RETURN NEXT is(
+    (SELECT type_info -> 'used_by' FROM jsonb_array_elements(
+       msar.list_schema_types('public'::regnamespace)) AS x(type_info)
+     WHERE type_info ->> 'name' = 'size'),
+    '[]'::jsonb,
+    'and a type nothing holds says so, which is what makes it safe to drop'
   );
 END;
 $f$ LANGUAGE plpgsql;

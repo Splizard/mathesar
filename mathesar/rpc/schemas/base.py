@@ -66,6 +66,22 @@ class TypeConstraint(TypedDict):
     definition: str
 
 
+class TypeUser(TypedDict):
+    """
+    A column holding values of a type.
+
+    Attributes:
+        table: The OID of the table the column belongs to.
+        table_name: The name of that table.
+        attnum: The attnum of the column.
+        column_name: The name of the column.
+    """
+    table: int
+    table_name: str
+    attnum: int
+    column_name: str
+
+
 class TypeInfo(TypedDict):
     """
     A type defined in a schema: an enum, a composite type, or a domain.
@@ -76,6 +92,7 @@ class TypeInfo(TypedDict):
         kind: Which of the three it is.
         description: The description of the type.
         values: For enums, their labels, in order.
+        used_by: The columns holding values of the type, or arrays of them.
         fields: For composite types, their fields, in order.
         base_type: For domains, the type they're ultimately defined over.
         over: For domains, the type they're directly defined over, which
@@ -89,6 +106,7 @@ class TypeInfo(TypedDict):
     kind: Literal['enum', 'composite', 'domain']
     description: Optional[str]
     values: Optional[list[str]]
+    used_by: list['TypeUser']
     fields: Optional[list[TypeField]]
     base_type: Optional[str]
     over: Optional[str]

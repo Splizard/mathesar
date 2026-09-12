@@ -144,7 +144,7 @@ export const typeFamilies: TypeFamily[] = [
     identifier: 'choice',
     name: 'Choice',
     icon: iconUiTypeEnum,
-    kinds: [kind(t.Enum)],
+    kinds: [{ ...kind(t.Enum), withoutArrays: true }],
   },
   {
     identifier: 'composite',

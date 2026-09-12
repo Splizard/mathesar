@@ -15,6 +15,7 @@ import { roles } from './roles';
 import { schemas } from './schemas';
 import { servers } from './servers';
 import { tables } from './tables';
+import { types } from './types';
 import { users } from './users';
 
 /** Mathesar's JSON-RPC API */
@@ -35,6 +36,7 @@ export const api = buildRpcApi({
     schemas,
     servers,
     tables,
+    types,
     users,
   },
 });

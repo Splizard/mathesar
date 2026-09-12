@@ -4,6 +4,7 @@ import type {
   RawColumnWithMetadata,
 } from '@mathesar/api/rpc/columns';
 import type { ConstraintType } from '@mathesar/api/rpc/constraints';
+import { getEnumValueName } from '@mathesar/api/rpc/types';
 import { type ValidationFn, uniqueWith } from '@mathesar/components/form';
 import { iconConstraint, iconTableLink } from '@mathesar/icons';
 import type { Table } from '@mathesar/models/Table';
@@ -93,7 +94,8 @@ export function columnTypeOptionsAreEqual(
     fields: true,
     item_type: true,
     original_type: true,
-    enum_values: true,
+    // Compared below, being a list rather than a value.
+    enum_values: false,
     composite_fields: false,
     domain: false,
     array: false,
@@ -111,7 +113,11 @@ export function columnTypeOptionsAreEqual(
       return false;
     }
   }
-  return true;
+  // A choice offers the same values when they read the same in the same order,
+  // whether each is written as itself or as which of the values it was.
+  const values = (options: ColumnTypeOptions) =>
+    (options.enum_values ?? []).map(getEnumValueName).join('\u0000');
+  return values(a) === values(b);
 }
 
 export function castColumnIdToNumber(columnId: string | number) {

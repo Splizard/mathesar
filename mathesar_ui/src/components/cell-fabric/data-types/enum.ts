@@ -1,4 +1,5 @@
 import type { RawColumnWithMetadata } from '@mathesar/api/rpc/columns';
+import { getEnumValueName } from '@mathesar/api/rpc/types';
 import { Select } from '@mathesar/component-library';
 
 import SingleSelectCell from './components/select/SingleSelectCell.svelte';
@@ -12,7 +13,7 @@ function getProps(
     autoSelect: 'none',
     options: [
       ...(column.nullable ? [null] : []),
-      ...(column.type_options?.enum_values ?? []),
+      ...(column.type_options?.enum_values ?? []).map(getEnumValueName),
     ],
     getLabel: (value?: string | null) => value ?? '',
   };

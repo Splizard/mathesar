@@ -21,6 +21,7 @@ from mathesar.rpc import roles
 from mathesar.rpc import schemas
 from mathesar.rpc import servers
 from mathesar.rpc import tables
+from mathesar.rpc import types
 from mathesar.rpc import users
 
 METHODS = [
@@ -480,6 +481,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        tables.list_all,
+        "tables.list_all",
+        [user_is_authenticated]
+    ),
+    (
         tables.list_joinable,
         "tables.list_joinable",
         [user_is_authenticated]
@@ -550,6 +556,26 @@ METHODS = [
     (
         users.patch_self,
         "users.patch_self",
+        [user_is_authenticated]
+    ),
+    (
+        types.add_enum,
+        "types.add_enum",
+        [user_is_authenticated]
+    ),
+    (
+        types.delete,
+        "types.delete",
+        [user_is_authenticated]
+    ),
+    (
+        types.patch_enum,
+        "types.patch_enum",
+        [user_is_authenticated]
+    ),
+    (
+        users.current_ip_address,
+        "users.current_ip_address",
         [user_is_authenticated]
     ),
     (
