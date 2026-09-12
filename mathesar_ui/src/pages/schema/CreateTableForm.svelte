@@ -1,6 +1,7 @@
 <script lang="ts">
   import { _ } from 'svelte-i18n';
 
+  import type { RawTableWithSchemaName } from '@mathesar/api/rpc/tables';
   import CollapsibleFieldset from '@mathesar/components/CollapsibleFieldset.svelte';
   import {
     FieldLayout,
@@ -16,6 +17,7 @@
     type NewPkColumnType,
     SelectNewPkColumnType,
   } from '@mathesar/components/select-new-pk-column-type';
+  import TableName from '@mathesar/components/TableName.svelte';
   import type { Schema } from '@mathesar/models/Schema';
   import { createTable } from '@mathesar/stores/tables';
   import {
@@ -24,6 +26,8 @@
     LabeledInput,
     portalToWindowFooter,
   } from '@mathesar-component-library';
+
+  import SelectTableToCopy from './SelectTableToCopy.svelte';
 
   export let close: () => void;
   export let schema: Schema;
@@ -51,6 +55,14 @@
    */
   const recordTimestamps = requiredField(true);
 
+  /**
+   * A table whose shape the new one is given. Only while the section offering
+   * it is open: closing it is how you say you don't want one.
+   */
+  let tableToCopy: RawTableWithSchemaName | undefined = undefined;
+  let isCopying = false;
+  $: copiedTable = isCopying ? tableToCopy : undefined;
+
   async function save(values: FilledFormValues<typeof form>) {
     await createTable({
       schema,
@@ -61,6 +73,7 @@
         type: values.pkColumnType,
       },
       recordTimestamps: $recordTimestamps,
+      copyStructureFromTableOid: copiedTable?.oid,
     });
     close();
   }
@@ -82,6 +95,21 @@
 </FieldLayout>
 
 <FieldLayout>
+  <CollapsibleFieldset bind:isOpen={isCopying}>
+    <span slot="label">
+      {$_('copy_structure_from_table')}
+      {#if copiedTable}
+        <span class="copied-table"><TableName table={copiedTable} /></span>
+      {/if}
+      <Help>
+        <p>{$_('copy_structure_from_table_help')}</p>
+      </Help>
+    </span>
+    <SelectTableToCopy database={schema.database} bind:value={tableToCopy} />
+  </CollapsibleFieldset>
+</FieldLayout>
+
+<FieldLayout>
   <LabeledInput layout="inline-input-first">
     <div slot="label">
       {$_('record_timestamps')}
@@ -96,3 +124,9 @@
 <div use:portalToWindowFooter>
   <FormSubmit {form} onProceed={save} onCancel={close} />
 </div>
+
+<style>
+  .copied-table {
+    margin-left: var(--sm4);
+  }
+</style>
