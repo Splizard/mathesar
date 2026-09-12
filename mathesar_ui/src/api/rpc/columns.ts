@@ -152,7 +152,7 @@ export interface ColumnPatchSpec {
   updated_at_trigger?: boolean;
 }
 
-type ColumnMetadataBlob = ColumnMetadata & { attnum: number };
+export type ColumnMetadataBlob = ColumnMetadata & { attnum: number };
 
 export const columns = {
   list: rpcMethodTypeContainer<

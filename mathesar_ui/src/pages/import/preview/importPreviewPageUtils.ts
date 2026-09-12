@@ -2,6 +2,7 @@ import { dataFilesApi } from '@mathesar/api/rest/dataFiles';
 import type { DataFile } from '@mathesar/api/rest/types/dataFiles';
 import type {
   ColumnCastOptions,
+  ColumnMetadataBlob,
   ColumnPatchSpec,
   RawColumnWithMetadata,
 } from '@mathesar/api/rpc/columns';
@@ -10,6 +11,7 @@ import { getCellCap } from '@mathesar/components/cell-fabric/utils';
 import type { Schema } from '@mathesar/models/Schema';
 import type { Table } from '@mathesar/models/Table';
 import { getAbstractTypeForDbType } from '@mathesar/stores/abstract-types';
+import { DB_TYPES } from '@mathesar/stores/abstract-types/dbTypes';
 import type { AbstractType } from '@mathesar/stores/abstract-types/types';
 import AsyncStore from '@mathesar/stores/AsyncStore';
 import { createTableFromDataFile, deleteTable } from '@mathesar/stores/tables';
@@ -157,4 +159,41 @@ export function finalizeColumns(
         columnPropertiesMap[c.id]?.castOptions,
       ),
     );
+}
+
+/**
+ * The columns that came in as money, and what they should become.
+ *
+ * Money is stored as a plain numeric carrying a currency symbol, but an amount
+ * arrives from a file still wearing that symbol, and only the money cast knows
+ * how to take it off. So a column is imported as `mathesar_types.mathesar_money`
+ * and converted once it is in: the domain is numeric underneath, which makes the
+ * conversion free, and casting to numeric directly would either fail on the
+ * symbol or, were it taught not to, silently discard it.
+ */
+export function getMoneyColumnsToConvert(
+  columns: RawColumnWithMetadata[],
+  columnPropertiesMap: ColumnPropertiesMap,
+): { patches: ColumnPatchSpec[]; metadata: ColumnMetadataBlob[] } {
+  const money = columns.filter(
+    (c) =>
+      columnPropertiesMap[c.id]?.selected &&
+      c.type === DB_TYPES.MSAR__MATHESAR_MONEY,
+  );
+  return {
+    patches: money.map((c) => ({ id: c.id, type: DB_TYPES.NUMERIC })),
+    metadata: money.map((c) => {
+      const castOptions = columnPropertiesMap[c.id]?.castOptions ?? {};
+      const prefix = String(castOptions.curr_pref ?? '');
+      const suffix = String(castOptions.curr_suff ?? '');
+      return {
+        attnum: c.id,
+        // Whichever side it was written on is where it goes back.
+        mon_currency_symbol: prefix || suffix,
+        ...(suffix && !prefix
+          ? { mon_currency_location: 'end-with-space' as const }
+          : {}),
+      };
+    }),
+  };
 }

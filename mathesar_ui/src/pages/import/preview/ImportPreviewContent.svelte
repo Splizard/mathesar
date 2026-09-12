@@ -47,6 +47,7 @@
     buildColumnPreviewSpec,
     buildColumnPropertiesMap,
     finalizeColumns,
+    getMoneyColumnsToConvert,
     getSkeletonRecords,
     makeHeaderUpdateRequest,
     processColumns,
@@ -204,6 +205,29 @@
     }
   }
 
+  /**
+   * Money arrives as `mathesar_types.mathesar_money`, which is the only cast
+   * that knows how to take a currency symbol off an amount. It is stored as a
+   * plain numeric carrying that symbol in its metadata, so put it away as one
+   * now the values are in. The domain is numeric underneath, so nothing is
+   * converted but the column's type.
+   */
+  async function convertMoneyColumns() {
+    const { patches, metadata } = getMoneyColumnsToConvert(
+      columns,
+      columnPropertiesMap,
+    );
+    if (!patches.length) return;
+    const context = {
+      database_id: schema.database.id,
+      table_oid: table.oid,
+    };
+    await api.columns.patch({ ...context, column_data_list: patches }).run();
+    await api.columns.metadata
+      .set({ ...context, column_meta_data_list: metadata })
+      .run();
+  }
+
   async function finishImport() {
     try {
       await updateTable({
@@ -220,6 +244,7 @@
           .filter(([, { selected }]) => !selected)
           .map(([id]) => parseInt(id, 10)),
       });
+      await convertMoneyColumns();
       router.goto(
         getTablePageUrl(schema.database.id, schema.oid, table.oid),
         true,
