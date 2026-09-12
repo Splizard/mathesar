@@ -60,6 +60,12 @@ export interface PrimaryKeyCellExternalProps {
    * as much right to be read as any other.
    */
   formatForDisplay?: CellValueFormatter<PrimaryKeyCellValue>;
+  /**
+   * Set when the column is a Database Table one, whose values are the names of
+   * the database's tables. Such a value is shown as a link to the table it
+   * names, here as anywhere else it appears.
+   */
+  namesTable?: boolean;
 }
 
 export interface PrimaryKeyCellProps

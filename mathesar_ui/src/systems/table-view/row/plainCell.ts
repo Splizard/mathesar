@@ -69,12 +69,15 @@ export function getPlainCell(
   const { component, props } = columnFabric.cellComponentAndProps;
   const kind = plainCellKinds.get(component);
   if (!kind) return undefined;
-  const { formatForDisplay, tableId } = props as {
+  const { formatForDisplay, tableId, namesTable } = props as {
     formatForDisplay?: (v: unknown) => unknown;
     tableId?: number;
+    namesTable?: boolean;
   };
   // Record links are only rendered for records of the table being shown
   if (kind.recordLink && tableId !== tableOid) return undefined;
+  // A primary key naming a table is a link to it, which is not a plain value
+  if (namesTable) return undefined;
   // Same as `SteppedInputCell`: `formatValue?.(value) ?? value`
   const display = formatForDisplay?.(value) ?? value;
   const disabled = !(canUpdateRecords && columnFabric.isEditable);

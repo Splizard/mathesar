@@ -85,6 +85,7 @@ export function getCellCap({
     const props: PrimaryKeyCellExternalProps = {
       tableId: pkTargetTableId,
       formatForDisplay: getDisplayFormatter(column),
+      namesTable: cellInfo?.type === 'databaseTable',
     };
     return { component: PrimaryKeyCell, props };
   }

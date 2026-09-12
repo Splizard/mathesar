@@ -2,6 +2,7 @@
   import { createEventDispatcher } from 'svelte';
 
   import CellWrapper from '@mathesar/components/cell-fabric/data-types/components/CellWrapper.svelte';
+  import TableValue from '@mathesar/components/cell-fabric/data-types/components/database-table/TableValue.svelte';
   import type { PrimaryKeyCellProps } from '@mathesar/components/cell-fabric/data-types/components/typeDefinitions';
   import Default from '@mathesar/components/Default.svelte';
   import RecordHyperlink from '@mathesar/components/RecordHyperlink.svelte';
@@ -19,6 +20,7 @@
   export let isIndependentOfSheet: $$Props['isIndependentOfSheet'];
   export let canViewLinkedEntities: $$Props['canViewLinkedEntities'];
   export let formatForDisplay: $$Props['formatForDisplay'] = undefined;
+  export let namesTable: $$Props['namesTable'] = false;
 
   $: shown =
     value === undefined ? undefined : formatForDisplay?.(value) ?? value;
@@ -62,6 +64,8 @@
     <span class="value">
       {#if shown === undefined}
         <Default />
+      {:else if namesTable}
+        <TableValue {value} />
       {:else}
         {shown}
       {/if}
