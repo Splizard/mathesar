@@ -9,10 +9,7 @@
     iconRevealPageHeader,
     iconTableActions,
   } from '@mathesar/icons';
-  import {
-    compactPageHeaderVisible,
-    tableInspectorVisible,
-  } from '@mathesar/stores/localStorage';
+  import { tableInspectorVisible } from '@mathesar/stores/localStorage';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
   import { tableLayout } from '@mathesar/stores/viewport';
   import { isTableView } from '@mathesar/utils/tables';
@@ -24,6 +21,7 @@
   import HideColumnsDropdown from './actions-pane/record-operations/hide/HideColumnsDropdown.svelte';
   import JoinDropdown from './actions-pane/record-operations/join/JoinDropdown.svelte';
   import SortDropdown from './actions-pane/record-operations/sort/SortDropdown.svelte';
+  import { compactPageHeaderVisible } from './pageHeader';
   import StatusPane from './StatusPane.svelte';
 
   const tabularData = getTabularDataStoreFromContext();

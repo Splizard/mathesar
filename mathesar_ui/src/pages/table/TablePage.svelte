@@ -8,7 +8,6 @@
   import LayoutWithHeader from '@mathesar/layouts/LayoutWithHeader.svelte';
   import type { Table } from '@mathesar/models/Table';
   import { makeSimplePageTitle } from '@mathesar/pages/pageTitleUtils';
-  import { compactPageHeaderVisible } from '@mathesar/stores/localStorage';
   import {
     Meta,
     TabularData,
@@ -23,6 +22,7 @@
     showTheRestAgain,
     tableIsFullScreen,
   } from '@mathesar/systems/table-view/fullScreen';
+  import { compactPageHeaderVisible } from '@mathesar/systems/table-view/pageHeader';
   import TableView from '@mathesar/systems/table-view/TableView.svelte';
 
   import {
@@ -48,6 +48,9 @@
   $: ({ query } = $router);
   $: meta = Meta.fromSerialization(query[metaSerializationQueryKey] ?? '');
   $: ({ currentRolePrivileges } = table.currentAccess);
+  // Opening a table is opening it with the room given to the table, whatever was asked for the
+  // last time somebody wanted to see where they were.
+  $: table.oid, compactPageHeaderVisible.set(false);
   /**
    * A list of records is shown by what each record is called, so the summaries have to be asked
    * for. Only where one will be shown: on a screen with room for the spreadsheet they would be a
