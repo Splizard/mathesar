@@ -11727,3 +11727,19 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_formula_operator_with_one_side() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_formula_columns();
+  RETURN NEXT throws_ok(
+    format(
+      $q$SELECT msar.build_formula_sql(%s::oid, '{"op": "*", "of": [{"value": 2}]}'::jsonb)$q$,
+      'formula_orders'::regclass::oid
+    ),
+    '22023',
+    null,
+    'an operator that goes between two formulas is refused when given one'
+  );
+END;
+$f$ LANGUAGE plpgsql;

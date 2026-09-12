@@ -159,15 +159,24 @@ BEGIN
       USING ERRCODE = 'invalid_parameter_value',
         HINT = 'See msar.formula_operators for the ones it can.';
     END IF;
-    RETURN CASE
-      -- The ones that take a single formula, whichever side they are written on.
-      WHEN name_ = 'NOT' THEN format('(NOT %s)', parts[1])
-      WHEN name_ IN ('IS NULL', 'IS NOT NULL') THEN format('(%s %s)', parts[1], name_)
-      WHEN name_ = '-' AND cardinality(parts) = 1 THEN format('(- %s)', parts[1])
-      WHEN cardinality(parts) = 1 THEN NULL
-      -- Everything else goes between, and between each of them if there are more than two.
-      ELSE format('(%s)', array_to_string(parts, format(' %s ', name_)))
-    END;
+    -- The ones that take a single formula, whichever side they are written on.
+    IF name_ = 'NOT' THEN
+      RETURN format('(NOT %s)', parts[1]);
+    END IF;
+    IF name_ IN ('IS NULL', 'IS NOT NULL') THEN
+      RETURN format('(%s %s)', parts[1], name_);
+    END IF;
+    IF name_ = '-' AND cardinality(parts) = 1 THEN
+      RETURN format('(- %s)', parts[1]);
+    END IF;
+    -- Everything else goes between, so there has to be something on each side of it. Said rather
+    -- than answered with nothing, which would have put a hole in the statement being built.
+    IF cardinality(parts) < 2 THEN
+      RAISE EXCEPTION '% needs a formula on each side of it.', name_
+      USING ERRCODE = 'invalid_parameter_value';
+    END IF;
+    -- Between each of them, if there are more than two.
+    RETURN format('(%s)', array_to_string(parts, format(' %s ', name_)));
   END IF;
 
   IF formula ? 'fn' THEN

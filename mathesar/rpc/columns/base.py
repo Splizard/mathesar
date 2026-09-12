@@ -344,7 +344,7 @@ def add_formula(
         table_oid: int,
         name: str,
         formula: dict,
-        type_: Optional[TypeOptions] = None,
+        type_: Optional[dict] = None,
         description: Optional[str] = None,
         database_id: int,
         **kwargs
@@ -372,7 +372,9 @@ def add_formula(
         table_oid: The OID of the table to add the column to.
         name: The name to give the column.
         formula: The formula its values are worked out from.
-        type_: The type to hold the values as, or null to work it out from the formula.
+        type_: The type to hold the values as, given the way a column's type is given -- an
+            object with a `name` and the `options` that go with it -- or null to work it out from
+            the formula, which is what it is for.
         description: The description of the column.
         database_id: The Django id of the database containing the table.
 
