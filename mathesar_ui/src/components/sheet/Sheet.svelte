@@ -98,12 +98,14 @@
   ));
 
   const selectionInProgress = writable(false);
+  const verticalScrollbarWidth = writable(0);
   const stores = {
     columnStyleMap: writable(columnStyleMap),
     rowWidth: writable(rowWidth),
     horizontalScrollOffset: writable(horizontalScrollOffset),
     scrollOffset: writable(scrollOffset),
     paddingRight: writable(paddingRight),
+    verticalScrollbarWidth,
     selectionInProgress,
   };
 
@@ -136,6 +138,9 @@
       },
       setScrollOffset: (offset) => {
         scrollOffset = offset;
+      },
+      setVerticalScrollbarWidth: (width) => {
+        verticalScrollbarWidth.set(width);
       },
     },
   });

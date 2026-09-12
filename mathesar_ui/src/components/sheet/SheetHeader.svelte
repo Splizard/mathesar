@@ -6,6 +6,14 @@
   const { stores, api } = getSheetContext();
   const { horizontalScrollOffset } = stores;
   const { rowWidth } = stores;
+  const { verticalScrollbarWidth } = stores;
+
+  // The body reserves a gutter for its vertical scrollbar, so its viewport is
+  // narrower than the header's by that much. Both scroll the same `rowWidth` of
+  // content, so without matching the gutter here the header would run out of
+  // scroll before the body did, and the headings would sit up to a scrollbar's
+  // width to the right of their columns at the far right of the sheet.
+  $: headerWidth = $rowWidth + $verticalScrollbarWidth;
 
   export let inheritFontStyle = false;
   let headerRef: HTMLElement;
@@ -45,7 +53,7 @@
   data-sheet-element="header-row"
   class:inherit-font-style={inheritFontStyle}
 >
-  <div style:width="{$rowWidth}px">
+  <div style:width="{headerWidth}px">
     <slot />
   </div>
 </div>

@@ -20,6 +20,12 @@ export interface SheetContextStores {
   horizontalScrollOffset: Readable<number>;
   scrollOffset: Readable<number>;
   paddingRight: Readable<number>;
+  /**
+   * The width of the body's vertical scrollbar, if it has one. The header sits
+   * in its own scroll container, beside the scrollbar rather than behind it, so
+   * it needs to reserve the same width to scroll as far as the body does.
+   */
+  verticalScrollbarWidth: Readable<number>;
   selectionInProgress: Readable<boolean>;
 }
 
@@ -33,6 +39,7 @@ export interface SheetContext {
     handleReleaseColumnWidth: (columnId: string, width: number | null) => void;
     setHorizontalScrollOffset: (offset: number) => void;
     setScrollOffset: (offset: number) => void;
+    setVerticalScrollbarWidth: (width: number) => void;
   };
 }
 

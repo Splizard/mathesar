@@ -122,6 +122,9 @@
 <div data-sheet-element="body" tabindex="-1">
   <Resizer let:height let:width>
     <VirtualList
+      on:vertical-scrollbar-width={(e) => {
+        api.setVerticalScrollbarWidth(e.detail);
+      }}
       horizontalScrollOffset={$horizontalScrollOffset}
       scrollOffset={$scrollOffset}
       {height}

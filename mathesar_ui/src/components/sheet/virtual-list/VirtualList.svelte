@@ -144,6 +144,22 @@
     }
   }
 
+  /**
+   * The width taken up by the vertical scrollbar, which is 0 when the list has
+   * none (and on platforms that overlay their scrollbars). Dispatched so that a
+   * sheet's header can reserve the same width and stay aligned with the columns
+   * when scrolled all the way right.
+   */
+  let verticalScrollbarWidth = 0;
+
+  function measureVerticalScrollbar() {
+    if (!outerRef) return;
+    const measured = outerRef.offsetWidth - outerRef.clientWidth;
+    if (measured === verticalScrollbarWidth) return;
+    verticalScrollbarWidth = measured;
+    dispatch('vertical-scrollbar-width', verticalScrollbarWidth);
+  }
+
   onMount(() => {
     if (typeof scrollOffset === 'number') {
       outerRef.scrollTop = scrollOffset;
@@ -154,7 +170,15 @@
 
     outerRef.addEventListener('scroll', onScroll, { passive: true });
 
+    // The content box shrinks when the scrollbar appears and grows when it
+    // goes away, so observing it catches the rows growing past the viewport as
+    // well as the viewport itself being resized.
+    const resizeObserver = new ResizeObserver(measureVerticalScrollbar);
+    resizeObserver.observe(outerRef);
+    measureVerticalScrollbar();
+
     return () => {
+      resizeObserver.disconnect();
       outerRef.removeEventListener('scroll', onScroll);
     };
   });
