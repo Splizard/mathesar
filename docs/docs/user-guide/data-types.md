@@ -106,7 +106,7 @@ A value from a fixed list, as a PostgreSQL [enum](https://www.postgresql.org/doc
 
 ### Composite
 
-A value made of named fields, as a PostgreSQL [composite type](https://www.postgresql.org/docs/17/rowtypes.html). Mathesar shows composite values as `field: value, field: value`, but can't yet edit them. A schema's composite types are listed in its [Ontology](#ontology).
+A value made of named fields, as a PostgreSQL [composite type](https://www.postgresql.org/docs/17/rowtypes.html). Mathesar shows composite values as `field: value, field: value`, with a **{…}** button that opens the value's fields in the **Cell** section of the inspector. There each field is a cell of its own type — a checkbox for a boolean field, a file for a file field — to change, and the changes are saved together. A schema's composite types are listed in its [Ontology](#ontology).
 
 ### JSON
 

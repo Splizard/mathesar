@@ -8793,6 +8793,39 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_column_info_of_composite_arrays() RETURNS SETOF TEXT AS $f$
+DECLARE
+  col_info jsonb;
+BEGIN
+  CREATE TYPE pair AS (first text, second integer);
+  CREATE TABLE pairs (id integer PRIMARY KEY, one pair, many pair[]);
+  col_info := msar.get_column_info('pairs'::regclass);
+  RETURN NEXT is(col_info -> 1 ->> 'type', '_composite');
+  RETURN NEXT is(
+    col_info -> 1 -> 'type_options' -> 'composite_fields',
+    '[{"name": "first", "type": "text"}, {"name": "second", "type": "integer"}]'::jsonb
+  );
+  RETURN NEXT is(
+    col_info -> 2 -> 'type_options' ->> 'item_type', '_composite',
+    'an array of composites has composites for items'
+  );
+  RETURN NEXT is(
+    col_info -> 2 -> 'type_options' -> 'composite_fields',
+    '[{"name": "first", "type": "text"}, {"name": "second", "type": "integer"}]'::jsonb,
+    'and describes their fields'
+  );
+  RETURN NEXT is(msar.get_composite_fields('integer'::regtype), NULL, 'other types have none');
+
+  -- Mathesar's own composites, such as files, stay themselves
+  CREATE TABLE albums (id integer PRIMARY KEY, pics mathesar_types.file[]);
+  RETURN NEXT is(
+    msar.get_column_info('albums'::regclass) -> 1 -> 'type_options' ->> 'item_type',
+    'mathesar_types.file'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_cast_to_ranges() RETURNS SETOF TEXT AS $f$
 BEGIN
   RETURN NEXT is(msar.cast_to_int4range(5), '[5,6)'::int4range, 'a value is the range of it');

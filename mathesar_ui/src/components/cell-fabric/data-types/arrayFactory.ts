@@ -28,6 +28,8 @@ import { getCellConfiguration, getCellInfo } from './utils';
 export interface ArrayLikeColumn extends CellColumnLike {
   type_options: {
     item_type: DbType;
+    /** The fields of the items of an array of composites */
+    composite_fields?: { name: string; type: DbType }[] | null;
   } | null;
   metadata: ColumnMetadata | null;
 }
@@ -66,7 +68,9 @@ function getItemColumnFabric(
   const itemDbType = column.type_options?.item_type ?? 'string';
   const itemColumn = {
     type: itemDbType,
-    type_options: null,
+    type_options: {
+      composite_fields: column.type_options?.composite_fields ?? null,
+    },
     metadata: column.metadata,
   };
   const cellInfo = getCellInfo(itemDbType, column.metadata);
@@ -97,7 +101,9 @@ function makeDisplayFormatter(
         elementCellFactory.getDisplayFormatter(
           {
             type: itemDbType,
-            type_options: null,
+            type_options: {
+              composite_fields: column.type_options?.composite_fields ?? null,
+            },
             metadata: column.metadata,
           },
           config,

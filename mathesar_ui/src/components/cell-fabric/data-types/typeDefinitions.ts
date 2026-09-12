@@ -25,7 +25,12 @@ export type SimpleCellDataTypes =
   | 'composite'
   | 'enum';
 
-export type CompoundCellDataTypes = 'array';
+/**
+ * Types whose cells hold values of other types, so are made from the cells of
+ * those. A composite is also a simple type, whose cells only show its fields,
+ * for where one is within an array.
+ */
+export type CompoundCellDataTypes = 'array' | 'composite';
 
 export type CellDataType = SimpleCellDataTypes | CompoundCellDataTypes;
 

@@ -17,7 +17,7 @@ text wouldn't let them be edited, such as arrays of booleans or of files.
 
   /** The column of one value, of the type of the array's items */
   export let itemColumnFabric: CellColumnFabric;
-  export let value: unknown[] | null = null;
+  export let value: unknown = null;
   export let disabled = false;
   /** The file a value refers to, for arrays of files */
   export let getFileManifest:
@@ -31,10 +31,10 @@ text wouldn't let them be edited, such as arrays of booleans or of files.
 
   /** The values being edited, which are the given ones until they're changed */
   let elements: unknown[] = [];
-  let lastValue: unknown[] | null | undefined;
+  let lastValue: unknown;
   $: if (value !== lastValue) {
     lastValue = value;
-    elements = value ? [...value] : [];
+    elements = Array.isArray(value) ? [...value] : [];
   }
   /** The value being edited, as a table has one active cell */
   let activeIndex: number | undefined = undefined;

@@ -1149,6 +1149,7 @@ INSERT INTO msar.all_mathesar_objects VALUES
   ('msar', 'msar.get_column_names(oid,jsonb)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_type(oid,smallint)', 'FUNCTION', NULL),
   ('msar', 'msar.get_column_type(text,text,text)', 'FUNCTION', NULL),
+  ('msar', 'msar.get_composite_fields(regtype)', 'FUNCTION', NULL),
   ('msar', 'msar.get_constraint_name(oid)', 'FUNCTION', NULL),
   ('msar', 'msar.get_constraint_type_api_code(character)', 'FUNCTION', NULL),
   ('msar', 'msar.get_constraints_for_table(oid)', 'FUNCTION', NULL),

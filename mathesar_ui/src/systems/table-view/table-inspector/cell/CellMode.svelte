@@ -3,6 +3,7 @@
 
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
   import ArrayElements from '@mathesar/components/cell-fabric/data-types/components/array/ArrayElements.svelte';
+  import CompositeFields from '@mathesar/components/cell-fabric/data-types/components/composite/CompositeFields.svelte';
   import { getCellInfo } from '@mathesar/components/cell-fabric/data-types/utils';
   import { getCellCap } from '@mathesar/components/cell-fabric/utils';
   import { parseFileReference } from '@mathesar/components/file-attachments/fileUtils';
@@ -27,35 +28,55 @@
   } = $tabularData);
   $: ({ selectableRowsMap, fileManifests } = recordsData);
 
-  /** The array cell the inspector edits, whose values are shown one by one */
-  $: activeArrayCell = (() => {
+  /**
+   * The cell the inspector edits value by value: an array's values, or a
+   * composite's fields
+   */
+  $: activePartedCell = (() => {
     const { activeCellId } = $selection;
     if (!activeCellId) return undefined;
     const { rowId, columnId } = parseCellId(activeCellId);
     const row = $selectableRowsMap.get(rowId);
     const column = $processedColumns.get(columnId);
-    if (!row || !column || column.column.type !== DB_TYPES.ARRAY) {
+    const type = column?.column.type;
+    if (!row || !column) return undefined;
+    if (type !== DB_TYPES.ARRAY && type !== DB_TYPES.COMPOSITE) {
       return undefined;
     }
-    return { row, column, columnId, value: row.record[columnId] };
+    return {
+      row,
+      column,
+      columnId,
+      value: row.record[columnId],
+      isArray: type === DB_TYPES.ARRAY,
+    };
   })();
 
-  /** The column of one of the array's values, for its cell to show it */
-  $: itemColumn = {
-    type: activeArrayCell?.column.column.type_options?.item_type ?? 'string',
-    type_options: null,
-    metadata: activeArrayCell?.column.column.metadata ?? null,
-  };
-  $: itemColumnFabric = {
-    id: `${activeArrayCell?.columnId ?? ''}-item`,
-    column: itemColumn,
-    cellComponentAndProps: getCellCap({
-      cellInfo: getCellInfo(itemColumn.type, itemColumn.metadata) ?? {
-        type: 'string',
-      },
-      column: itemColumn,
-    }),
-  };
+  $: metadata = activePartedCell?.column.column.metadata ?? null;
+
+  /** The column of a value of the array, or of a field, for its cell to show */
+  function getPartColumnFabric(id: string, type: string) {
+    const column = { type, type_options: null, metadata };
+    return {
+      id,
+      column,
+      cellComponentAndProps: getCellCap({
+        cellInfo: getCellInfo(type, metadata) ?? { type: 'string' },
+        column,
+      }),
+    };
+  }
+
+  $: itemColumnFabric = getPartColumnFabric(
+    `${activePartedCell?.columnId ?? ''}-item`,
+    activePartedCell?.column.column.type_options?.item_type ?? 'string',
+  );
+  $: fields = (
+    activePartedCell?.column.column.type_options?.composite_fields ?? []
+  ).map((field) => ({
+    name: field.name,
+    columnFabric: getPartColumnFabric(field.name, field.type),
+  }));
 
   /** Arrays of files show each file, as a file column's cells do */
   function getFileManifest(columnId: string, value: unknown) {
@@ -64,25 +85,24 @@
     return $fileManifests.get(columnId)?.get(fileReference.hmac);
   }
 
-  let values: unknown[] | null = null;
-  let savedValues: unknown[] | null = null;
+  /** The value being edited, of the array's values or the composite's fields */
+  let value: unknown = null;
+  let savedValue: unknown = null;
   let saveState: RequestStatus;
 
-  function reset(cell: typeof activeArrayCell) {
-    savedValues = Array.isArray(cell?.value)
-      ? (cell?.value as unknown[])
-      : null;
-    values = savedValues;
+  function reset(cell: typeof activePartedCell) {
+    savedValue = cell?.value ?? null;
+    value = savedValue;
   }
-  $: reset(activeArrayCell);
+  $: reset(activePartedCell);
 
-  $: hasChanges = JSON.stringify(values) !== JSON.stringify(savedValues);
-  $: isEditable = !!activeArrayCell?.column.isEditable && $canUpdateRecords;
+  $: hasChanges = JSON.stringify(value) !== JSON.stringify(savedValue);
+  $: isEditable = !!activePartedCell?.column.isEditable && $canUpdateRecords;
 
   async function save() {
-    if (!activeArrayCell) return;
-    const { row, columnId } = activeArrayCell;
-    const cells = [{ columnId, value: values }];
+    if (!activePartedCell) return;
+    const { row, columnId } = activePartedCell;
+    const cells = [{ columnId, value }];
     saveState = { state: 'processing' };
     try {
       await recordsData.bulkDml(
@@ -100,27 +120,47 @@
   }
 </script>
 
-{#if activeArrayCell}
-  <div class="array-cell">
-    <header class="header">{$_('values')}</header>
-    <ArrayElements
-      {itemColumnFabric}
-      bind:value={values}
-      disabled={!isEditable || saveState?.state === 'processing'}
-      getFileManifest={(value) =>
-        getFileManifest(activeArrayCell?.columnId ?? '', value)}
-      setFileManifest={(hmac, manifest) =>
-        fileManifests.addBespokeValue({
-          columnId: activeArrayCell?.columnId ?? '',
-          key: hmac,
-          value: manifest,
-        })}
-    />
+{#if activePartedCell}
+  {@const cell = activePartedCell}
+  {@const isProcessing = saveState?.state === 'processing'}
+  <div class="parted-cell">
+    <header class="header">
+      {cell.isArray ? $_('values') : $_('fields')}
+    </header>
+    {#if cell.isArray}
+      <ArrayElements
+        {itemColumnFabric}
+        bind:value
+        disabled={!isEditable || isProcessing}
+        getFileManifest={(fileValue) =>
+          getFileManifest(cell.columnId, fileValue)}
+        setFileManifest={(hmac, manifest) =>
+          fileManifests.addBespokeValue({
+            columnId: cell.columnId,
+            key: hmac,
+            value: manifest,
+          })}
+      />
+    {:else}
+      <CompositeFields
+        {fields}
+        bind:value
+        disabled={!isEditable || isProcessing}
+        getFileManifest={(fileValue) =>
+          getFileManifest(cell.columnId, fileValue)}
+        setFileManifest={(hmac, manifest) =>
+          fileManifests.addBespokeValue({
+            columnId: cell.columnId,
+            key: hmac,
+            value: manifest,
+          })}
+      />
+    {/if}
     {#if hasChanges}
       <div class="footer">
         <CancelOrProceedButtonPair
           onProceed={save}
-          onCancel={() => reset(activeArrayCell)}
+          onCancel={() => reset(activePartedCell)}
           isProcessing={saveState?.state === 'processing'}
           proceedButton={{ label: $_('save') }}
           size="small"
@@ -133,7 +173,7 @@
 {/if}
 
 <style lang="scss">
-  .array-cell {
+  .parted-cell {
     padding: var(--sm1);
   }
   .header {

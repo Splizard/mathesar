@@ -1,6 +1,7 @@
 import arrayFactory from './arrayFactory';
 import boolean from './boolean';
-import composite from './composite';
+import compositeFactory from './composite';
+import compositeReadOnly from './compositeReadOnly';
 import date from './date';
 import datetime from './datetime';
 import duration from './duration';
@@ -34,7 +35,7 @@ const simpleDataTypeComponentFactories: Record<
   datetime,
   file,
   uuid,
-  composite,
+  composite: compositeReadOnly,
   enum: enumFactory,
 };
 
@@ -43,6 +44,7 @@ const compoundDataTypeComponentFactories: Record<
   CellComponentFactory
 > = {
   array: arrayFactory(simpleDataTypeComponentFactories),
+  composite: compositeFactory(simpleDataTypeComponentFactories),
 };
 
 const dataTypeComponentFactories: Record<CellDataType, CellComponentFactory> = {

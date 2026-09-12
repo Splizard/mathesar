@@ -824,22 +824,43 @@ SELECT nullif(
     WHEN typ_ndims>0 THEN
       jsonb_build_object(
         'item_type',
-        CASE
-          WHEN (
-            SELECT typtype
-            FROM pg_catalog.pg_type
-            WHERE oid = (SELECT typelem FROM pg_catalog.pg_type WHERE oid = typ_id)
-          ) = 'e'
-          THEN '_enum'
+        COALESCE(
+          (
+            SELECT CASE
+              WHEN elem.typtype = 'e' THEN '_enum'
+              WHEN elem.typtype = 'c'
+                AND elem.typnamespace <> 'mathesar_types'::regnamespace THEN '_composite'
+            END
+            FROM pg_catalog.pg_type arr
+              JOIN pg_catalog.pg_type elem ON elem.oid = arr.typelem
+            WHERE arr.oid = typ_id
+          ),
           -- This string wrangling is debatably dubious, but avoids a slow join.
-          ELSE rtrim(typ_id::regtype::text, '[]')
-        END
+          rtrim(typ_id::regtype::text, '[]')
+        )
       )
     ELSE '{}'
   END,
   '{}'
 )
 $$ LANGUAGE SQL RETURNS NULL ON NULL INPUT;
+
+
+CREATE OR REPLACE FUNCTION
+msar.get_composite_fields(typ_id regtype) RETURNS jsonb AS $$/*
+Return the fields of the given composite type, in order, with the type of each.
+
+Args:
+  typ_id: The type, which gives no fields unless it's a composite one.
+*/
+SELECT jsonb_agg(
+  jsonb_build_object('name', f.attname, 'type', format_type(f.atttypid, f.atttypmod))
+  ORDER BY f.attnum
+)
+FROM pg_catalog.pg_type t
+  JOIN pg_catalog.pg_attribute f ON f.attrelid = t.typrelid
+WHERE t.oid = typ_id AND t.typtype = 'c' AND f.attnum > 0 AND NOT f.attisdropped;
+$$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
 
 CREATE OR REPLACE FUNCTION msar.has_dependents(rel_id oid, att_id smallint) RETURNS boolean AS $$/*
@@ -1093,17 +1114,17 @@ SELECT
     || CASE WHEN base.typ <> atttypid AND attndims = 0 THEN
       jsonb_build_object('domain', atttypid::regtype::text)
     ELSE '{}' END
+    || CASE WHEN elem.typtype = 'c' AND elem.typnamespace <> 'mathesar_types'::regnamespace THEN
+      -- A column of an array of composites describes the composite its items are
+      jsonb_build_object(
+        'original_type', elem.oid::regtype::text,
+        'composite_fields', msar.get_composite_fields(elem.oid)
+      )
+    ELSE '{}' END
     || CASE WHEN pgt.typtype = 'c' AND pgt.typnamespace <> 'mathesar_types'::regnamespace THEN
       jsonb_build_object(
         'original_type', base.typ::text,
-        'composite_fields', (
-          SELECT jsonb_agg(
-            jsonb_build_object('name', f.attname, 'type', format_type(f.atttypid, f.atttypmod))
-            ORDER BY f.attnum
-          )
-          FROM pg_catalog.pg_attribute f
-          WHERE f.attrelid = pgt.typrelid AND f.attnum > 0 AND NOT f.attisdropped
-        )
+        'composite_fields', msar.get_composite_fields(base.typ)
       )
     ELSE '{}' END,
     '{}'
@@ -1120,6 +1141,7 @@ FROM pg_catalog.pg_attribute pga
     AND pga.attnum=ANY(pgi.indkey) AND pgi.indisprimary
   CROSS JOIN LATERAL msar.get_column_base_type(pga.atttypid, pga.atttypmod) AS base
   LEFT JOIN pg_catalog.pg_type pgt ON base.typ=pgt.oid
+  LEFT JOIN pg_catalog.pg_type elem ON pgt.typelem=elem.oid AND pga.attndims>0
 WHERE pga.attrelid=tab_id AND pga.attnum > 0 and NOT attisdropped;
 $$ LANGUAGE SQL STABLE RETURNS NULL ON NULL INPUT;
 
