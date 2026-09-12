@@ -9553,3 +9553,209 @@ BEGIN
   RETURN NEXT ok((SELECT pics[2] IS NULL FROM array_files));
 END;
 $f$ LANGUAGE plpgsql;
+
+
+-- presentation metadata ---------------------------------------------------------------------------
+
+
+CREATE OR REPLACE FUNCTION __setup_pres() RETURNS SETOF TEXT AS $$
+BEGIN
+  -- `note` is dropped so that `amount` sits at attnum 3, where a restore would not put it.
+  CREATE TABLE pres (id integer, note integer, amount numeric, paid boolean);
+  ALTER TABLE pres DROP COLUMN note;
+  PERFORM msar.set_column_presentation(
+    'pres'::regclass::oid, 3, '{"mon_currency_symbol": "$", "display_width": 120}'::jsonb
+  );
+  PERFORM msar.set_column_presentation(
+    'pres'::regclass::oid, 4, '{"bool_input": "checkbox"}'::jsonb
+  );
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_round_trip() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    '$',
+    'an option comes back keyed by the attnum it was set on'
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '4' ->> 'bool_input',
+    'checkbox',
+    'and each column keeps its own'
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '1',
+    NULL,
+    'a column nobody has said anything about has no entry'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_sets_only_what_it_is_given() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  PERFORM msar.set_column_presentation('pres'::regclass::oid, 3, '{"display_width": 200}'::jsonb);
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    '$',
+    'an option left out of the call is left alone'
+  );
+  RETURN NEXT is(
+    (msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'display_width')::integer,
+    200,
+    'and an option named in the call is written'
+  );
+  PERFORM msar.set_column_presentation(
+    'pres'::regclass::oid, 3, '{"mon_currency_symbol": null}'::jsonb
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    NULL,
+    'naming an option with a null value clears it'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_rejects_the_unknown() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  -- A typo should be loud. Quietly dropping it would leave someone staring at a setting that
+  -- never took effect.
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.set_column_presentation(
+      'pres'::regclass::oid, 3, '{"display_wdith": 100}'::jsonb
+    )$i$,
+    'Unknown presentation options: display_wdith'
+  );
+  RETURN NEXT throws_ok(
+    $i$SELECT msar.set_column_presentation(
+      'pres'::regclass::oid, 99, '{"display_width": 100}'::jsonb
+    )$i$,
+    'Column 99 of table pres does not exist'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_survives_a_rename() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  PERFORM msar.rename_column('pres'::regclass::oid, 3, 'total');
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    '$',
+    'the attnum still binds the row after a rename'
+  );
+  RETURN NEXT is(
+    (SELECT column_name FROM presentation_schema.columns
+     WHERE "table" = 'pres'::regclass AND attnum = 3),
+    'total',
+    'and the cached name is brought along, so a dump would restore onto the right column'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_refreshes_a_stale_name() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  -- A rename by something other than Mathesar. The attnum is untouched, so nothing is broken; the
+  -- cached name is just stale until something looks.
+  ALTER TABLE pres RENAME COLUMN amount TO total;
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    '$',
+    'a rename we did not make still leaves the attnum binding correctly'
+  );
+  PERFORM msar.heal_column_presentation('pres'::regclass::oid);
+  RETURN NEXT is(
+    (SELECT column_name FROM presentation_schema.columns
+     WHERE "table" = 'pres'::regclass AND attnum = 3),
+    'total',
+    'and healing catches the cached name up'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION __setup_pres_restored() RETURNS SETOF TEXT AS $$
+BEGIN
+  PERFORM __setup_pres();
+  -- What a restore leaves behind, without needing pg_dump to do it: the same columns by name, but
+  -- with the gap left by the dropped `note` closed up, and rows still carrying the old table's OID.
+  CREATE TABLE pres_restored (id integer, amount numeric, paid boolean);
+  UPDATE presentation_schema.columns
+  SET "table" = 'pres_restored'::regclass
+  WHERE "table" = 'pres'::regclass;
+END;
+$$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_reads_through_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres_restored();
+  -- attnum 3 in the restored table is `paid`. Believing it would put a currency symbol on a
+  -- boolean, which is exactly the kind of quiet wrongness the cached name is there to prevent.
+  RETURN NEXT is(
+    msar.column_presentation('pres_restored'::regclass::oid) -> '2' ->> 'mon_currency_symbol',
+    '$',
+    'settings follow the column by name to wherever the restore put it'
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres_restored'::regclass::oid) -> '3' ->> 'mon_currency_symbol',
+    NULL,
+    'and do not land on whatever now holds the old attnum'
+  );
+  RETURN NEXT is(
+    msar.column_presentation('pres_restored'::regclass::oid) -> '3' ->> 'bool_input',
+    'checkbox',
+    'every column is moved, not just the first'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_heal_column_presentation_rebinds_after_a_restore() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres_restored();
+  -- Both rows move down one, so the row leaving attnum 3 is moving into a slot the other row has
+  -- not left yet. The primary key has to be deferrable for this to work at all.
+  PERFORM msar.heal_column_presentation('pres_restored'::regclass::oid);
+  RETURN NEXT is(
+    (SELECT string_agg(attnum || ':' || column_name, ', ' ORDER BY attnum)
+     FROM presentation_schema.columns WHERE "table" = 'pres_restored'::regclass),
+    '2:amount, 3:paid',
+    'healing writes the rows back where the restore actually put the columns'
+  );
+  RETURN NEXT is(
+    (SELECT bool_and(written_against = 'pres_restored'::regclass::oid)
+     FROM presentation_schema.columns WHERE "table" = 'pres_restored'::regclass),
+    true,
+    'and takes the OID witness forward, so the attnums are trusted again'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION  test_column_presentation_forgets_a_dropped_column() RETURNS SETOF TEXT AS $f$
+BEGIN
+  PERFORM __setup_pres();
+  ALTER TABLE pres DROP COLUMN paid;
+  RETURN NEXT is(
+    msar.column_presentation('pres'::regclass::oid) -> '4',
+    NULL,
+    'a dropped column stops being reported straight away'
+  );
+  PERFORM msar.heal_column_presentation('pres'::regclass::oid);
+  RETURN NEXT is(
+    (SELECT count(*)::integer FROM presentation_schema.columns WHERE "table" = 'pres'::regclass),
+    1,
+    'and healing clears the row out'
+  );
+END;
+$f$ LANGUAGE plpgsql;

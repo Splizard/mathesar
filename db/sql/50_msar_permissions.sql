@@ -30,6 +30,10 @@ $$ LANGUAGE plpgsql;
 
 
 GRANT USAGE ON SCHEMA __msar, msar, mathesar_types TO PUBLIC;
+-- Presentation is shared: anyone who can reach the data can say how it is shown, which is the
+-- arrangement Mathesar already had when these settings lived in its own database.
+GRANT USAGE ON SCHEMA presentation_schema TO PUBLIC;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA presentation_schema TO PUBLIC;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA msar, __msar, mathesar_types TO PUBLIC;
 GRANT SELECT ON ALL TABLES IN SCHEMA msar, __msar, mathesar_types TO PUBLIC;
 SELECT msar.grant_usage_on_custom_mathesar_types_to_public();

@@ -12,6 +12,7 @@ CREATE DATABASE mathesar_testing;
 \ir 01_msar_types.sql
 \ir 02_msar_remove.sql
 \ir 05_msar.sql
+\ir 06_msar_presentation.sql
 \ir 10_msar_joinable_tables.sql
 \ir 30_msar_custom_aggregates.sql
 \ir 45_msar_type_casting.sql

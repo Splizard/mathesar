@@ -21,7 +21,7 @@ Return a text array of the Mathesar System schemas.
 
 Update this function whenever the list changes.
 */
-SELECT ARRAY['msar', '__msar', 'mathesar_types']
+SELECT ARRAY['msar', '__msar', 'mathesar_types', 'presentation_schema']
 $$ LANGUAGE SQL STABLE;
 
 
@@ -4171,6 +4171,12 @@ BEGIN
       old_col_name,
       new_col_name
     );
+    -- Keep the name cached alongside the presentation options up to date. The attnum still binds
+    -- the row, so nothing here is load-bearing while the database is live; it is what makes the
+    -- row restore onto the right column once the attnum stops meaning anything.
+    UPDATE presentation_schema.columns
+    SET column_name = new_col_name
+    WHERE "table" = tab_id::regclass AND attnum = col_id;
     RETURN col_id;
   ELSE
     RETURN null;
