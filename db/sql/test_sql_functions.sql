@@ -11673,3 +11673,57 @@ BEGIN
   );
 END;
 $f$ LANGUAGE plpgsql;
+
+
+-- SAYING WHAT CHANGED ----------------------------------------------------------------------------
+
+CREATE OR REPLACE FUNCTION test_change_message_says_what_changed() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(
+    msar.change_message(1234, 'update', '[7]'::jsonb)::jsonb,
+    '{"table": 1234, "op": "update", "keys": ["7"], "count": 1}'::jsonb,
+    'the message says which table, what happened, and which records'
+  );
+  RETURN NEXT is(
+    msar.change_message(1234, 'delete', '[3, 4, 5]'::jsonb)::jsonb -> 'count',
+    '3'::jsonb,
+    'and how many of them there were'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_change_message_keys_are_text() RETURNS SETOF TEXT AS $f$
+BEGIN
+  RETURN NEXT is(
+    msar.keys_as_text('[1, "2", 3]'::jsonb),
+    '["1", "2", "3"]'::jsonb,
+    'a key is written out as text whatever it arrived as, so there is one shape to match against'
+  );
+  RETURN NEXT is(
+    msar.keys_as_text(NULL), '[]'::jsonb, 'and no keys at all is no keys rather than nothing'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
+CREATE OR REPLACE FUNCTION test_change_message_too_long_to_carry() RETURNS SETOF TEXT AS $f$
+DECLARE
+  many jsonb := (SELECT jsonb_agg(i) FROM generate_series(1, 4000) AS i);
+  message jsonb;
+BEGIN
+  message := msar.change_message(1234, 'update', many)::jsonb;
+  RETURN NEXT ok(
+    octet_length(message::text) < 8000,
+    'a change to more records than a message will carry still fits in one'
+  );
+  RETURN NEXT is(
+    message -> 'keys', '[]'::jsonb,
+    'and names none of them rather than some of them'
+  );
+  RETURN NEXT is(
+    message -> 'count', '4000'::jsonb,
+    'but still says how many there were, which is enough to know to ask about the whole table'
+  );
+END;
+$f$ LANGUAGE plpgsql;

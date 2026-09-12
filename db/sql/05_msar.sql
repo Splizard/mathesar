@@ -6585,6 +6585,7 @@ BEGIN
     ),
     msar.get_column_name(tab_id, pk_id)
   ) INTO ids_deleted;
+  PERFORM msar.announce_change(tab_id, 'delete', ids_deleted);
   RETURN ids_deleted;
 END;
 $$ LANGUAGE plpgsql RETURNS NULL ON NULL INPUT;
@@ -6687,6 +6688,9 @@ BEGIN
     return_record_summaries,
     table_record_summary_templates
   );
+  -- Said from inside the transaction that made the change, so it reaches anybody listening only
+  -- if the change is committed. See msar.announce_change.
+  PERFORM msar.announce_change(tab_id, 'insert', jsonb_build_array(rec_created_id));
   RETURN jsonb_build_object(
     'results', rec_created -> 'results',
     'record_summaries', rec_created -> 'record_summaries',
@@ -6758,6 +6762,7 @@ BEGIN
     return_record_summaries,
     table_record_summary_templates
   );
+  PERFORM msar.announce_change(tab_id, 'update', jsonb_build_array(rec_id));
   RETURN jsonb_build_object(
     'results', rec_modified -> 'results',
     'record_summaries', rec_modified -> 'record_summaries',

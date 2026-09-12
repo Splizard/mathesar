@@ -1,5 +1,5 @@
 <script lang="ts">
-  import { tick } from 'svelte';
+  import { onDestroy, tick } from 'svelte';
   import { _ } from 'svelte-i18n';
   import { router } from 'tinro';
 
@@ -14,6 +14,7 @@
     setTabularDataStoreInContext,
   } from '@mathesar/stores/table-data';
   import { tableLayout } from '@mathesar/stores/viewport';
+  import { watchChanges } from '@mathesar/systems/realtime/changes';
   import WithModalRecordView from '@mathesar/systems/record-view-modal/WithModalRecordView.svelte';
   import ActionsPane from '@mathesar/systems/table-view/actions-pane/ActionsPane.svelte';
   import TableView from '@mathesar/systems/table-view/TableView.svelte';
@@ -76,6 +77,41 @@
     hasInitialized = true;
     void activateFirstDataCell();
   }
+
+  /**
+   * Ask again when somebody else changes this table.
+   *
+   * The change says which records, not what they now hold, so the answer is to ask -- which is
+   * also the only way to ask with this user's privileges rather than the privileges of whoever
+   * made the change. Held off for a moment so that a handful of changes arriving together, which
+   * is what a paste or a bulk delete looks like from here, is one request rather than a dozen.
+   *
+   * Our own edits come back to us too, and are asked about again like anybody's. Telling them
+   * apart would mean the message saying who made the change, which is not something it says.
+   */
+  let askAgainSoon: ReturnType<typeof setTimeout> | undefined;
+  let stopWatching: (() => void) | undefined;
+
+  function onChanged() {
+    if (askAgainSoon) clearTimeout(askAgainSoon);
+    askAgainSoon = setTimeout(() => {
+      void tabularData.recordsData.fetch();
+    }, 300);
+  }
+
+  $: {
+    stopWatching?.();
+    stopWatching = watchChanges({
+      databaseId: table.schema.database.id,
+      tables: [table.oid],
+      onChange: onChanged,
+    });
+  }
+
+  onDestroy(() => {
+    stopWatching?.();
+    if (askAgainSoon) clearTimeout(askAgainSoon);
+  });
 
   function handleMetaSerializationChange(s: string) {
     router.location.query.set(metaSerializationQueryKey, s);
