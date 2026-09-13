@@ -216,6 +216,14 @@ AGENT_EMAIL_DOMAIN = os.environ.get('AGENT_EMAIL_DOMAIN') or 'agents.invalid'
 # mathesar/utils/certmint.py and appliance/certmint.
 CERTMINT_SOCKET = os.environ.get('CERTMINT_SOCKET', default=None)
 
+# Where an agent reads the long form of its setup instructions (README.md) and fetches the script
+# it calls Mathesar with (mathesar). It has to be readable before the agent has a certificate
+# installed, so it is the public copy of docs/agents rather than a page behind the gate.
+AGENT_REFERENCE_BASE_URL = (
+    os.environ.get('AGENT_REFERENCE_BASE_URL')
+    or 'https://raw.githubusercontent.com/Splizard/mathesar/release/docs/agents'
+)
+
 SECRETS_ROOT = os.path.join(BASE_DIR, '.secrets')
 SECRET_KEY = os.environ.get("SECRET_KEY")
 # We don't want to persist envvar SECRET_KEY

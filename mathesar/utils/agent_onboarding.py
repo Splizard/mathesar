@@ -2,34 +2,64 @@
 The instructions handed to an agent once it has a certificate.
 
 The point of this file is that setting an agent going should end with something a person can
-paste to their agent, rather than with a certificate and a shrug. What comes back is written
-to be read by the agent itself.
+drop into any AI session -- Claude Code, Codex, Cursor, whatever has a terminal -- and have
+that session come out the other end reading and writing the database as itself.
 
-Two rules shape all of it.
+It is deliberately short. A prompt is pasted into somebody's working session, where every line
+of it competes with the work they were doing, so it carries only what is particular to this
+agent and what must be obeyed before anything else is read: why it has been given the database,
+who it is, where its files are, and the handful of rules. Everything else -- the password
+options, the API, troubleshooting -- is on a public reference page (docs/agents/README.md), and
+the script it calls Mathesar with sits beside that page. Both have to be readable before the
+agent has a certificate installed, which is why they are not served by Mathesar, where the
+certificate gate would stand in front of them.
 
-**The password never appears here.** It is shown once, to the person, in the browser. In this
-text it would travel into the agent's context and from there into a transcript, a log, and
-whatever the agent quotes back -- and a password that has been in a transcript is not a
-password any more.
+Three rules survive the cut, because they cannot wait until the reference has been read.
 
-**Saying "ask the person for it" is not enough**, because an agent told that will ask in the
-conversation, which puts it in the transcript by a slower route. So the instructions say how
-to ask: through a hidden prompt the person types into directly, with the answer going
-straight to openssl and never through the agent's own reasoning. Better still, they offer
-the version where the person does the one-time conversion themselves and the agent never
-sees the password at all.
+**The password never appears here**, and the agent is told never to ask for it in the
+conversation. The prompt goes into an agent's context and from there into a transcript and a
+log; a password that has been through one is spent.
 
-The last section is about what to remember. An agent that has to be walked through this every
-session is not set up, it is set up repeatedly -- so it is told what to write down (where the
-key is, who it is, how to call) and, just as firmly, what never to write down.
+**A certificate already in its place is reused.** It lives in one well-known directory, so any
+session can find it, and the first thing the prompt has the agent do is look there. An agent set
+up every session is not set up, only set up repeatedly.
+
+**It says why the database is being shared** -- because it holds data for the work the agent and
+its person are doing together -- which is what tells the agent what it is there for and how far
+to go.
 """
 
-from urllib.parse import urlsplit
+from django.conf import settings
+
+HOME = "~/.config/mathesar"
 
 
 def bundle_filename(agent):
     """What the downloaded bundle is called, which the instructions then refer to."""
     return f"{agent.cert_slug}.p12"
+
+
+def sign_in_provider():
+    """
+    The single sign-on provider an agent signs in through.
+
+    An agent has no password, so the only way it gets a session is the OIDC provider that reads
+    its certificate. On the appliance that is certid, which is also what it is called when no
+    provider is configured at all -- in which case the sign-in will not work, but the prompt
+    is still pointing at the right thing to set up.
+    """
+    apps = settings.SSO_CONFIG.oidc_apps
+    return apps[0]["provider_id"] if apps else "certid"
+
+
+def reference_url():
+    """The public page an agent reads for everything the prompt leaves out."""
+    return f"{settings.AGENT_REFERENCE_BASE_URL.rstrip('/')}/README.md"
+
+
+def script_url():
+    """Where the agent fetches the script it calls Mathesar with."""
+    return f"{settings.AGENT_REFERENCE_BASE_URL.rstrip('/')}/mathesar"
 
 
 def onboarding_prompt(agent, site_url):
@@ -40,132 +70,55 @@ def onboarding_prompt(agent, site_url):
         agent: the agent user, already issued a certificate.
         site_url: where this Mathesar answers, e.g. https://my.hiddenstrings.com
     """
-    host = urlsplit(site_url).netloc or site_url
-    bundle = bundle_filename(agent)
+    site_url = site_url.rstrip("/")
     slug = agent.cert_slug
-    home = "~/.config/mathesar"
+    home = HOME
     return f"""\
-You have been given your own access to Mathesar, as "{agent.display_name}".
+# Mathesar access for {agent.display_name}
 
-You are a collaborator there in your own right, not a borrowed login. Work you do is
-recorded against you, and you can be assigned rows through a User column the way a person
-can. You reach exactly the databases your owner reaches, and nothing further.
+The person you are working with is sharing their Mathesar database with you because it holds
+data for the project you are working on together. Use it for that work -- look things up, and
+keep rows up to date as the work moves along. It is live data other people rely on.
 
     site:       {site_url}
-    you are:    {agent.email}
-    your key:   {home}/{slug}.key (after step 2)
+    you are:    {agent.display_name} ({agent.email}); what you change is recorded against you
+    your files: {home}/{slug}.crt, .key, .conf and the script `mathesar`
+    reference:  {reference_url()}
 
-## 1. Getting the password, without putting it in this conversation
+You need a shell with `curl` and `openssl`; without one, say so and stop. The reference has the
+detail for every step below.
 
-{host} asks every caller for a client certificate.
-You have been issued one of your own, in a file called
-{bundle}. It is encrypted, and the password is NOT in
-these instructions on purpose.
+## 1. Reuse your certificate if you already have it
 
-**Do not ask for the password in this conversation.** Anything typed to you here is in your
-context, and from there in a transcript, a log, and anything you quote back. Ask for it in a
-way that goes past you instead.
+    cd {home} && ls {slug}.crt {slug}.key && openssl x509 -in {slug}.crt -noout -checkend 86400
 
-The best option, if the person is at the machine: ask THEM to run step 2 themselves, in
-their own terminal, and tell you when the files exist. You never see the password at all,
-and nothing is lost by it.
+`Certificate will not expire`: skip to step 3, and do not look for a bundle or ask for a password.
+Anything else: do step 2.
 
-If you must collect it yourself, use a hidden prompt and send the answer straight to a file
-that openssl reads, never into a variable you print, a command line, or your own reasoning:
+## 2. Install it (first time, or after a reissue)
 
-    umask 077
-    mkdir -p {home} && cd {home}
-    # macOS: a real dialog box, with the typing hidden
-    osascript -e 'display dialog "Mathesar bundle password" default answer "" \\
-      with hidden answer' -e 'text returned of result' > .pw
-    # Linux with zenity:   zenity --password > .pw
-    # Anywhere with a tty: read -rs -p "Mathesar bundle password: " p && printf %s "$p" > .pw && unset p
+The person has a bundle, `{bundle_filename(agent)}`, and its password. **Never ask for the
+password in this conversation** -- it would end up in your transcript. Ask them to unpack it
+themselves, or collect it through a hidden prompt; the reference has the commands for both
+("Installing the certificate"). The files go at the paths above.
 
-Never `echo` it, never pass it as `-passin pass:...` (that lands in the process list and in
-shell history), and never keep it after step 2.
+## 3. Connect
 
-## 2. Installing the certificate
+    umask 077 && mkdir -p {home} && chmod 700 {home}
+    printf 'site=%s\\nagent=%s\\nprovider=%s\\n' {site_url} {slug} {sign_in_provider()} > {home}/{slug}.conf
+    curl -fsSL {script_url()} -o {home}/mathesar && chmod 700 {home}/mathesar
+    {home}/mathesar databases.configured.list
 
-    umask 077
-    mkdir -p {home} && chmod 700 {home}
-    mv {bundle} {home}/
-    cd {home}
+A list of databases means you are in; the script signs itself in with your certificate. The
+reference ("Finding your way around") shows how to find tables and read and change rows. If it
+is not clear which tables belong to this work, ask.
 
-    openssl pkcs12 -in {slug}.p12 -clcerts -nokeys \\
-      -out {slug}.crt -passin file:.pw
-    openssl pkcs12 -in {slug}.p12 -nocerts -nodes \\
-      -out {slug}.key -passin file:.pw
+## Rules
 
-    rm -f .pw {slug}.p12          # the password, and the bundle that needed it
-    chmod 600 {slug}.key
-    chmod 644 {slug}.crt
-
-Delete `.pw` even if a command failed. If you are on a machine with a keychain, importing
-the bundle there instead is better still -- on macOS, `security import {slug}.p12
--k ~/Library/Keychains/login.keychain-db` prompts for the password itself and you never
-handle it.
-
-`{slug}.key` is now the secret, and it is not password-protected. **Anyone holding that file
-is you.** Never copy it into a repository, a container image, a prompt, a pastebin, an issue,
-or anywhere a backup or a sync folder might pick it up. Never read its contents aloud. If you
-think it has been somewhere it should not have, say so and ask for the certificate to be
-reissued -- that revokes the old one.
-
-## 3. Checking it worked
-
-    curl -sS -o /dev/null -w '%{{http_code}}\\n' \\
-         --cert {home}/{slug}.crt \\
-         --key {home}/{slug}.key \\
-         {site_url}/
-
-Any HTTP status at all means your certificate was accepted: the gate refuses the connection
-before HTTP begins, so a number here is the proof. `000`, a connection reset, or a TLS error
-means the certificate is not being sent or not being accepted -- check the two paths above
-before anything else.
-
-Leave the `--cert` and `--key` off and you should get nothing back. That is the gate working.
-
-## 4. What you cannot do yet
-
-You can reach the site, and it knows who you are. **You cannot call the JSON-RPC API from a
-script yet.** The API wants a browser session, which is obtained through a sign-in flow that
-curl cannot walk through on its own, and you have no password to fall back on -- by design,
-since a password would be a second way in that nobody is watching.
-
-Closing that gap is the next piece of work: Mathesar will authenticate you from the
-certificate you are already presenting, and then everything below becomes available. Until it
-lands, do not try to work around this. Specifically: do not ask anybody for their password,
-do not reuse a human's session cookie, and do not look for another route in. If you are asked
-to do something that needs the API, say that agent API access is not finished yet.
-
-## 5. Writing it down for next time
-
-Put this in whatever notes you keep between sessions, so nobody has to walk you through it
-again:
-
-    Mathesar at {site_url}, as "{agent.display_name}" ({agent.email}).
-    Client certificate required on every request:
-      --cert {home}/{slug}.crt
-      --key  {home}/{slug}.key
-    JSON-RPC at {site_url}/api/rpc/v0/
-
-Write down the paths. **Never write down the password, the contents of the key, or anything
-you had to unlock to get them.** Notes get read, synced, and shared; the paths are useless to
-anyone without the file, and the password would not be.
-
-If the certificate is ever reissued, only the files change -- the paths above stay right.
-
-## 6. Using it, once the gap above is closed
-
-Mathesar speaks JSON-RPC at {site_url}/api/rpc/v0/, and you will send the certificate with
-every request. Useful methods to start from: `databases.configured.list`, `schemas.list`,
-`tables.list`, `records.list`, `records.patch`. Each takes named params; `tables.list` wants
-a `database_id` and a `schema_oid`.
-
-## 7. If you stop being let in
-
-A certificate that stops being accepted has been revoked -- someone stopped you
-deliberately, or it expired. Do not look for another way in, do not use anybody else's
-credentials, and do not reuse a certificate you were told to replace. Say what happened and
-stop.
+- Ask before deleting anything or changing more than a handful of rows. Change tables and columns
+  only when asked.
+- `{slug}.key` and the `.session` file beside it are you: never copy, print or commit them.
+- In your notes for next session, keep the site, who you are and the paths -- never a secret.
+- If you are refused or lack a permission, say so and stop. Do not look for another way in, and
+  do not use anybody else's credentials.
 """

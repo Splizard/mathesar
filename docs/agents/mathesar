@@ -1,0 +1,88 @@
+#!/bin/sh
+# mathesar -- call Mathesar's JSON-RPC API as an agent, signing in with its client certificate.
+# Reference: https://github.com/Splizard/mathesar/blob/release/docs/agents/README.md
+#
+#   mathesar METHOD                      no params
+#   mathesar METHOD '{"name": value}'    named params
+#   mathesar METHOD - < params.json      params from stdin, for anything long or quoted
+#
+# Reads ~/.config/mathesar/<agent>.conf (site=, agent=, provider=) and the <agent>.crt and
+# <agent>.key beside it. With more than one agent set up here, pick one: MATHESAR_AGENT=<agent>.
+set -eu
+umask 077
+dir="$HOME/.config/mathesar"
+
+conf=
+if [ -n "${MATHESAR_AGENT:-}" ]; then
+  conf="$dir/$MATHESAR_AGENT.conf"
+else
+  for c in "$dir"/*.conf; do
+    [ -e "$c" ] || break
+    if [ -n "$conf" ]; then
+      echo "mathesar: more than one agent in $dir -- set MATHESAR_AGENT" >&2
+      exit 2
+    fi
+    conf=$c
+  done
+fi
+if [ -z "$conf" ] || [ ! -r "$conf" ]; then
+  echo "mathesar: no agent set up in $dir -- see the reference named at the top of this script" >&2
+  exit 2
+fi
+
+# Read, never sourced: the file names three values and is not a program.
+setting() { sed -n "s/^$1=//p" "$conf" | tail -n 1; }
+site=$(setting site)
+name=$(setting agent)
+provider=$(setting provider)
+jar="$dir/$name.session"
+
+web() {
+  curl -sS --cert "$dir/$name.crt" --key "$dir/$name.key" -b "$jar" -c "$jar" "$@"
+}
+
+sign_in() {
+  login="$site/auth/oidc/$provider/login/?process=login"
+  token=$(web "$login" | sed -n 's/.*name="csrfmiddlewaretoken" value="\([^"]*\)".*/\1/p' | head -n 1)
+  if [ -z "$token" ]; then
+    echo "mathesar: no sign-in form at $login" >&2
+    exit 1
+  fi
+  # Mathesar -> the identity provider, which reads the certificate -> back to Mathesar. Each hop
+  # is followed by hand: curl -L does not reliably present the certificate to the second host.
+  next=$(web -o /dev/null -w '%{redirect_url}' -e "$site/auth/login/" \
+             -d "csrfmiddlewaretoken=$token" "$login")
+  [ -n "$next" ] && next=$(web -o /dev/null -w '%{redirect_url}' "$next")
+  if [ -z "$next" ]; then
+    echo "mathesar: sign-in was refused -- certificate revoked or expired?" >&2
+    exit 1
+  fi
+  web -o /dev/null "$next"
+}
+
+call() {
+  web -H 'Content-Type: application/json' \
+      --data-binary "{\"jsonrpc\": \"2.0\", \"id\": 1, \"method\": \"$1\", \"params\": $2}" \
+      "$site/api/rpc/v0/"
+}
+
+if [ $# -lt 1 ]; then
+  echo "usage: mathesar METHOD ['{\"name\": value}' | -]" >&2
+  exit 2
+fi
+params='{}'
+[ $# -ge 2 ] && params=$2
+[ "$params" = - ] && params=$(cat)
+
+out=$(call "$1" "$params")
+case $out in
+  *'"Authentication failed'*)
+    sign_in
+    out=$(call "$1" "$params")
+    case $out in
+      *'"Authentication failed'*)
+        echo "mathesar: signed in but still not recognised -- certificate revoked or expired?" >&2
+        exit 1 ;;
+    esac ;;
+esac
+printf '%s\n' "$out"

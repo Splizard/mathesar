@@ -9,14 +9,18 @@ end up in the instructions handed to the agent.
 import base64
 import json
 import socketserver
+import subprocess
 import threading
 from http.server import BaseHTTPRequestHandler
+from pathlib import Path
 
 import pytest
 
 from mathesar.models import User
 from mathesar.utils import certmint
-from mathesar.utils.agent_onboarding import onboarding_prompt
+from django.conf import settings as django_settings
+
+from mathesar.utils.agent_onboarding import onboarding_prompt, reference_url, script_url
 from mathesar.utils.users import (
     add_agent,
     delete_agent,
@@ -197,106 +201,143 @@ class TestRevoking:
         assert User.objects.filter(id=claude.id).exists()
 
 
-class TestTheInstructions:
+class TestThePrompt:
     """
-    The prompt is handed to the agent, so it lands in a context window and from there in a
-    transcript. What it must not carry matters more than what it says.
+    The prompt is pasted into somebody's working session, so it is short and carries only what
+    is particular to this agent and what must be obeyed before the reference has been read. It
+    lands in a context window and from there in a transcript, so what it must not carry matters
+    more than what it says.
     """
 
-    def test_the_password_is_never_in_them(self, helper, claude):
+    def test_the_password_is_never_in_it(self, helper, claude):
         issued = provision_agent_certificate(claude.owner, claude.id, SITE)
         assert issued["password"] not in issued["prompt"]
 
-    def test_they_say_where_the_password_is_not(self, helper, claude):
-        issued = provision_agent_certificate(claude.owner, claude.id, SITE)
-        assert "NOT in these instructions" in flat(issued["prompt"])
+    def test_it_is_short(self, claude):
+        assert len(onboarding_prompt(claude, SITE).splitlines()) <= 60
 
-    def test_they_forbid_asking_for_it_in_the_conversation(self, claude):
+    def test_it_says_why_the_database_is_being_shared(self, claude):
+        prompt = flat(onboarding_prompt(claude, SITE))
+        assert "because it holds data for the project you are working on together" in prompt
+        assert "Use it for that work" in prompt
+
+    def test_it_names_the_agent_and_this_installation(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "Quentin's Claude" in prompt
+        assert claude.email in prompt
+        assert SITE in prompt
+
+    def test_it_points_at_the_public_reference_and_script(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert reference_url() in prompt
+        assert f"curl -fsSL {script_url()} -o ~/.config/mathesar/mathesar" in prompt
+
+    def test_the_reference_is_where_the_settings_say(self, claude, settings):
+        settings.AGENT_REFERENCE_BASE_URL = "https://example.org/agents/"
+        prompt = onboarding_prompt(claude, SITE)
+        assert "https://example.org/agents/README.md" in prompt
+        assert "https://example.org/agents/mathesar" in prompt
+
+    def test_it_reuses_a_certificate_already_in_its_place(self, claude):
+        """Set up once, not every session: look in the one place it lives before anything."""
+        prompt = flat(onboarding_prompt(claude, SITE))
+        assert "ls quentin-claude.crt quentin-claude.key" in prompt
+        assert "-checkend 86400" in prompt
+        assert "do not look for a bundle or ask for a password" in prompt
+
+    def test_it_forbids_asking_for_the_password_in_the_conversation(self, claude):
         """
         "Ask the person" is not enough on its own: an agent told that asks in the chat,
         which puts the password in the transcript by a slower route.
         """
-        prompt = onboarding_prompt(claude, SITE)
-        assert "Do not ask for the password in this conversation" in flat(prompt)
-
-    def test_they_show_how_to_ask_without_seeing_it(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "with hidden answer" in prompt  # macOS dialog
-        assert "zenity --password" in prompt
-        assert "read -rs" in prompt
-
-    def test_they_offer_the_version_where_the_agent_never_sees_it(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "ask THEM to run step 2 themselves" in flat(prompt)
-
-    def test_they_warn_off_the_ways_a_password_leaks(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "-passin pass:" in prompt
-        assert "shell history" in flat(prompt)
-
-    def test_they_say_to_delete_the_password_afterwards(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "rm -f .pw" in prompt
-        assert "Delete `.pw` even if a command failed" in flat(prompt)
-
-    def test_they_say_to_store_it_somewhere_tight(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "umask 077" in prompt
-        assert "chmod 700" in prompt
-        assert "chmod 600" in prompt
-        assert "security import" in prompt  # the keychain, which is better still
-
-    def test_they_say_to_remember_it_for_next_time(self, claude):
-        """An agent walked through this every session is not set up, only set up again."""
-        prompt = onboarding_prompt(claude, SITE)
-        assert "notes you keep between sessions" in flat(prompt)
-        assert "Write down the paths" in flat(prompt)
-
-    def test_they_say_what_never_to_write_down(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "Never write down the password" in flat(prompt)
-
-    def test_they_name_the_agent_and_its_address(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "Quentin's Claude" in flat(prompt)
-        assert claude.email in prompt
-
-    def test_they_point_at_this_installation(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert SITE in prompt
-        assert "my.example.com" in prompt
-
-    def test_they_say_what_to_do_when_shut_out(self, claude):
-        """An agent that loses access should stop, not go looking for another way in."""
-        prompt = onboarding_prompt(claude, SITE)
-        assert "has been revoked" in flat(prompt)
-        assert "do not use anybody else's credentials" in flat(prompt).lower()
-        assert "Say what happened and stop." in flat(prompt)
-
-    def test_they_tell_it_to_guard_the_key(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "chmod 600" in prompt
-        assert "Anyone holding that file is you." in flat(prompt)
-        assert "ask for the certificate to be reissued" in flat(prompt)
-
-
-class TestSayingWhatDoesNotWorkYet:
-    """
-    An agent can reach the site and be recognised, but cannot call the API from a script:
-    that needs a browser sign-in flow, and an agent deliberately has no password to fall
-    back on. Saying so in the prompt is what keeps an agent from inventing a way round it.
-    """
-
-    def test_they_say_the_api_is_not_reachable_yet(self, claude):
-        prompt = onboarding_prompt(claude, SITE)
-        assert "You cannot call the JSON-RPC API from a script yet" in flat(prompt)
-
-    def test_they_forbid_the_obvious_workarounds(self, claude):
         prompt = flat(onboarding_prompt(claude, SITE))
-        assert "do not ask anybody for their password" in prompt.lower()
-        assert "do not reuse a human's session cookie" in prompt.lower()
+        assert "Never ask for the password in this conversation" in prompt
+        assert "Ask them to unpack it themselves" in prompt
 
-    def test_the_check_that_is_offered_is_one_that_works(self, claude):
-        """It checks the certificate is accepted, which is all that can be checked today."""
+    def test_it_writes_the_config_the_script_reads(self, claude):
         prompt = onboarding_prompt(claude, SITE)
-        assert "Any HTTP status at all means your certificate was accepted" in flat(prompt)
+        assert f"{SITE} quentin-claude certid > ~/.config/mathesar/quentin-claude.conf" in prompt
+
+    def test_the_config_names_whichever_provider_is_configured(self, claude, settings):
+        before = settings.SSO_CONFIG.oidc_apps
+        settings.SSO_CONFIG.oidc_apps = [{"provider_id": "elsewhere"}]
+        try:
+            assert "quentin-claude elsewhere >" in onboarding_prompt(claude, SITE)
+        finally:
+            settings.SSO_CONFIG.oidc_apps = before
+
+    def test_it_carries_the_rules_that_cannot_wait(self, claude):
+        prompt = flat(onboarding_prompt(claude, SITE))
+        assert "Ask before deleting anything" in prompt
+        assert "never copy, print or commit them" in prompt
+        assert "never a secret" in prompt
+        assert "say so and stop" in prompt
+        assert "do not use anybody else's credentials" in prompt
+
+
+REFERENCE = Path(django_settings.BASE_DIR) / "docs" / "agents"
+
+
+class TestTheReference:
+    """
+    The public page carries what the prompt leaves out. It is the only place an agent learns how
+    to get the password past itself, so those parts are checked as closely as the prompt was.
+    """
+
+    @pytest.fixture
+    def page(self):
+        return flat((REFERENCE / "README.md").read_text())
+
+    def test_it_shows_how_to_ask_without_seeing_the_password(self, page):
+        assert "with hidden answer" in page  # macOS dialog
+        assert "zenity --password" in page
+        assert "read -rs" in page
+        assert "the person unpacks it themselves" in page
+
+    def test_it_warns_off_the_ways_a_password_leaks(self, page):
+        assert "Do not ask for the password in the conversation" in page
+        assert "-passin pass:" in page
+        assert "shell history" in page
+        assert "Delete `.pw` even if a command failed" in page
+
+    def test_it_says_to_store_things_tightly(self, page):
+        assert "umask 077" in page
+        assert "chmod 700" in page
+        assert "chmod 600" in page
+        assert "Anyone holding either file is you." in page
+
+    def test_it_says_how_rows_are_keyed(self, page):
+        assert "rows are keyed by column id as a string, not by name" in page
+
+    def test_it_says_what_never_to_write_down(self, page):
+        assert "Never write down the password" in page
+
+    def test_it_says_what_to_do_when_shut_out(self, page):
+        assert "do not use anybody else's credentials" in page
+        assert "do not reuse a human's session cookie" in page
+        assert "Say what happened and stop." in page
+
+    def test_it_is_about_no_installation_in_particular(self, page):
+        assert "hiddenstrings" not in page
+
+
+class TestTheScript:
+    """The script the prompt fetches: generic, told everything by the config the prompt writes."""
+
+    @pytest.fixture
+    def script(self):
+        return (REFERENCE / "mathesar").read_text()
+
+    def test_it_is_valid_shell(self):
+        subprocess.run(["sh", "-n", str(REFERENCE / "mathesar")], check=True)
+
+    def test_it_signs_in_through_the_configured_provider(self, script):
+        assert '"$site/auth/oidc/$provider/login/?process=login"' in script
+        assert '"$site/api/rpc/v0/"' in script
+
+    def test_it_reads_the_config_rather_than_running_it(self, script):
+        assert "sed -n" in script
+        assert '. "$conf"' not in script
+
+    def test_it_is_about_no_installation_in_particular(self, script):
+        assert "hiddenstrings" not in script

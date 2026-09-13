@@ -78,7 +78,7 @@
   "cell": "セル",
   "cell_cannot_be_null_for_column": "この列のセル値はNULLにできません。",
   "certificate_password_help": "Do not paste this into a chat with your agent. The instructions below tell it to open a hidden password prompt instead — type it there, or run the install step yourself so the agent never sees it at all.",
-  "certificate_prompt_help": "Everything the agent needs: how to ask for the password without putting it in the conversation, where to keep the certificate, and what to note down so it does not have to be set up again next session. Safe to paste — it carries no secret.",
+  "certificate_prompt_help": "Paste this into any AI session that can run commands — Claude Code, Codex, Cursor — and it will set itself up: unpack the certificate without seeing the password, sign in as your agent, and start reading and changing rows. Safe to paste — it carries no secret.",
   "certificate_shown_once": "The password below is shown once and kept nowhere. If you lose it, issue the certificate again — it cannot be recovered.",
   "certificate_step_download": "1. Download the bundle",
   "certificate_step_password": "2. Keep the password out of the chat",
