@@ -113,16 +113,32 @@ reissued -- that revokes the old one.
 
 ## 3. Checking it worked
 
-    curl --cert {home}/{slug}.crt \\
+    curl -sS -o /dev/null -w '%{{http_code}}\\n' \\
+         --cert {home}/{slug}.crt \\
          --key {home}/{slug}.key \\
-         {site_url}/api/rpc/v0/ \\
-         -H 'Content-Type: application/json' \\
-         -d '{{"jsonrpc":"2.0","id":1,"method":"users.current_ip_address","params":{{}}}}'
+         {site_url}/
 
-A JSON answer means the certificate is accepted. A connection reset or a TLS error means it
-is not being sent -- check the two paths before anything else.
+Any HTTP status at all means your certificate was accepted: the gate refuses the connection
+before HTTP begins, so a number here is the proof. `000`, a connection reset, or a TLS error
+means the certificate is not being sent or not being accepted -- check the two paths above
+before anything else.
 
-## 4. Writing it down for next time
+Leave the `--cert` and `--key` off and you should get nothing back. That is the gate working.
+
+## 4. What you cannot do yet
+
+You can reach the site, and it knows who you are. **You cannot call the JSON-RPC API from a
+script yet.** The API wants a browser session, which is obtained through a sign-in flow that
+curl cannot walk through on its own, and you have no password to fall back on -- by design,
+since a password would be a second way in that nobody is watching.
+
+Closing that gap is the next piece of work: Mathesar will authenticate you from the
+certificate you are already presenting, and then everything below becomes available. Until it
+lands, do not try to work around this. Specifically: do not ask anybody for their password,
+do not reuse a human's session cookie, and do not look for another route in. If you are asked
+to do something that needs the API, say that agent API access is not finished yet.
+
+## 5. Writing it down for next time
 
 Put this in whatever notes you keep between sessions, so nobody has to walk you through it
 again:
@@ -139,14 +155,14 @@ anyone without the file, and the password would not be.
 
 If the certificate is ever reissued, only the files change -- the paths above stay right.
 
-## 5. Using it
+## 6. Using it, once the gap above is closed
 
-Mathesar speaks JSON-RPC. Send the certificate with every request. Useful methods to start
-from: `databases.configured.list`, `schemas.list`, `tables.list`, `records.list`,
-`records.patch`. Each takes named params; `tables.list` wants a `database_id` and a
-`schema_oid`.
+Mathesar speaks JSON-RPC at {site_url}/api/rpc/v0/, and you will send the certificate with
+every request. Useful methods to start from: `databases.configured.list`, `schemas.list`,
+`tables.list`, `records.list`, `records.patch`. Each takes named params; `tables.list` wants
+a `database_id` and a `schema_oid`.
 
-## 6. If you stop being let in
+## 7. If you stop being let in
 
 A certificate that stops being accepted has been revoked -- someone stopped you
 deliberately, or it expired. Do not look for another way in, do not use anybody else's

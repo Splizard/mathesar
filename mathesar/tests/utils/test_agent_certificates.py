@@ -278,3 +278,25 @@ class TestTheInstructions:
         assert "chmod 600" in prompt
         assert "Anyone holding that file is you." in flat(prompt)
         assert "ask for the certificate to be reissued" in flat(prompt)
+
+
+class TestSayingWhatDoesNotWorkYet:
+    """
+    An agent can reach the site and be recognised, but cannot call the API from a script:
+    that needs a browser sign-in flow, and an agent deliberately has no password to fall
+    back on. Saying so in the prompt is what keeps an agent from inventing a way round it.
+    """
+
+    def test_they_say_the_api_is_not_reachable_yet(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "You cannot call the JSON-RPC API from a script yet" in flat(prompt)
+
+    def test_they_forbid_the_obvious_workarounds(self, claude):
+        prompt = flat(onboarding_prompt(claude, SITE))
+        assert "do not ask anybody for their password" in prompt.lower()
+        assert "do not reuse a human's session cookie" in prompt.lower()
+
+    def test_the_check_that_is_offered_is_one_that_works(self, claude):
+        """It checks the certificate is accepted, which is all that can be checked today."""
+        prompt = onboarding_prompt(claude, SITE)
+        assert "Any HTTP status at all means your certificate was accepted" in flat(prompt)
