@@ -27,6 +27,17 @@ from mathesar.utils.users import (
 SITE = "https://my.example.com"
 
 
+def flat(text):
+    """
+    The prose with its line breaks flattened.
+
+    The prompt is hard-wrapped for reading, and where a sentence happens to wrap is not
+    something a test should care about -- otherwise rewording a paragraph breaks tests that
+    were checking the wording was there at all.
+    """
+    return " ".join(text.split())
+
+
 class FakeHelper:
     """A stand-in for certmint, listening on a unix socket the way the real one does."""
 
@@ -198,11 +209,56 @@ class TestTheInstructions:
 
     def test_they_say_where_the_password_is_not(self, helper, claude):
         issued = provision_agent_certificate(claude.owner, claude.id, SITE)
-        assert "NOT in these\ninstructions" in issued["prompt"]
+        assert "NOT in these instructions" in flat(issued["prompt"])
+
+    def test_they_forbid_asking_for_it_in_the_conversation(self, claude):
+        """
+        "Ask the person" is not enough on its own: an agent told that asks in the chat,
+        which puts the password in the transcript by a slower route.
+        """
+        prompt = onboarding_prompt(claude, SITE)
+        assert "Do not ask for the password in this conversation" in flat(prompt)
+
+    def test_they_show_how_to_ask_without_seeing_it(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "with hidden answer" in prompt  # macOS dialog
+        assert "zenity --password" in prompt
+        assert "read -rs" in prompt
+
+    def test_they_offer_the_version_where_the_agent_never_sees_it(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "ask THEM to run step 2 themselves" in flat(prompt)
+
+    def test_they_warn_off_the_ways_a_password_leaks(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "-passin pass:" in prompt
+        assert "shell history" in flat(prompt)
+
+    def test_they_say_to_delete_the_password_afterwards(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "rm -f .pw" in prompt
+        assert "Delete `.pw` even if a command failed" in flat(prompt)
+
+    def test_they_say_to_store_it_somewhere_tight(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "umask 077" in prompt
+        assert "chmod 700" in prompt
+        assert "chmod 600" in prompt
+        assert "security import" in prompt  # the keychain, which is better still
+
+    def test_they_say_to_remember_it_for_next_time(self, claude):
+        """An agent walked through this every session is not set up, only set up again."""
+        prompt = onboarding_prompt(claude, SITE)
+        assert "notes you keep between sessions" in flat(prompt)
+        assert "Write down the paths" in flat(prompt)
+
+    def test_they_say_what_never_to_write_down(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        assert "Never write down the password" in flat(prompt)
 
     def test_they_name_the_agent_and_its_address(self, claude):
         prompt = onboarding_prompt(claude, SITE)
-        assert "Quentin's Claude" in prompt
+        assert "Quentin's Claude" in flat(prompt)
         assert claude.email in prompt
 
     def test_they_point_at_this_installation(self, claude):
@@ -213,10 +269,12 @@ class TestTheInstructions:
     def test_they_say_what_to_do_when_shut_out(self, claude):
         """An agent that loses access should stop, not go looking for another way in."""
         prompt = onboarding_prompt(claude, SITE)
-        assert "revoked" in prompt
-        assert "do not use anybody else's credentials" in prompt.lower()
+        assert "has been revoked" in flat(prompt)
+        assert "do not use anybody else's credentials" in flat(prompt).lower()
+        assert "Say what happened and stop." in flat(prompt)
 
     def test_they_tell_it_to_guard_the_key(self, claude):
         prompt = onboarding_prompt(claude, SITE)
         assert "chmod 600" in prompt
-        assert "Anyone holding it is you" in prompt
+        assert "Anyone holding that file is you." in flat(prompt)
+        assert "ask for the certificate to be reissued" in flat(prompt)
