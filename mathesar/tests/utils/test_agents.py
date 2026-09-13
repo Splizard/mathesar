@@ -88,12 +88,33 @@ class TestDerivedHandles:
         User.objects.create(username="quentin__claude")
         assert derive_username(quentin, "Claude") == "quentin__claude_2"
 
-    def test_email_tags_the_owners_own(self, quentin):
-        assert derive_email(quentin, "Claude") == "q+claude@example.com"
+    def test_the_identifier_is_on_a_domain_nobody_can_own(self, quentin):
+        """
+        Not a mailbox, and deliberately not on a real domain.
 
-    def test_email_is_undeliverable_when_the_owner_has_none(self, db):
+        Inventing an address on somebody's own domain would imply a mailbox that does not
+        exist, could collide with one that does, and would start delivering somewhere the
+        day that domain grew a catch-all. RFC 2606 reserves `.invalid` so that it cannot be
+        registered by anybody, which is what makes it the honest choice here.
+        """
+        assert derive_email(quentin, "Claude") == "quentin-claude@agents.invalid"
+
+    def test_it_is_not_built_on_the_owners_domain(self, quentin):
+        assert "example.com" not in derive_email(quentin, "Claude")
+
+    def test_it_avoids_plus_addressing(self, quentin):
+        """Understood almost everywhere is not everywhere, and this has to survive being
+        typed into a certificate, a config file and an allow-list."""
+        assert "+" not in derive_email(quentin, "Claude")
+
+    def test_it_does_not_need_the_owner_to_have_an_address(self, db):
         nameless = User.objects.create(username="someone")
-        assert derive_email(nameless, "Claude").endswith("@agents.invalid")
+        assert derive_email(nameless, "Claude") == "someone-claude@agents.invalid"
+
+    def test_an_installation_may_name_its_own_domain(self, quentin, settings):
+        """For a gate that insists on a domain it recognises."""
+        settings.AGENT_EMAIL_DOMAIN = "agents.hiddenstrings.com"
+        assert derive_email(quentin, "Claude") == "quentin-claude@agents.hiddenstrings.com"
 
 
 class TestSettingOneGoing:
@@ -114,7 +135,7 @@ class TestSettingOneGoing:
 
     def test_an_agent_gets_an_address_of_its_own(self, quentin):
         agent = add_agent(quentin, "Claude", "claude")
-        assert agent.email == "q+claude@example.com"
+        assert agent.email == "quentin-claude@agents.invalid"
         assert agent.email != quentin.email
 
     def test_an_address_may_be_given(self, quentin):

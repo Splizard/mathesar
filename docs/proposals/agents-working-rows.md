@@ -85,26 +85,50 @@ your own name, because a picker is personal and a stored value is not.
 Because it is composed rather than stored, renaming a person renames their agents
 with them, and there is nothing to migrate.
 
-#### An agent needs its own way in
+#### An agent needs its own way in (*Built*)
 
 This is the part that is easy to miss. Where Mathesar sits behind a gate that
 works out who is knocking — SSO merging accounts by email, or this fork's
 appliance deriving an identity from the email in a client certificate — **the
-address is the identity**. An agent therefore gets an address of its own, by
-default its owner's with the agent's name tagged onto it
-(`you+claude@example.com`): deliverable to the owner, unmistakably an agent of
-theirs, and theirs to hand out.
+address is the identity**. An agent therefore gets one of its own: sharing its
+owner's would make the two of them the same person to everything upstream of
+Mathesar, which is exactly the telling-apart that owning an agent is for.
 
-Sharing the owner's address instead would make the two of them the same person to
-everything upstream of Mathesar, which is exactly the telling-apart that owning an
-agent is for.
+But it is **not a mailbox**, and it would be wrong to invent one on somebody's
+real domain — that implies a mailbox that does not exist, might collide with one
+that does, and would quietly start delivering the day that domain grew a
+catch-all. So it is built on a domain nobody can register: RFC 2606 reserves
+`.invalid` for precisely this, which makes `quentin-claude@agents.invalid` read,
+to anyone who sees it, as the identifier it is. `AGENT_EMAIL_DOMAIN` points it at
+a real domain for an identity provider that insists on one.
 
-Creating an agent therefore does **not** let it in. On an appliance with an mTLS
-gate, three further deliberate acts are needed, each by whoever runs it: issue the
-agent a client certificate for its address, trust that certificate at the gate,
-and allow the address at the identity service. That is a feature — an agent
-existing in Mathesar and an agent being able to reach Mathesar are separate
-decisions, and the second one is revocable on its own by pulling the certificate.
+#### Provisioning is a button (*Built*)
+
+Three manual steps and an ssh session is not "set an agent going", it is sysadmin
+homework, so the profile page issues the certificate itself. Pressing **Provision
+certificate** returns three things once: the PKCS#12 bundle, its password, and a
+setup prompt written to be handed to the agent.
+
+Mathesar holds no signing key. A small root-owned helper (`certmint`) holds the
+CA and listens on a unix socket only root and Mathesar's group can open, and the
+only thing Mathesar may ask it for is a certificate for an agent it owns. So
+anything that got into Mathesar could obtain access for an agent somebody already
+has — no worse than the database it would already be holding — but could not mint
+a person's identity, and loses all of it the moment the agent is stopped.
+
+Two consequences worth stating plainly:
+
+- **The gate moved.** Caddy's shared mTLS snippet now trusts the client CA rather
+  than pinning each leaf, because a button that provisions certificates would
+  otherwise rewrite the file that gates everybody's access on every click. Control
+  moved to the identity service's allow-list, which `certmint` writes and which
+  certid now re-reads **on every sign-in** — so revoking takes effect on the
+  agent's next request rather than at the next restart. The two narrow per-person
+  gates still pin leaves, deliberately: an agent has no business reaching those.
+- **The password is never in the prompt.** The prompt goes into an agent's
+  context and from there into a transcript and a log; a password that has been
+  through one is spent. The person carries it across themselves, once, and nothing
+  on the appliance keeps a copy — a lost bundle is reissued rather than recovered.
 
 ### Assignment is a column
 
@@ -139,11 +163,16 @@ Two details that will bite if they are left until later:
 
 ### Connecting in one step
 
-The ask is "some way to easily prompt your agent to connect to the DB". The
-smallest thing that answers it properly is **an MCP server shipped with
-Mathesar**, because MCP is what agents already speak.
+The ask is "some way to easily prompt your agent to connect to the DB". Half of
+it is answered: the agent is handed a certificate and instructions that get it as
+far as a working JSON-RPC call, which it can already drive.
 
-Given one URL and one token it would:
+The other half is **an MCP server shipped with Mathesar**, because MCP is what
+agents already speak. Note that the token this section used to assume is no
+longer needed — the client certificate *is* the credential, and the MCP server
+presents it the way curl does.
+
+Given one URL and its certificate it would:
 
 - discover the databases, schemas and tables that token can see;
 - expose the RPC methods that already exist as tools — `tables.list`,
@@ -180,7 +209,8 @@ record's history is already the record.
    display rules above, owner-derived database reach, and the refusal of both a
    password and superuser. The user column already worked.
 3. **The MCP server.** A thin adapter over the existing RPC, plus a subscription
-   to the agent's own assignments.
+   to the agent's own assignments. No token to design: the certificate an agent is
+   now issued is what it authenticates with.
 4. **`records.claim_next`.** Only when there is more than one agent.
 
 Each of these is useful on its own, which is the test of whether the order is
@@ -197,7 +227,8 @@ ever assigned, because it is how an agent reads the database at all.
   is the agent's business, and putting prompts in the database makes the database
   responsible for them.
 - **Long-lived superuser tokens.** An agent should be no more privileged than the
-  person who set it going.
+  person who set it going — and now has no token at all, only a certificate that
+  expires and can be pulled.
 
 ## Open questions, honestly
 

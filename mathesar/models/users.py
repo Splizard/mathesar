@@ -1,3 +1,4 @@
+import re
 from uuid import uuid4
 
 from django.contrib.auth.models import AbstractUser
@@ -40,6 +41,12 @@ class User(AbstractUser):
     # running Claude have two agents that happen to say the same thing here. Free text,
     # because the list of models changes faster than Mathesar does.
     agent_model = models.CharField(max_length=63, blank=True, default='')
+    # What is known about the certificate an agent was issued. The certificate itself lives
+    # on the appliance and its password nowhere at all; this is only enough to say on the
+    # page whether an agent has one and until when, and to name it when revoking.
+    cert_serial = models.CharField(max_length=64, blank=True, default='')
+    cert_issued_at = models.DateTimeField(null=True, blank=True)
+    cert_expires_at = models.DateTimeField(null=True, blank=True)
 
     class Meta(AbstractUser.Meta):
         constraints = [
@@ -57,6 +64,34 @@ class User(AbstractUser):
                 name='agent_is_not_superuser',
             ),
         ]
+
+    @property
+    def display_name(self):
+        """
+        What to call this user wherever one is shown.
+
+        A person is their own name; an agent carries its owner's as well, because its own
+        is only unique among its owner's agents. Imported here rather than at the top
+        because the module that composes it reads this one.
+        """
+        from mathesar.utils.agents import display_name
+
+        return display_name(self)
+
+    @property
+    def cert_slug(self):
+        """
+        The name the certificate's files are kept under on the appliance.
+
+        Derived from the username, which is already unique across Mathesar, reduced to the
+        hyphenated form the issuing helper accepts -- a run of anything else becoming one
+        hyphen, so that `quentin__claude` is `quentin-claude` rather than `quentin--claude`.
+        """
+        return re.sub(r'[^a-z0-9]+', '-', self.username.lower()).strip('-')
+
+    @property
+    def has_certificate(self):
+        return bool(self.cert_serial)
 
     @property
     def is_agent(self):

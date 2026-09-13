@@ -7,10 +7,12 @@ from django.conf import settings
 from modernrpc.core import REQUEST_KEY
 
 from mathesar.rpc.decorators import mathesar_rpc_method
-from mathesar.utils.agents import display_name
+from mathesar.utils import certmint
 from mathesar.utils.users import (
     add_agent,
     delete_agent,
+    provision_agent_certificate,
+    revoke_agent_certificate,
     get_user,
     list_agents,
     list_users,
@@ -39,6 +41,8 @@ class UserInfo(TypedDict):
         display_name: What to call this user wherever one is shown. An agent is named by
             its owner as well as itself -- "Quentin's Claude" -- because its own name is
             only unique among its owner's agents.
+        has_certificate: Whether this agent has been issued the certificate that lets it in.
+        cert_expires_at: When that certificate stops being accepted, ISO 8601, or `null`.
     """
     id: str
     username: str
@@ -49,6 +53,8 @@ class UserInfo(TypedDict):
     owner: Optional[str]
     agent_model: str
     display_name: str
+    has_certificate: bool
+    cert_expires_at: Optional[str]
 
     @classmethod
     def from_model(cls, model):
@@ -61,7 +67,11 @@ class UserInfo(TypedDict):
             display_language=model.display_language,
             owner=str(model.owner_id) if model.owner_id else None,
             agent_model=model.agent_model,
-            display_name=display_name(model),
+            display_name=model.display_name,
+            has_certificate=model.has_certificate,
+            cert_expires_at=(
+                model.cert_expires_at.isoformat() if model.cert_expires_at else None
+            ),
         )
 
 
@@ -330,3 +340,86 @@ def delete_agent_(*, agent_id: str, **kwargs) -> None:
     """
     owner = kwargs.get(REQUEST_KEY).user
     delete_agent(owner, agent_id)
+
+
+class AgentCertificate(TypedDict):
+    """
+    A newly issued certificate, and what to do with it. Returned once and never again.
+
+    Attributes:
+        filename: What to save the bundle as.
+        bundle: The PKCS#12 bundle, base64 encoded.
+        password: The bundle's password. Kept nowhere -- not by Mathesar and not by the
+            helper that made it -- so a bundle whose password was lost is reissued rather
+            than recovered. It is deliberately absent from `prompt`.
+        authority: The certificate authority that signed it, PEM, base64 encoded.
+        prompt: Setup instructions written to be handed to the agent itself.
+        agent: The agent, with its certificate now recorded.
+    """
+    filename: str
+    bundle: str
+    password: str
+    authority: str
+    prompt: str
+    agent: UserInfo
+
+
+@mathesar_rpc_method(name='users.agents.can_issue_certificates', auth="login")
+def can_issue_certificates() -> bool:
+    """
+    Whether this Mathesar can issue an agent the certificate that lets it in.
+
+    True only where the installation puts a client-certificate gate in front of Mathesar and
+    has the helper that holds the authority. Everywhere else an agent is still set going the
+    same way; letting it in is then whatever that installation does to let anybody in.
+
+    Returns:
+        Whether `users.agents.provision_certificate` will work.
+    """
+    return certmint.is_available()
+
+
+@mathesar_rpc_method(name='users.agents.provision_certificate', auth="login")
+def provision_certificate(*, agent_id: str, **kwargs) -> AgentCertificate:
+    """
+    Issue one of the caller's own agents a client certificate, and say how to install it.
+
+    Issuing again replaces what was there. The bundle and its password come back once;
+    nothing keeps a copy of the password, so one that is lost means issuing again.
+
+    Args:
+        agent_id: The Django id of the agent, a UUID.
+
+    Returns:
+        The bundle, its password, and instructions to hand to the agent.
+    """
+    request = kwargs.get(REQUEST_KEY)
+    site_url = f"{request.scheme}://{request.get_host()}"
+    issued = provision_agent_certificate(request.user, agent_id, site_url)
+    return AgentCertificate(
+        filename=issued["filename"],
+        bundle=issued["bundle"],
+        password=issued["password"],
+        authority=issued["authority"],
+        prompt=issued["prompt"],
+        agent=UserInfo.from_model(issued["agent"]),
+    )
+
+
+@mathesar_rpc_method(name='users.agents.revoke_certificate', auth="login")
+def revoke_certificate(*, agent_id: str, **kwargs) -> UserInfo:
+    """
+    Shut one of the caller's own agents out, leaving the agent itself in place.
+
+    Takes effect at once rather than at the next restart. Use it when a certificate may have
+    got somewhere it should not have; the agent keeps its name, its history and the rows
+    assigned to it, and can be issued another.
+
+    Args:
+        agent_id: The Django id of the agent, a UUID.
+
+    Returns:
+        The agent, with its certificate no longer recorded.
+    """
+    owner = kwargs.get(REQUEST_KEY).user
+    return UserInfo.from_model(revoke_agent_certificate(owner, agent_id))

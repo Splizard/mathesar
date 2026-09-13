@@ -203,6 +203,19 @@ for db_key, db_dict in DATABASES.items():
 # TODO: We use this variable for analytics, consider removing/renaming it.
 TEST = bool(os.environ.get('TEST', default=False))
 
+# The domain an agent's identifier is built on. Not a mailbox: an agent is recognised at
+# sign-in by an address-shaped identifier, and nothing is ever sent to it. The default is a
+# domain RFC 2606 reserves so that it can never be registered by anybody, which is the point
+# -- it cannot collide with a real mailbox and cannot quietly start delivering somewhere.
+# Point it at a domain you own only if your identity provider insists on one it recognises.
+AGENT_EMAIL_DOMAIN = os.environ.get('AGENT_EMAIL_DOMAIN') or 'agents.invalid'
+
+# Where a root-owned helper listens to be asked for an agent's client certificate. Set only
+# where the installation puts a certificate gate in front of Mathesar; unset everywhere else,
+# and the pages that would offer to issue one then do not offer it. See
+# mathesar/utils/certmint.py and appliance/certmint.
+CERTMINT_SOCKET = os.environ.get('CERTMINT_SOCKET', default=None)
+
 SECRETS_ROOT = os.path.join(BASE_DIR, '.secrets')
 SECRET_KEY = os.environ.get("SECRET_KEY")
 # We don't want to persist envvar SECRET_KEY

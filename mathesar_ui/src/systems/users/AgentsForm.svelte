@@ -10,7 +10,7 @@
   import { _ } from 'svelte-i18n';
 
   import { api } from '@mathesar/api/rpc';
-  import type { User } from '@mathesar/api/rpc/users';
+  import type { AgentCertificate, User } from '@mathesar/api/rpc/users';
   import {
     FormSubmit,
     makeForm,
@@ -21,19 +21,34 @@
   import { GridForm, GridFormLabelRow } from '@mathesar/components/grid-form';
   import ErrorBox from '@mathesar/components/message-boxes/ErrorBox.svelte';
   import WarningBox from '@mathesar/components/message-boxes/WarningBox.svelte';
-  import { iconAddNew, iconDeleteMajor } from '@mathesar/icons';
+  import { iconAddNew, iconDeleteMajor, iconRefresh } from '@mathesar/icons';
   import AsyncStore from '@mathesar/stores/AsyncStore';
   import { getErrorMessage } from '@mathesar/utils/errors';
   import { Button, Icon, Spinner, TextInput } from '@mathesar-component-library';
 
+  import AgentCertificateIssued from './AgentCertificateIssued.svelte';
+
   const agentsRequest = new AsyncStore<void, User[]>(() =>
     api.users.agents.list().run(),
   );
+  /**
+   * Whether this installation can issue a certificate at all. Where it cannot -- which is
+   * every installation without a certificate gate in front of it -- the button is not shown
+   * rather than shown and failing.
+   */
+  const canIssueRequest = new AsyncStore<void, boolean>(() =>
+    api.users.agents.can_issue_certificates().run(),
+  );
 
-  let deleteError: string | undefined = undefined;
+  let actionError: string | undefined = undefined;
   let busyWith: string | undefined = undefined;
+  /** The one showing of a newly issued certificate, kept only until the page moves on */
+  let issued: AgentCertificate | undefined = undefined;
 
   void agentsRequest.run();
+  void canIssueRequest.run();
+
+  $: canIssue = $canIssueRequest.resolvedValue ?? false;
 
   $: agents = $agentsRequest.resolvedValue ?? [];
 
@@ -54,17 +69,45 @@
     await agentsRequest.run();
   }
 
-  async function stopAgent(agent: User) {
-    deleteError = undefined;
+  /** Run one thing against one agent, showing it as busy and keeping any complaint. */
+  async function against(agent: User, work: () => Promise<void>) {
+    actionError = undefined;
     busyWith = agent.id;
     try {
-      await api.users.agents.delete({ agent_id: agent.id }).run();
+      await work();
       await agentsRequest.run();
     } catch (error) {
-      deleteError = getErrorMessage(error);
+      actionError = getErrorMessage(error);
     } finally {
       busyWith = undefined;
     }
+  }
+
+  function stopAgent(agent: User) {
+    return against(agent, async () => {
+      await api.users.agents.delete({ agent_id: agent.id }).run();
+      if (issued?.agent.id === agent.id) issued = undefined;
+    });
+  }
+
+  function provision(agent: User) {
+    return against(agent, async () => {
+      issued = await api.users.agents
+        .provision_certificate({ agent_id: agent.id })
+        .run();
+    });
+  }
+
+  function revoke(agent: User) {
+    return against(agent, async () => {
+      await api.users.agents.revoke_certificate({ agent_id: agent.id }).run();
+      if (issued?.agent.id === agent.id) issued = undefined;
+    });
+  }
+
+  function expiry(agent: User): string {
+    if (!agent.cert_expires_at) return '';
+    return new Date(agent.cert_expires_at).toLocaleDateString();
   }
 </script>
 
@@ -87,26 +130,62 @@
               <span class="model">{agent.agent_model}</span>
             {/if}
             <span class="email">{agent.email}</span>
-          </div>
-          <Button
-            appearance="secondary"
-            disabled={busyWith === agent.id}
-            on:click={() => stopAgent(agent)}
-          >
-            {#if busyWith === agent.id}
-              <Spinner />
+            {#if agent.has_certificate}
+              <span class="admitted">
+                {$_('certificate_until', { values: { date: expiry(agent) } })}
+              </span>
             {:else}
-              <Icon {...iconDeleteMajor} />
+              <span class="not-admitted">{$_('not_let_in_yet')}</span>
             {/if}
-            <span>{$_('stop_agent')}</span>
-          </Button>
+          </div>
+          <div class="actions">
+            {#if canIssue}
+              <Button
+                appearance="primary"
+                disabled={busyWith === agent.id}
+                on:click={() => provision(agent)}
+              >
+                {#if busyWith === agent.id}
+                  <Spinner />
+                {:else}
+                  <Icon {...(agent.has_certificate ? iconRefresh : iconAddNew)} />
+                {/if}
+                <span>
+                  {agent.has_certificate
+                    ? $_('reissue_certificate')
+                    : $_('provision_certificate')}
+                </span>
+              </Button>
+              {#if agent.has_certificate}
+                <Button
+                  appearance="secondary"
+                  disabled={busyWith === agent.id}
+                  on:click={() => revoke(agent)}
+                >
+                  <span>{$_('revoke_certificate')}</span>
+                </Button>
+              {/if}
+            {/if}
+            <Button
+              appearance="secondary"
+              disabled={busyWith === agent.id}
+              on:click={() => stopAgent(agent)}
+            >
+              <Icon {...iconDeleteMajor} />
+              <span>{$_('stop_agent')}</span>
+            </Button>
+          </div>
         </li>
       {/each}
     </ul>
   {/if}
 
-  {#if deleteError}
-    <ErrorBox>{deleteError}</ErrorBox>
+  {#if actionError}
+    <ErrorBox>{actionError}</ErrorBox>
+  {/if}
+
+  {#if issued}
+    <AgentCertificateIssued certificate={issued} />
   {/if}
 
   <GridForm>
@@ -164,6 +243,28 @@
     display: flex;
     flex-direction: column;
     gap: var(--sm2);
+  }
+
+  .actions {
+    display: flex;
+    gap: var(--sm3);
+    flex-wrap: wrap;
+  }
+
+  .admitted,
+  .not-admitted {
+    font-size: var(--sm1);
+    padding: 0 var(--sm4);
+    border-radius: var(--border-radius-s);
+  }
+
+  .admitted {
+    background: var(--color-bg-raised-2);
+    color: var(--color-fg-base-muted);
+  }
+
+  .not-admitted {
+    color: var(--color-fg-warning);
   }
 
   .agent-list li {

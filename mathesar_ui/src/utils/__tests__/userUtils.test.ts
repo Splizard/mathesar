@@ -18,6 +18,8 @@ function person(username: string, fullName?: string): User {
     owner: null,
     agent_model: '',
     display_name: fullName ?? username,
+    has_certificate: false,
+    cert_expires_at: null,
   };
 }
 
@@ -33,6 +35,8 @@ function agent(owner: User, name: string): User {
     owner: owner.id,
     agent_model: 'claude',
     display_name: `${ownerLabel}'s ${name}`,
+    has_certificate: false,
+    cert_expires_at: null,
   };
 }
 

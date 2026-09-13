@@ -48,6 +48,9 @@ def mathesar_rpc_method(*, name, auth="superuser", writes=False):
             'users.agents.add',
             'users.agents.list',
             'users.agents.delete',
+            'users.agents.can_issue_certificates',
+            'users.agents.provision_certificate',
+            'users.agents.revoke_certificate',
         ]
         if name not in authorization_ignore_list:
             authorization_wrap = ensure_db_authorization

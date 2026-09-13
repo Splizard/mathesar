@@ -28,6 +28,27 @@ export interface User extends BaseUser {
    * its owner's agents, so the server names it by its owner too: "Quentin's Claude".
    */
   readonly display_name: string;
+  /** Whether this agent has been issued the certificate that lets it in */
+  readonly has_certificate: boolean;
+  /** When that certificate stops being accepted, ISO 8601, or null */
+  readonly cert_expires_at: string | null;
+}
+
+/** A newly issued certificate and what to do with it. Returned once and never again. */
+export interface AgentCertificate {
+  readonly filename: string;
+  /** The PKCS#12 bundle, base64 encoded */
+  readonly bundle: string;
+  /**
+   * The bundle's password. Kept nowhere once this response is gone, and deliberately not
+   * part of `prompt` -- a password that has been through an agent's context is spent.
+   */
+  readonly password: string;
+  /** The certificate authority that signed it, PEM, base64 encoded */
+  readonly authority: string;
+  /** Setup instructions written to be handed to the agent itself */
+  readonly prompt: string;
+  readonly agent: User;
 }
 
 export const users = {
@@ -64,6 +85,16 @@ export const users = {
     >(),
 
     delete: rpcMethodTypeContainer<{ agent_id: User['id'] }, void>(),
+
+    /** Whether this installation can issue an agent the certificate that lets it in */
+    can_issue_certificates: rpcMethodTypeContainer<void, boolean>(),
+
+    provision_certificate: rpcMethodTypeContainer<
+      { agent_id: User['id'] },
+      AgentCertificate
+    >(),
+
+    revoke_certificate: rpcMethodTypeContainer<{ agent_id: User['id'] }, User>(),
   },
 
   password: {

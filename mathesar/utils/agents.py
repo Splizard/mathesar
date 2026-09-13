@@ -14,6 +14,7 @@ shown rather than stored, so that renaming a person renames their agents with th
 
 import re
 
+from django.conf import settings
 from django.utils.translation import gettext as _
 
 from mathesar.models import User
@@ -75,20 +76,24 @@ def derive_username(owner, name):
 
 def derive_email(owner, name):
     """
-    The address an agent is known by at the door.
+    The identifier an agent is known by at the door.
 
     Where Mathesar sits behind a gate that works out who somebody is from a client
     certificate -- this fork's appliance does, and SSO generally merges accounts by email --
-    the address in the certificate is the whole identity. An agent therefore needs one of its
-    own: sharing its owner's would make the two of them the same person to everything
-    upstream of Mathesar, which is exactly the telling-apart that owning an agent is for.
+    identity arrives shaped like an email address. So an agent needs one of its own: sharing
+    its owner's would make the two of them the same person to everything upstream of
+    Mathesar, which is exactly the telling-apart that owning an agent is for.
 
-    The default is the owner's own address with a tag on it, so that it is unmistakably an
-    agent of that person, it still reaches them, and it is theirs to hand out. An owner with
-    no address of their own gets a plainly undeliverable one, which is better than a guess
-    at a real mailbox somebody else might hold.
+    It is **not a mailbox**. Nothing is ever sent to it, and it would be wrong to invent one
+    on somebody's real domain: that implies a mailbox that does not exist, might collide
+    with one that does, and would quietly start delivering somewhere if the domain ever grew
+    a catch-all. So it is built on a domain that cannot be registered by anybody -- RFC 2606
+    reserves `.invalid` for exactly this -- and it reads, to anyone who sees it, as the
+    identifier it is rather than an address somebody forgot to check.
+
+    An installation whose identity provider insists on a domain it recognises can point
+    AGENT_EMAIL_DOMAIN at one it owns, and any agent can be given a particular address
+    instead when it is set going.
     """
-    local, _sep, domain = (owner.email or "").partition("@")
-    if local and domain:
-        return f"{local}+{_slug(name)}@{domain}"
-    return f"{derive_username(owner, name)}@agents.invalid"
+    domain = getattr(settings, "AGENT_EMAIL_DOMAIN", None) or "agents.invalid"
+    return f"{_slug(owner.username)}-{_slug(name)}@{domain}"

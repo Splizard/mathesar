@@ -45,7 +45,9 @@ def test_users_list(rf, monkeypatch):
             'display_language': 'en',
             'owner': None,
             'agent_model': '',
-            'display_name': 'Alice Liddell'
+            'display_name': 'Alice Liddell',
+            'has_certificate': False,
+            'cert_expires_at': None
         },
         {
             'id': '2',
@@ -56,7 +58,9 @@ def test_users_list(rf, monkeypatch):
             'display_language': 'ja',
             'owner': None,
             'agent_model': '',
-            'display_name': 'Bob Marley'
+            'display_name': 'Bob Marley',
+            'has_certificate': False,
+            'cert_expires_at': None
         }
     ]
     actual_users_list = users.list_()
@@ -89,7 +93,9 @@ def test_users_get(rf, monkeypatch):
         'display_language': 'en',
         'owner': None,
         'agent_model': '',
-        'display_name': 'Alice Liddell'
+        'display_name': 'Alice Liddell',
+        'has_certificate': False,
+        'cert_expires_at': None
     }
     actual_user_info = users.get(user_id=user_id)
     assert actual_user_info == expected_user_info
@@ -107,7 +113,9 @@ def test_users_add(rf, monkeypatch):
         'display_language': 'en',
         'owner': None,
         'agent_model': '',
-        'display_name': 'Bob Marley'
+        'display_name': 'Bob Marley',
+        'has_certificate': False,
+        'cert_expires_at': None
     }
 
     def mock_add_user(_user_def):
@@ -131,7 +139,9 @@ def test_users_add(rf, monkeypatch):
         'display_language': 'en',
         'owner': None,
         'agent_model': '',
-        'display_name': 'Bob Marley'
+        'display_name': 'Bob Marley',
+        'has_certificate': False,
+        'cert_expires_at': None
     }
     actual_user_info = users.add(user_def=user_def)
     assert actual_user_info == expected_user_info
@@ -186,7 +196,9 @@ def test_users_patch_self(rf, monkeypatch):
         'display_language': 'en',
         'owner': None,
         'agent_model': '',
-        'display_name': 'Alice liddell'
+        'display_name': 'Alice liddell',
+        'has_certificate': False,
+        'cert_expires_at': None
     }
     actual_user_info = users.patch_self(
         username=_username,
@@ -236,7 +248,9 @@ def test_users_other(rf, monkeypatch):
         'display_language': 'ja',
         'owner': None,
         'agent_model': '',
-        'display_name': 'bob Marley'
+        'display_name': 'bob Marley',
+        'has_certificate': False,
+        'cert_expires_at': None
     }
     actual_user_info = users.patch_other(
         user_id=_user_id,

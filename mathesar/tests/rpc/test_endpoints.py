@@ -564,6 +564,21 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        users.can_issue_certificates,
+        "users.agents.can_issue_certificates",
+        [user_is_authenticated]
+    ),
+    (
+        users.provision_certificate,
+        "users.agents.provision_certificate",
+        [user_is_authenticated]
+    ),
+    (
+        users.revoke_certificate,
+        "users.agents.revoke_certificate",
+        [user_is_authenticated]
+    ),
+    (
         users.delete,
         "users.delete",
         [user_is_superuser]

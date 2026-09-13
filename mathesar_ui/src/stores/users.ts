@@ -64,6 +64,8 @@ export class UserModel {
       owner: this.owner,
       agent_model: this.agentModel,
       display_name: this.displayName,
+      has_certificate: false,
+      cert_expires_at: null,
     };
   }
 
@@ -87,6 +89,8 @@ export class AnonymousViewerUserModel extends UserModel {
       owner: null,
       agent_model: '',
       display_name: 'Anonymous',
+      has_certificate: false,
+      cert_expires_at: null,
     });
   }
 }

@@ -1,8 +1,12 @@
 from django.conf import settings
 from django.db import transaction
+from django.utils import timezone
+from django.utils.dateparse import parse_datetime
 
 from mathesar.models import User
+from mathesar.utils import certmint
 from mathesar.utils.agents import DEFAULT_AGENT_NAME, derive_email, derive_username
+from mathesar.utils.agent_onboarding import bundle_filename, onboarding_prompt
 from mathesar.utils.permissions import set_up_home_role_and_db_for_user
 
 
@@ -129,9 +133,66 @@ def list_agents(owner):
     return owner.agents.order_by("date_joined")
 
 
-def delete_agent(owner, agent_id):
-    """Stop one of your own agents. Somebody else's is not yours to stop."""
+def _own_agent(owner, agent_id):
     agent = User.objects.get(id=agent_id)
     if agent.owner_id != owner.id:
         raise Exception("That agent belongs to somebody else.")
+    return agent
+
+
+def delete_agent(owner, agent_id):
+    """
+    Stop one of your own agents. Somebody else's is not yours to stop.
+
+    Its certificate goes first. Deleting the row would leave a certificate that still opens
+    the door with nothing on the other side of it knowing who it belongs to, so the door is
+    shut before the record of who was coming through it is thrown away. A helper that cannot
+    be reached stops the deletion rather than being skipped past, for the same reason.
+    """
+    agent = _own_agent(owner, agent_id)
+    if agent.has_certificate:
+        revoke_agent_certificate(owner, agent_id)
     agent.delete()
+
+
+@transaction.atomic
+def provision_agent_certificate(owner, agent_id, site_url):
+    """
+    Issue one of your own agents the certificate that lets it in.
+
+    Issuing again replaces what was there: the previous certificate is filed away and its
+    address stays admitted, so a bundle somebody lost is reissued rather than recovered.
+    The password comes back once and is written down nowhere.
+    """
+    agent = _own_agent(owner, agent_id)
+    if not agent.is_agent:
+        raise Exception("Only an agent is given a certificate.")
+    issued = certmint.issue(
+        slug=agent.cert_slug,
+        common_name=agent.display_name,
+        email=agent.email,
+    )
+    agent.cert_serial = issued["serial"]
+    agent.cert_issued_at = timezone.now()
+    agent.cert_expires_at = parse_datetime(issued["not_after"])
+    agent.save()
+    return {
+        "agent": agent,
+        "filename": bundle_filename(agent),
+        "bundle": issued["p12_base64"],
+        "password": issued["password"],
+        "authority": issued.get("ca_base64", ""),
+        "prompt": onboarding_prompt(agent, site_url),
+    }
+
+
+@transaction.atomic
+def revoke_agent_certificate(owner, agent_id):
+    """Shut one of your own agents out, leaving the agent itself in place."""
+    agent = _own_agent(owner, agent_id)
+    certmint.revoke(slug=agent.cert_slug, email=agent.email)
+    agent.cert_serial = ""
+    agent.cert_issued_at = None
+    agent.cert_expires_at = None
+    agent.save()
+    return agent
