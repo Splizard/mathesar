@@ -87,6 +87,7 @@ import {
   faProjectDiagram,
   faQuestion,
   faRedo,
+  faRobot,
   faRotateBack,
   faSave,
   faSearchPlus,
@@ -283,6 +284,7 @@ export const iconTreeChildNodeArrow: IconProps = {
 export const iconUpgradeAvailable: IconProps = { data: faCircleInfo };
 export const iconCurrentlyInstalledVersion: IconProps = { data: faCheck };
 export const iconUser: IconProps = { data: faUser };
+export const iconAgent: IconProps = { data: faRobot };
 export const iconMultipleUsers: IconProps = { data: faUsers };
 export const iconAdminUser: IconProps = { data: faUserGear };
 export const iconLinksInThisTable: IconProps = { data: faArrowRight };

@@ -51,6 +51,7 @@ def mathesar_rpc_method(*, name, auth="superuser", writes=False):
             'users.agents.can_issue_certificates',
             'users.agents.provision_certificate',
             'users.agents.revoke_certificate',
+            'users.agents.prompt',
         ]
         if name not in authorization_ignore_list:
             authorization_wrap = ensure_db_authorization

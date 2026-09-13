@@ -23,6 +23,7 @@ from django.conf import settings as django_settings
 from mathesar.utils.agent_onboarding import onboarding_prompt, reference_url, script_url
 from mathesar.utils.users import (
     add_agent,
+    agent_prompt,
     delete_agent,
     provision_agent_certificate,
     revoke_agent_certificate,
@@ -273,6 +274,33 @@ class TestThePrompt:
         assert "never a secret" in prompt
         assert "say so and stop" in prompt
         assert "do not use anybody else's credentials" in prompt
+
+    TABLE = {
+        "database_id": 3,
+        "database_name": "Bligh & Quentin",
+        "schema_name": "Work",
+        "table_oid": 16500,
+        "table_name": "Tasks",
+    }
+
+    def test_a_table_gives_it_somewhere_to_start(self, claude):
+        prompt = onboarding_prompt(claude, SITE, self.TABLE)
+        assert '"Tasks", in schema "Work" of the database "Bligh & Quentin"' in flat(prompt)
+        assert """columns.list '{"database_id": 3, "table_oid": 16500}'""" in prompt
+        assert len(prompt.splitlines()) <= 70
+
+    def test_without_a_table_it_names_none(self, claude):
+        assert "brought in for" not in onboarding_prompt(claude, SITE)
+
+    def test_it_can_be_had_again_without_issuing_anything(self, helper, claude):
+        prompt = agent_prompt(claude.owner, claude.id, SITE, self.TABLE)
+        assert "Tasks" in prompt
+        assert helper.asked == []
+
+    def test_somebody_elses_agent_has_no_prompt_for_you(self, claude, db):
+        bligh = User.objects.create(username="bligh", email="b@example.com")
+        with pytest.raises(Exception, match="belongs to somebody else"):
+            agent_prompt(bligh, claude.id, SITE)
 
 
 REFERENCE = Path(django_settings.BASE_DIR) / "docs" / "agents"

@@ -62,17 +62,43 @@ def script_url():
     return f"{settings.AGENT_REFERENCE_BASE_URL.rstrip('/')}/mathesar"
 
 
-def onboarding_prompt(agent, site_url):
+def _about_table(table):
+    """
+    The section that points an agent at the table it was handed, when it was handed one.
+
+    Names go in the prose and ids in the calls: a person reads the first, the API wants the
+    second, and a name is free to contain anything while an id is only ever a number.
+    """
+    database_id = int(table["database_id"])
+    table_oid = int(table["table_oid"])
+    ids = f'"database_id": {database_id}, "table_oid": {table_oid}'
+    return f"""\
+## 4. Start with the table you were brought in for
+
+"{table['table_name']}", in schema "{table['schema_name']}" of the database "{table['database_name']}":
+
+    {HOME}/mathesar columns.list '{{{ids}}}'
+    {HOME}/mathesar records.list '{{{ids}, "limit": 50}}'
+
+Stay with it unless the work needs another table, and ask if that is not clear.
+
+"""
+
+
+def onboarding_prompt(agent, site_url, table=None):
     """
     What to paste to the agent.
 
     Args:
         agent: the agent user, already issued a certificate.
         site_url: where this Mathesar answers, e.g. https://my.hiddenstrings.com
+        table: optionally, the table it is being handed -- database_id, database_name,
+            schema_name, table_oid and table_name -- which gives it somewhere to start.
     """
     site_url = site_url.rstrip("/")
     slug = agent.cert_slug
     home = HOME
+    about = _about_table(table) if table else ""
     return f"""\
 # Mathesar access for {agent.display_name}
 
@@ -113,7 +139,7 @@ A list of databases means you are in; the script signs itself in with your certi
 reference ("Finding your way around") shows how to find tables and read and change rows. If it
 is not clear which tables belong to this work, ask.
 
-## Rules
+{about}## Rules
 
 - Ask before deleting anything or changing more than a handful of rows. Change tables and columns
   only when asked.

@@ -4,15 +4,18 @@
   import EntityPageHeader from '@mathesar/components/EntityPageHeader.svelte';
   import InspectorButton from '@mathesar/components/InspectorButton.svelte';
   import ModificationStatus from '@mathesar/components/ModificationStatus.svelte';
-  import { iconRequiresAttention } from '@mathesar/icons';
+  import { iconAgent, iconRequiresAttention } from '@mathesar/icons';
+  import { canIssueAgentCertificates } from '@mathesar/stores/agents';
   import { tableInspectorVisible } from '@mathesar/stores/localStorage';
+  import { modal } from '@mathesar/stores/modal';
   import { getTabularDataStoreFromContext } from '@mathesar/stores/table-data';
+  import AgentPromptModal from '@mathesar/systems/users/AgentPromptModal.svelte';
   import {
     getTableIcon,
     getTableIconFillColor,
     isTableView,
   } from '@mathesar/utils/tables';
-  import { Icon, Tooltip } from '@mathesar-component-library';
+  import { Button, Icon, Tooltip } from '@mathesar-component-library';
 
   import SavedFilters from './record-operations/filter/SavedFilters.svelte';
   import TableFilter from './record-operations/filter/TableFilter.svelte';
@@ -22,6 +25,7 @@
   import SortDropdown from './record-operations/sort/SortDropdown.svelte';
 
   const tabularData = getTabularDataStoreFromContext();
+  const agentModal = modal.spawnModalController();
 
   $: ({ table, meta, isLoading, hasPrimaryKey } = $tabularData);
   $: ({ currentRolePrivileges } = table.currentAccess);
@@ -79,6 +83,12 @@
   {/if}
 
   <div class="aux-actions" slot="actions-right">
+    {#if isSelectable && $canIssueAgentCertificates}
+      <Button appearance="secondary" on:click={() => agentModal.open()}>
+        <Icon {...iconAgent} />
+        <span>{$_('add_your_agent')}</span>
+      </Button>
+    {/if}
     {#if isSelectable}
       <InspectorButton
         disabled={$isLoading}
@@ -88,6 +98,8 @@
     {/if}
   </div>
 </EntityPageHeader>
+
+<AgentPromptModal controller={agentModal} {table} />
 
 <style lang="scss">
   .quick-access {

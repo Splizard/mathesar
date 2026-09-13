@@ -94,7 +94,28 @@ export const users = {
       AgentCertificate
     >(),
 
-    revoke_certificate: rpcMethodTypeContainer<{ agent_id: User['id'] }, User>(),
+    revoke_certificate: rpcMethodTypeContainer<
+      { agent_id: User['id'] },
+      User
+    >(),
+
+    /**
+     * The instructions to paste to an agent that already has its certificate, without issuing
+     * anything. Given a table, they say where to start.
+     */
+    prompt: rpcMethodTypeContainer<
+      {
+        agent_id: User['id'];
+        table?: {
+          database_id: number;
+          database_name: string;
+          schema_name: string;
+          table_oid: number;
+          table_name: string;
+        };
+      },
+      string
+    >(),
   },
 
   password: {

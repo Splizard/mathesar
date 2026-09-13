@@ -10,6 +10,7 @@ from mathesar.rpc.decorators import mathesar_rpc_method
 from mathesar.utils import certmint
 from mathesar.utils.users import (
     add_agent,
+    agent_prompt,
     delete_agent,
     provision_agent_certificate,
     revoke_agent_certificate,
@@ -404,6 +405,47 @@ def provision_certificate(*, agent_id: str, **kwargs) -> AgentCertificate:
         prompt=issued["prompt"],
         agent=UserInfo.from_model(issued["agent"]),
     )
+
+
+class AgentPromptTable(TypedDict):
+    """
+    The table an agent is being handed, which its prompt then starts from.
+
+    Attributes:
+        database_id: The Django id of the database containing the table.
+        database_name: The database's name, for the agent to read.
+        schema_name: The schema's name, for the agent to read.
+        table_oid: The OID of the table.
+        table_name: The table's name, for the agent to read.
+    """
+    database_id: int
+    database_name: str
+    schema_name: str
+    table_oid: int
+    table_name: str
+
+
+@mathesar_rpc_method(name='users.agents.prompt', auth="login")
+def agent_prompt_(
+        *, agent_id: str, table: Optional[AgentPromptTable] = None, **kwargs
+) -> str:
+    """
+    The instructions to paste to one of the caller's own agents, without issuing anything.
+
+    For an agent that already has its certificate: the instructions tell it to reuse the one in
+    its place rather than ask for a bundle. Given a table, they also say where to start. Nothing
+    is looked up in the database -- the names are only for the agent to read.
+
+    Args:
+        agent_id: The Django id of the agent, a UUID.
+        table: The table being handed to the agent, if any.
+
+    Returns:
+        The prompt, as text.
+    """
+    request = kwargs.get(REQUEST_KEY)
+    site_url = f"{request.scheme}://{request.get_host()}"
+    return agent_prompt(request.user, agent_id, site_url, table)
 
 
 @mathesar_rpc_method(name='users.agents.revoke_certificate', auth="login")

@@ -579,6 +579,11 @@ METHODS = [
         [user_is_authenticated]
     ),
     (
+        users.agent_prompt_,
+        "users.agents.prompt",
+        [user_is_authenticated]
+    ),
+    (
         users.delete,
         "users.delete",
         [user_is_superuser]

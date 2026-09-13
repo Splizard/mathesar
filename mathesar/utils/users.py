@@ -186,6 +186,19 @@ def provision_agent_certificate(owner, agent_id, site_url):
     }
 
 
+def agent_prompt(owner, agent_id, site_url, table=None):
+    """
+    The instructions for one of your own agents, again, without issuing anything.
+
+    They tell the agent to reuse the certificate already in its place, so this is for handing
+    an agent that is set up a new piece of work -- a table, say -- rather than for letting one in.
+    """
+    agent = _own_agent(owner, agent_id)
+    if not agent.is_agent:
+        raise Exception("Only an agent is given instructions.")
+    return onboarding_prompt(agent, site_url, table)
+
+
 @transaction.atomic
 def revoke_agent_certificate(owner, agent_id):
     """Shut one of your own agents out, leaving the agent itself in place."""
