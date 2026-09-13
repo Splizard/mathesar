@@ -122,12 +122,23 @@ class Database(BaseModel):
                 )
 
     def connect_user(self, user):
-        """Return the given user's connection to the database."""
-        try:
-            role_map = UserDatabaseRoleMap.objects.get(user=user, database=self)
-        except UserDatabaseRoleMap.DoesNotExist:
-            raise exceptions.NoConnectionAvailable
-        return role_map.connection
+        """
+        Return the given user's connection to the database.
+
+        An agent given a role of its own uses it; one that has not been given one borrows
+        its owner's, so that setting an agent going needs no second round of granting and
+        the agent cannot reach further than the person who set it going.
+        """
+        # The agent's own role first, its owner's only where it has none of its own.
+        for principal in [user, user.database_principal]:
+            try:
+                role_map = UserDatabaseRoleMap.objects.get(
+                    user=principal, database=self
+                )
+            except UserDatabaseRoleMap.DoesNotExist:
+                continue
+            return role_map.connection
+        raise exceptions.NoConnectionAvailable
 
     def connect_manually(self, role, password):
         """Return a connection to the Database using the role and password."""

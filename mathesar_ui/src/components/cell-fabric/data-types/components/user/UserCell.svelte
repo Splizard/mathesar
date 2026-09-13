@@ -7,6 +7,7 @@
   import LinkedRecord from '@mathesar/components/LinkedRecord.svelte';
   import Null from '@mathesar/components/Null.svelte';
   import { CollaborationFeaturesContext } from '@mathesar/contexts/CollaborationFeaturesContext';
+  import { getUserProfileStoreFromContext } from '@mathesar/stores/userProfile';
   import { rowSeekerContext } from '@mathesar/systems/row-seeker/AttachableRowSeekerController';
   import {
     type UserDisplayField,
@@ -28,6 +29,7 @@
 
   const dispatch = createEventDispatcher();
   const collabContext = CollaborationFeaturesContext.get();
+  const userProfileStore = getUserProfileStoreFromContext();
 
   export let isActive: CellExternalProps['isActive'];
   export let value: CellExternalProps['value'] = undefined;
@@ -94,7 +96,9 @@
         triggerElement: cellWrapperElement,
         previousValue: getPreviousValue(),
         constructRecordStore: () =>
-          createUserRecordStore(users, userDisplayField),
+          // The picker knows who is looking, so it can drop the possessive from the
+          // agents this person owns. The cell it writes into keeps the long form.
+          createUserRecordStore(users, userDisplayField, $userProfileStore?.id),
         onSelect: (v) => {
           if (v) {
             const user = users.find((u) => u.id === v.key);

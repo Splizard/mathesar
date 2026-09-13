@@ -43,7 +43,11 @@ def mathesar_rpc_method(*, name, auth="superuser", writes=False):
             'servers.configured.list',
             'users.current_ip_address',
             'users.patch_self',
-            'users.password.replace_own'
+            'users.password.replace_own',
+            # An agent is about the caller rather than about a database.
+            'users.agents.add',
+            'users.agents.list',
+            'users.agents.delete',
         ]
         if name not in authorization_ignore_list:
             authorization_wrap = ensure_db_authorization
@@ -133,12 +137,19 @@ def ensure_db_authorization(f):
     def wrapper(*args, **kwargs):
         DATABASE_ID_KEY = 'database_id'
         user = kwargs.get(REQUEST_KEY).user
-        if user.is_superuser:
+        # An agent reaches a database exactly as far as the person who set it going, so it
+        # is that person's reach being asked about here.
+        principal = user.database_principal
+        if principal.is_superuser:
             return f(*args, **kwargs)
         database_id = kwargs[DATABASE_ID_KEY]
-        try:
-            models.UserDatabaseRoleMap.objects.get(database__id=database_id, user=user)
-        except models.UserDatabaseRoleMap.DoesNotExist:
-            raise exceptions.NoConnectionAvailable
-        return f(*args, **kwargs)
+        for candidate in [user, principal]:
+            try:
+                models.UserDatabaseRoleMap.objects.get(
+                    database__id=database_id, user=candidate
+                )
+            except models.UserDatabaseRoleMap.DoesNotExist:
+                continue
+            return f(*args, **kwargs)
+        raise exceptions.NoConnectionAvailable
     return wrapper

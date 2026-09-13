@@ -42,7 +42,10 @@ def test_users_list(rf, monkeypatch):
             'is_superuser': True,
             'email': 'alice@mathesar.org',
             'full_name': 'Alice Liddell',
-            'display_language': 'en'
+            'display_language': 'en',
+            'owner': None,
+            'agent_model': '',
+            'display_name': 'Alice Liddell'
         },
         {
             'id': '2',
@@ -50,7 +53,10 @@ def test_users_list(rf, monkeypatch):
             'is_superuser': False,
             'email': 'bob@mathesar.org',
             'full_name': 'Bob Marley',
-            'display_language': 'ja'
+            'display_language': 'ja',
+            'owner': None,
+            'agent_model': '',
+            'display_name': 'Bob Marley'
         }
     ]
     actual_users_list = users.list_()
@@ -80,7 +86,10 @@ def test_users_get(rf, monkeypatch):
         'is_superuser': True,
         'email': 'alice@mathesar.org',
         'full_name': 'Alice Liddell',
-        'display_language': 'en'
+        'display_language': 'en',
+        'owner': None,
+        'agent_model': '',
+        'display_name': 'Alice Liddell'
     }
     actual_user_info = users.get(user_id=user_id)
     assert actual_user_info == expected_user_info
@@ -95,7 +104,10 @@ def test_users_add(rf, monkeypatch):
         'is_superuser': False,
         'email': 'bob@mathesar.org',
         'full_name': 'Bob Marley',
-        'display_language': 'en'
+        'display_language': 'en',
+        'owner': None,
+        'agent_model': '',
+        'display_name': 'Bob Marley'
     }
 
     def mock_add_user(_user_def):
@@ -116,7 +128,10 @@ def test_users_add(rf, monkeypatch):
         'is_superuser': False,
         'email': 'bob@mathesar.org',
         'full_name': 'Bob Marley',
-        'display_language': 'en'
+        'display_language': 'en',
+        'owner': None,
+        'agent_model': '',
+        'display_name': 'Bob Marley'
     }
     actual_user_info = users.add(user_def=user_def)
     assert actual_user_info == expected_user_info
@@ -168,7 +183,10 @@ def test_users_patch_self(rf, monkeypatch):
         'is_superuser': False,
         'email': 'alice@mathesar.org',
         'full_name': 'Alice liddell',
-        'display_language': 'en'
+        'display_language': 'en',
+        'owner': None,
+        'agent_model': '',
+        'display_name': 'Alice liddell'
     }
     actual_user_info = users.patch_self(
         username=_username,
@@ -215,7 +233,10 @@ def test_users_other(rf, monkeypatch):
         'is_superuser': False,
         'email': 'bobm@mathesar.org',
         'full_name': 'bob Marley',
-        'display_language': 'ja'
+        'display_language': 'ja',
+        'owner': None,
+        'agent_model': '',
+        'display_name': 'bob Marley'
     }
     actual_user_info = users.patch_other(
         user_id=_user_id,

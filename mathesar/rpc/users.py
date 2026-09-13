@@ -7,8 +7,12 @@ from django.conf import settings
 from modernrpc.core import REQUEST_KEY
 
 from mathesar.rpc.decorators import mathesar_rpc_method
+from mathesar.utils.agents import display_name
 from mathesar.utils.users import (
+    add_agent,
+    delete_agent,
     get_user,
+    list_agents,
     list_users,
     add_user,
     update_self_user_info,
@@ -30,6 +34,11 @@ class UserInfo(TypedDict):
         email: The email of the user.
         full_name: The full name of the user.
         display_language: Specifies the display language for the user, can be either `en` or `ja`.
+        owner: The id of the person who set this agent going, and `null` for a person.
+        agent_model: Which model is behind an agent, as a label. Empty for a person.
+        display_name: What to call this user wherever one is shown. An agent is named by
+            its owner as well as itself -- "Quentin's Claude" -- because its own name is
+            only unique among its owner's agents.
     """
     id: str
     username: str
@@ -37,6 +46,9 @@ class UserInfo(TypedDict):
     email: str
     full_name: str
     display_language: str
+    owner: Optional[str]
+    agent_model: str
+    display_name: str
 
     @classmethod
     def from_model(cls, model):
@@ -46,7 +58,10 @@ class UserInfo(TypedDict):
             is_superuser=model.is_superuser,
             email=model.email,
             full_name=model.full_name,
-            display_language=model.display_language
+            display_language=model.display_language,
+            owner=str(model.owner_id) if model.owner_id else None,
+            agent_model=model.agent_model,
+            display_name=display_name(model),
         )
 
 
@@ -258,3 +273,60 @@ def revoke(
         This endpoint requires the caller to be a superuser.
     """
     revoke_password(user_id, new_password)
+
+
+@mathesar_rpc_method(name='users.agents.add', auth="login")
+def add_agent_(
+    *,
+    name: str,
+    agent_model: str = '',
+    email: Optional[str] = None,
+    **kwargs
+) -> UserInfo:
+    """
+    Set an agent going, owned by the caller.
+
+    An agent is a user with an owner, so it can be assigned a row through a user column
+    and its writes are attributed like anybody else's. It reaches a database exactly as
+    far as the person who set it going, and no further.
+
+    Creating one does not let it in: it has no password, and it arrives through the same
+    gate its owner does. Whoever runs the installation still has to allow its address --
+    and, where the gate asks for a client certificate, issue it one.
+
+    Args:
+        name: What to call it. Only has to be unique among the caller's own agents, so
+            both people on a shared Mathesar can have a "Claude". Defaults to "Agent".
+        agent_model: Which model is behind it, as a label -- "claude", "codex", "qwen".
+        email: The address it is known by at the gate, which must be nobody else's.
+            Defaults to the caller's own address with the agent's name tagged onto it.
+
+    Returns:
+        The information of the created agent.
+    """
+    owner = kwargs.get(REQUEST_KEY).user
+    return UserInfo.from_model(add_agent(owner, name, agent_model, email))
+
+
+@mathesar_rpc_method(name='users.agents.list', auth="login")
+def list_agents_(**kwargs) -> list[UserInfo]:
+    """
+    List the caller's own agents. Exposed as `list`.
+
+    Returns:
+        A list of information about the caller's agents, oldest first.
+    """
+    owner = kwargs.get(REQUEST_KEY).user
+    return [UserInfo.from_model(agent) for agent in list_agents(owner)]
+
+
+@mathesar_rpc_method(name='users.agents.delete', auth="login")
+def delete_agent_(*, agent_id: str, **kwargs) -> None:
+    """
+    Stop one of the caller's own agents.
+
+    Args:
+        agent_id: The Django id of the agent, a UUID.
+    """
+    owner = kwargs.get(REQUEST_KEY).user
+    delete_agent(owner, agent_id)

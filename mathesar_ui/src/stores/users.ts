@@ -23,6 +23,15 @@ export class UserModel {
 
   readonly displayLanguage: User['display_language'];
 
+  /** The person who set this agent going, and null for a person */
+  readonly owner: User['owner'];
+
+  /** Which model is behind an agent, as a label. Empty for a person. */
+  readonly agentModel: User['agent_model'];
+
+  /** What to call this user: an agent carries its owner's name as well as its own */
+  readonly displayName: User['display_name'];
+
   constructor(userDetails: User) {
     this.id = userDetails.id;
     this.isMathesarAdmin = userDetails.is_superuser;
@@ -30,6 +39,14 @@ export class UserModel {
     this.email = userDetails.email;
     this.username = userDetails.username;
     this.displayLanguage = userDetails.display_language;
+    this.owner = userDetails.owner ?? null;
+    this.agentModel = userDetails.agent_model ?? '';
+    this.displayName =
+      userDetails.display_name || userDetails.full_name || userDetails.username;
+  }
+
+  get isAgent(): boolean {
+    return this.owner !== null;
   }
 
   getDisplayName(): string {
@@ -44,6 +61,9 @@ export class UserModel {
       full_name: this.fullName,
       email: this.email,
       display_language: this.displayLanguage,
+      owner: this.owner,
+      agent_model: this.agentModel,
+      display_name: this.displayName,
     };
   }
 
@@ -64,6 +84,9 @@ export class AnonymousViewerUserModel extends UserModel {
       full_name: 'Anonymous',
       email: null,
       display_language: 'en',
+      owner: null,
+      agent_model: '',
+      display_name: 'Anonymous',
     });
   }
 }

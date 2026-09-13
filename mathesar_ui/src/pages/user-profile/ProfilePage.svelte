@@ -6,7 +6,11 @@
   import InsetPageLayout from '@mathesar/layouts/InsetPageLayout.svelte';
   import LayoutWithHeader from '@mathesar/layouts/LayoutWithHeader.svelte';
   import { getUserProfileStoreFromContext } from '@mathesar/stores/userProfile';
-  import { PasswordChangeForm, UserDetailsForm } from '@mathesar/systems/users';
+  import {
+    AgentsForm,
+    PasswordChangeForm,
+    UserDetailsForm,
+  } from '@mathesar/systems/users';
   import { preloadCommonData } from '@mathesar/utils/preloadData';
 
   const userProfileStore = getUserProfileStoreFromContext();
@@ -39,6 +43,11 @@
           <PasswordChangeForm userId={userProfile.id} />
         </InsetPageSection>
       {/if}
+
+      <InsetPageSection>
+        <h2 slot="header">{$_('agents')}</h2>
+        <AgentsForm />
+      </InsetPageSection>
 
       {#if !userProfile.isMathesarAdmin}
         <InsetPageSection>

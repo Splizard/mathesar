@@ -10,13 +10,15 @@ from uuid import UUID
 from mathesar.utils import user_display as ud
 
 
-def _make_user(id, full_name="", email="", username=""):
+def _make_user(id, full_name="", email="", username="", owner=None):
     """Create a mock User object with the given fields."""
-    user = MagicMock(spec=['id', 'full_name', 'email', 'username'])
+    user = MagicMock(spec=['id', 'full_name', 'email', 'username', 'owner', 'is_agent'])
     user.id = id
     user.full_name = full_name
     user.email = email
     user.username = username
+    user.owner = owner
+    user.is_agent = owner is not None
     return user
 
 
@@ -204,3 +206,32 @@ class TestApplyTrackEditingUser:
         record_def = {"1": "data", "3": 999}
         result = ud.apply_track_editing_user(record_def, table_meta, 42)
         assert result == {"1": "data", "3": 42}
+
+
+class TestNamingAnAgentInACell:
+    """
+    An agent is shown by its owner as well as itself, whichever field the column displays.
+
+    Its own name is only unique among its owner's agents, so the field on its own would
+    name two different agents on a Mathesar that two people share.
+    """
+
+    def test_an_agent_carries_its_owner(self, monkeypatch):
+        owner = _make_user(_uuid(1), full_name="Quentin", username="quentin")
+        agent = _make_user(
+            _uuid(2), full_name="Claude", username="quentin__claude", owner=owner
+        )
+
+        monkeypatch.setattr(ud.User.objects, "filter", lambda **kw: [agent])
+        result = ud.get_user_display_values({_uuid(2)}, "full_name")
+        assert result == {str(_uuid(2)): "Quentin's Claude"}
+
+    def test_it_carries_its_owner_whatever_field_was_asked_for(self, monkeypatch):
+        owner = _make_user(_uuid(1), full_name="Bligh", username="bligh")
+        agent = _make_user(
+            _uuid(2), full_name="Claude", username="bligh__claude", owner=owner
+        )
+
+        monkeypatch.setattr(ud.User.objects, "filter", lambda **kw: [agent])
+        result = ud.get_user_display_values({_uuid(2)}, "username")
+        assert result == {str(_uuid(2)): "Bligh's Claude"}

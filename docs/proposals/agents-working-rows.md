@@ -4,8 +4,9 @@ A proposal for row 2 of the feature-idea table: *"Assign AI agents rows somehow
 (user?), so they can work on them, need some way to easily prompt your agent to
 connect to the DB."*
 
-Not built. This is the case for a shape, so that the decision can be made before
-the code is.
+**Step 2 is now built** -- agents are users with owners, and the sections below marked
+*Built* describe what is there rather than what is proposed. The rest still stands as a
+case for a shape.
 
 ## What we do now
 
@@ -33,20 +34,77 @@ Four things, in the order they matter:
 
 ## The shape
 
-### An agent is a user
+### An agent belongs to a user (*Built*)
 
 The fork already has a user column type: a column whose values are Mathesar
 users, with a picker, and a trigger that records who last changed a record.
 
-An agent should be a Mathesar user with a flag saying it is one. Nothing else is
-needed to answer "who":
+An agent is a Mathesar user with an **owner** — not a flag, and emphatically not
+a model. "Claude" is not a collaborator; *your* Claude is. The principal is the
+pair, a person and the agent they set going, and the model is a property of that
+agent rather than its name. Two people both running Claude then have two agent
+users that happen to carry the same `agent_model` label, the same way two people
+both using Firefox are still two people.
 
-- it appears in a user column's picker like anybody else;
-- it connects as a Postgres role, so the database decides what it may touch;
-- its writes are attributed by the machinery that already attributes writes.
+Making the owner a real foreign key rather than a flag does a surprising amount
+of work at once:
 
-The flag earns its keep in the interface — an agent is worth showing differently
-from a person, and worth filtering by — and in refusing it a password login.
+- **Naming.** An agent's name only has to be unique *among its owner's agents*,
+  so you and a colleague can each have a "Claude" without either being made to
+  pick again. What tells them apart on the page is the owner: "Quentin's Claude",
+  "Bligh's Agent". The globally unique handle underneath (`quentin__claude`,
+  which doubles as a Postgres role name) is derived and never shown.
+- **Attribution.** The user-tracking trigger records the agent, and the agent
+  records its owner, so "who did this" is answerable at either grain.
+- **Privileges.** An agent reaches a database exactly as far as its owner and no
+  further: with no role of its own it borrows its owner's. This is most of the
+  answer to the containment question below.
+- **The picker.** A user column offers each person followed by the agents they
+  set going, so an agent is read beside whoever is answerable for it.
+
+Three rules fall out and are enforced:
+
+- **One level only.** An agent cannot own an agent. Sub-agents are real — an
+  agent spawning its own is routine — but they act *as* their parent rather than
+  being Mathesar users, or the tree of principals is unbounded and privilege
+  derivation becomes a chain to walk.
+- **An agent is never a superuser.** It borrows its owner's reach into the
+  databases, but administering Mathesar is not a thing to be delegated.
+- **An agent has no password.** It arrives through whatever gate the installation
+  puts in front of Mathesar; a password on it would be a second way in that
+  nobody is watching.
+
+#### The possessive is applied when shown, not stored
+
+A cell holding an agent always reads the long way round — "Quentin's Claude" —
+because a table should mean the same thing to everybody it is shown to, and a
+screenshot has no idea who is looking at it. The *picker* is where it shortens to
+"Claude" for the person whose agent it is, the way an app says "you" rather than
+your own name, because a picker is personal and a stored value is not.
+
+Because it is composed rather than stored, renaming a person renames their agents
+with them, and there is nothing to migrate.
+
+#### An agent needs its own way in
+
+This is the part that is easy to miss. Where Mathesar sits behind a gate that
+works out who is knocking — SSO merging accounts by email, or this fork's
+appliance deriving an identity from the email in a client certificate — **the
+address is the identity**. An agent therefore gets an address of its own, by
+default its owner's with the agent's name tagged onto it
+(`you+claude@example.com`): deliverable to the owner, unmistakably an agent of
+theirs, and theirs to hand out.
+
+Sharing the owner's address instead would make the two of them the same person to
+everything upstream of Mathesar, which is exactly the telling-apart that owning an
+agent is for.
+
+Creating an agent therefore does **not** let it in. On an appliance with an mTLS
+gate, three further deliberate acts are needed, each by whoever runs it: issue the
+agent a client certificate for its address, trust that certificate at the gate,
+and allow the address at the identity service. That is a feature — an agent
+existing in Mathesar and an agent being able to reach Mathesar are separate
+decisions, and the second one is revocable on its own by pulling the certificate.
 
 ### Assignment is a column
 
@@ -118,8 +176,9 @@ record's history is already the record.
 ## What to build, in order
 
 1. **Row 1's transport.** Websockets over `NOTIFY`/`LISTEN`. Row 2 waits on it.
-2. **Agent users.** A flag on the user model, and the refusal of a password
-   login for one. The user column already works.
+2. ~~**Agent users.**~~ **Done.** An owner on the user model, the naming and
+   display rules above, owner-derived database reach, and the refusal of both a
+   password and superuser. The user column already worked.
 3. **The MCP server.** A thin adapter over the existing RPC, plus a subscription
    to the agent's own assignments.
 4. **`records.claim_next`.** Only when there is more than one agent.
@@ -142,12 +201,21 @@ ever assigned, because it is how an agent reads the database at all.
 
 ## Open questions, honestly
 
-- **Assignment is not containment.** Giving an agent the privilege to write the
-  rows assigned to it means giving it the privilege to write the table.
-  Postgres can grant by column but not by row without policies, and Mathesar's
-  role model is per-table. So assigning a row to an agent is an expression of
-  trust, not a boundary. If it needs to be a boundary, that is row-level security
-  and a much bigger piece of work — worth deciding before, not after.
+- **Assignment is not containment.** Deriving an agent's reach from its owner's
+  settles the worst of this: an agent can never become a way to get privileges
+  the person who set it going does not have, which is what you would otherwise
+  fear from a pool of agents on a shared database. What it does not settle is the
+  row: giving an agent the privilege to write the rows assigned to it means
+  giving it the privilege to write the table. Postgres can grant by column but not
+  by row without policies, and Mathesar's role model is per-table. So assigning a
+  *row* to an agent remains an expression of trust rather than a boundary. If it
+  needs to be a boundary, that is row-level security and a much bigger piece of
+  work — worth deciding before, not after.
+- **The certificate is the credential.** Where identity comes from a client
+  certificate, whoever holds an agent's certificate is that agent. Issue one per
+  agent, to the machine it runs on, and revoke it rather than trying to detect
+  misuse. Two agents handed the same certificate are one agent, the same way two
+  people sharing a login are one user, and nothing should try to tell them apart.
 - **Runaway work.** An agent woken on every change to a large table can spend a
   lot of money quickly. Whatever the answer is — a rate limit, a budget, a human
   confirmation — it belongs in the first version rather than the third.

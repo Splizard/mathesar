@@ -8,6 +8,7 @@ and format them for display in cells (similar to linked record summaries).
 from uuid import UUID
 
 from mathesar.models import User
+from mathesar.utils.agents import display_name
 
 
 def get_user_display_values(
@@ -27,10 +28,23 @@ def get_user_display_values(
     if not user_ids:
         return {}
 
-    return {
-        str(user.id): getattr(user, display_field, None) or ""
-        for user in User.objects.filter(id__in=user_ids)
-    }
+    users = User.objects.filter(id__in=user_ids)
+    return {str(user.id): _cell_label(user, display_field) for user in users}
+
+
+def _cell_label(user, display_field):
+    """
+    What a user column shows for one user.
+
+    An agent is named by its owner as well as itself, whichever field the column was told
+    to display, because the field on its own -- "Claude", or a derived username nobody
+    reads -- would name two different agents on a Mathesar that two people share. A cell
+    reads the same to everybody looking at it; shortening it to "Claude" for the person
+    whose agent it is belongs in the picker, not in the stored table.
+    """
+    if user.is_agent:
+        return display_name(user)
+    return getattr(user, display_field, None) or ""
 
 
 def get_user_linked_record_summaries(columns_meta_data, results):

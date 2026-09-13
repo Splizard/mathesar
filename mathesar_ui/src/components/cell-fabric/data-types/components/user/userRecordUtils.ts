@@ -5,7 +5,11 @@ import type {
 import type { User } from '@mathesar/api/rpc/users';
 import AsyncStore from '@mathesar/stores/AsyncStore';
 import type { RowSeekerRecordStore } from '@mathesar/systems/row-seeker/RowSeekerController';
-import { type UserDisplayField, getUserLabel } from '@mathesar/utils/userUtils';
+import {
+  type UserDisplayField,
+  byOwnerThenName,
+  getUserPickerLabel,
+} from '@mathesar/utils/userUtils';
 
 export function convertUsersToRecords(
   users: User[],
@@ -13,15 +17,21 @@ export function convertUsersToRecords(
   searchQuery?: string,
   limit?: number,
   offset?: number,
+  viewerId?: string,
 ): RecordsSummaryListResponse {
-  let filteredUsers = users;
+  // Each person followed by the agents they set going, so that an agent is read beside
+  // whoever is answerable for it rather than wherever its name happens to sort.
+  let filteredUsers = byOwnerThenName(users);
   if (searchQuery) {
     const query = searchQuery.toLowerCase();
-    filteredUsers = users.filter(
+    filteredUsers = filteredUsers.filter(
       (user) =>
         user.username?.toLowerCase().includes(query) ||
         user.full_name?.toLowerCase().includes(query) ||
-        user.email?.toLowerCase().includes(query),
+        user.email?.toLowerCase().includes(query) ||
+        // Searching an owner's name finds the agents they set going, which is how you
+        // look for "one of Bligh's" without knowing what he called it.
+        user.display_name?.toLowerCase().includes(query),
     );
   }
 
@@ -32,7 +42,7 @@ export function convertUsersToRecords(
 
   const results: SummarizedRecordReference[] = paginatedUsers.map((user) => ({
     key: user.id,
-    summary: getUserLabel(user, userDisplayField),
+    summary: getUserPickerLabel(user, userDisplayField, viewerId),
   }));
 
   return {
@@ -48,6 +58,7 @@ export function convertUsersToRecords(
 export function createUserRecordStore(
   users: User[],
   userDisplayField: UserDisplayField,
+  viewerId?: string,
 ): RowSeekerRecordStore {
   return new AsyncStore<
     {
@@ -64,6 +75,7 @@ export function createUserRecordStore(
       search ?? undefined,
       limit ?? undefined,
       offset ?? undefined,
+      viewerId,
     );
   });
 }

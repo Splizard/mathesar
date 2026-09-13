@@ -549,6 +549,21 @@ METHODS = [
         [user_is_superuser]
     ),
     (
+        users.add_agent_,
+        "users.agents.add",
+        [user_is_authenticated]
+    ),
+    (
+        users.list_agents_,
+        "users.agents.list",
+        [user_is_authenticated]
+    ),
+    (
+        users.delete_agent_,
+        "users.agents.delete",
+        [user_is_authenticated]
+    ),
+    (
         users.delete,
         "users.delete",
         [user_is_superuser]
