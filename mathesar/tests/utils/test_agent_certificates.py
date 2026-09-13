@@ -215,7 +215,7 @@ class TestThePrompt:
         assert issued["password"] not in issued["prompt"]
 
     def test_it_is_short(self, claude):
-        assert len(onboarding_prompt(claude, SITE).splitlines()) <= 60
+        assert len(onboarding_prompt(claude, SITE).splitlines()) <= 65
 
     def test_it_says_why_the_database_is_being_shared(self, claude):
         prompt = flat(onboarding_prompt(claude, SITE))
@@ -271,7 +271,6 @@ class TestThePrompt:
         prompt = flat(onboarding_prompt(claude, SITE))
         assert "Ask before deleting anything" in prompt
         assert "never copy, print or commit them" in prompt
-        assert "never a secret" in prompt
         assert "say so and stop" in prompt
         assert "do not use anybody else's credentials" in prompt
 
@@ -287,7 +286,22 @@ class TestThePrompt:
         prompt = onboarding_prompt(claude, SITE, self.TABLE)
         assert '"Tasks", in schema "Work" of the database "Bligh & Quentin"' in flat(prompt)
         assert """columns.list '{"database_id": 3, "table_oid": 16500}'""" in prompt
-        assert len(prompt.splitlines()) <= 70
+        assert len(prompt.splitlines()) <= 75
+
+    def test_it_has_the_agent_remember_it_so_it_is_pasted_once(self, claude):
+        prompt = onboarding_prompt(claude, SITE)
+        text = flat(prompt)
+        assert "## 4. Remember this, so nobody has to paste it again" in prompt
+        assert "save this note to your persistent memory" in text
+        assert "not in a file the repository commits and pushes" in text
+        assert f'Mathesar: {SITE}, as "Quentin\'s Claude" ({claude.email}).' in text
+        assert reference_url() in text
+        assert "Never add the password" in text
+
+    def test_the_note_remembers_the_table_it_was_handed(self, claude):
+        prompt = onboarding_prompt(claude, SITE, self.TABLE)
+        assert "## 5. Remember this" in prompt
+        assert "database_id 3, table_oid 16500" in flat(prompt)
 
     def test_without_a_table_it_names_none(self, claude):
         assert "brought in for" not in onboarding_prompt(claude, SITE)

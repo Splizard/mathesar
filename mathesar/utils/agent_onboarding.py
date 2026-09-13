@@ -24,6 +24,11 @@ log; a password that has been through one is spent.
 session can find it, and the first thing the prompt has the agent do is look there. An agent set
 up every session is not set up, only set up repeatedly.
 
+**It ends by having the agent remember it.** A person should paste this once, not at the start
+of every session, so the agent is given the note to save -- where Mathesar is, who it is, how to
+call, and the table if it was handed one -- and told to keep it in its own memory rather than in
+a file its repository will commit and push.
+
 **It says why the database is being shared** -- because it holds data for the work the agent and
 its person are doing together -- which is what tells the agent what it is there for and how far
 to go.
@@ -60,6 +65,22 @@ def reference_url():
 def script_url():
     """Where the agent fetches the script it calls Mathesar with."""
     return f"{settings.AGENT_REFERENCE_BASE_URL.rstrip('/')}/mathesar"
+
+
+def _memory_note(agent, site_url, table):
+    """The note an agent saves so that it never needs this prompt again."""
+    lines = [
+        f'Mathesar: {site_url}, as "{agent.display_name}" ({agent.email}).',
+        f"Call it with {HOME}/mathesar METHOD '{{\"params\": ...}}' -- it signs itself in with the",
+        f"certificate in {HOME}. Reference: {reference_url()}",
+    ]
+    if table:
+        lines.append(
+            f'This work\'s data: "{table["table_name"]}" in schema "{table["schema_name"]}" of '
+            f'"{table["database_name"]}" (database_id {int(table["database_id"])}, '
+            f'table_oid {int(table["table_oid"])}).'
+        )
+    return "\n".join(f"    {line}" for line in lines)
 
 
 def _about_table(table):
@@ -99,6 +120,7 @@ def onboarding_prompt(agent, site_url, table=None):
     slug = agent.cert_slug
     home = HOME
     about = _about_table(table) if table else ""
+    remember = 5 if table else 4
     return f"""\
 # Mathesar access for {agent.display_name}
 
@@ -139,12 +161,22 @@ A list of databases means you are in; the script signs itself in with your certi
 reference ("Finding your way around") shows how to find tables and read and change rows. If it
 is not clear which tables belong to this work, ask.
 
-{about}## Rules
+{about}## {remember}. Remember this, so nobody has to paste it again
+
+Once step 3 works, save this note to your persistent memory -- whatever carries over to your next
+session on this work. Keep it in memory that stays with you, not in a file the repository commits
+and pushes:
+
+{_memory_note(agent, site_url, table)}
+
+Next session, start from the note: run step 1's check, then call. Never add the password, or the
+contents of the key or session, to it.
+
+## Rules
 
 - Ask before deleting anything or changing more than a handful of rows. Change tables and columns
   only when asked.
 - `{slug}.key` and the `.session` file beside it are you: never copy, print or commit them.
-- In your notes for next session, keep the site, who you are and the paths -- never a secret.
 - If you are refused or lack a permission, say so and stop. Do not look for another way in, and
   do not use anybody else's credentials.
 """
