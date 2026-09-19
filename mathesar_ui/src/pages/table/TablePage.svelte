@@ -24,6 +24,11 @@
   } from '@mathesar/systems/table-view/fullScreen';
   import { compactPageHeaderVisible } from '@mathesar/systems/table-view/pageHeader';
   import TableView from '@mathesar/systems/table-view/TableView.svelte';
+  import {
+    keepUserTableView,
+    viewOfMeta,
+  } from '@mathesar/systems/table-view/userTableView';
+  import UserTableViewKeeper from '@mathesar/systems/table-view/UserTableViewKeeper';
 
   import {
     ImperativeFilterController,
@@ -111,7 +116,11 @@
     });
   }
 
+  // What this person has on is kept for them, so coming back is coming back to it.
+  const viewKeeper = new UserTableViewKeeper(keepUserTableView);
+
   onDestroy(() => {
+    viewKeeper.flush();
     stopWatching?.();
     if (askAgainSoon) clearTimeout(askAgainSoon);
     // Leaving the table is leaving what was being shown on its own.
@@ -120,6 +129,10 @@
 
   function handleMetaSerializationChange(s: string) {
     router.location.query.set(metaSerializationQueryKey, s);
+    viewKeeper.note(
+      { databaseId: table.schema.database.id, tableOid: table.oid },
+      viewOfMeta(tabularData.meta),
+    );
   }
   $: metaSerialization = tabularData.meta.serialization;
   $: handleMetaSerializationChange($metaSerialization);

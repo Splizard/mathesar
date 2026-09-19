@@ -248,6 +248,34 @@ class TableMetaData(BaseModel):
         ]
 
 
+class UserTableView(BaseModel):
+    """
+    How one person last left one table: the filter they had on and the columns they had hidden.
+
+    So that coming back to a table is coming back to it as it was left, rather than to every row
+    of it with every column showing. It is theirs alone, which is why it is kept here beside the
+    person rather than with the table in the user's database, where a kept filter lives: that is
+    something a table offers everybody, and this is what one person happened to be doing.
+
+    The two fields are held as the table view writes them, column ids and all, and handed back
+    untouched; a condition on a column that has since gone is dropped on the way back in, as it
+    is for a filter in a link.
+    """
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE)
+    database = models.ForeignKey('Database', on_delete=models.CASCADE)
+    table_oid = models.PositiveBigIntegerField()
+    filtering = models.JSONField(null=True)
+    hidden_columns = models.JSONField(null=True)
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["user", "database", "table_oid"],
+                name="unique_user_table_view"
+            )
+        ]
+
+
 class Explorations(BaseModel):
     database = models.ForeignKey('Database', on_delete=models.CASCADE)
     name = models.CharField(max_length=128, unique=True)

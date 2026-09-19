@@ -73,6 +73,17 @@ export interface RecordSummaryCard {
  * which this layer knows nothing about; the one place that reads it back says
  * so.
  */
+/**
+ * How the person asking last left a table, so that coming back to it is coming back to it as it
+ * was left. Theirs alone; each is held as the table view writes it.
+ */
+export interface UserTableView {
+  /** The table view's terse filtering, or null for none */
+  filtering: unknown[] | null;
+  /** The ids of the hidden columns, or null for none */
+  hidden_columns: string[] | null;
+}
+
 export interface SavedTableFilter {
   name: string;
   filter: unknown;
@@ -361,6 +372,18 @@ export const tables = {
          */
         metadata: Partial<TableMetadata>;
       },
+      void
+    >(),
+  },
+
+  user_view: {
+    get: rpcMethodTypeContainer<
+      { database_id: number; table_oid: number },
+      UserTableView | null
+    >(),
+
+    set: rpcMethodTypeContainer<
+      { database_id: number; table_oid: number; view: UserTableView },
       void
     >(),
   },

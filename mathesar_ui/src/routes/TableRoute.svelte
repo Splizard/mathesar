@@ -8,6 +8,7 @@
   import type { Schema } from '@mathesar/models/Schema';
   import ErrorPage from '@mathesar/pages/ErrorPage.svelte';
   import TablePage from '@mathesar/pages/table/TablePage.svelte';
+  import WithRestoredView from '@mathesar/pages/table/WithRestoredView.svelte';
   import { currentTableId, currentTablesData } from '@mathesar/stores/tables';
 
   import RecordPageRoute from './RecordPageRoute.svelte';
@@ -30,7 +31,9 @@
   <AppendBreadcrumb item={{ type: 'table', database, schema, table }} />
 
   <Route path="/">
-    <TablePage {table} />
+    <WithRestoredView {table}>
+      <TablePage {table} />
+    </WithRestoredView>
   </Route>
 
   <Route path="/:recordPk" let:meta>

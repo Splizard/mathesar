@@ -542,6 +542,16 @@ METHODS = [
         "tables.metadata.set",
         [user_is_authenticated]
     ),
+    (
+        tables.user_view.get,
+        "tables.user_view.get",
+        [user_is_authenticated]
+    ),
+    (
+        tables.user_view.set_,
+        "tables.user_view.set",
+        [user_is_authenticated]
+    ),
 
     (
         users.add,

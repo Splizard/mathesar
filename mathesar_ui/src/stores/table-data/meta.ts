@@ -331,6 +331,11 @@ export class Meta {
     return new Meta(deserializeMetaProps(s));
   }
 
+  /** The serialization of a Meta with these props and the defaults for the rest */
+  static serializationOf(p: Partial<MetaProps>): string {
+    return serializeMetaProps(getFullMetaProps(p));
+  }
+
   destroy(): void {
     this.cleanupFunctions.forEach((fn) => fn());
   }

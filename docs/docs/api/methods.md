@@ -279,6 +279,15 @@
       - TableMetaDataBlob
       - TableMetaDataRecord
 
+## How a Person Last Left a Table
+
+::: tables.user_view
+    options:
+      members:
+      - get
+      - set_
+      - UserTableViewBlob
+
 ## Table Privileges
 
 ::: tables.privileges
