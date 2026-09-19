@@ -98,7 +98,7 @@
   function onChanged() {
     if (askAgainSoon) clearTimeout(askAgainSoon);
     askAgainSoon = setTimeout(() => {
-      void tabularData.recordsData.fetch();
+      void tabularData.recordsData.refresh();
     }, 300);
   }
 

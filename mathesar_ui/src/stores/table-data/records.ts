@@ -289,17 +289,38 @@ export class RecordsData {
       });
   }
 
+  /**
+   * Ask again for the records being shown without disturbing whoever is looking at them.
+   *
+   * For when somebody else has changed the table. A fetch starts over: it shows the table as
+   * loading, forgets the rows added here, and gives every row a new identity -- and the selection,
+   * the row components and any cell being edited all hang off a row's identity, so a person
+   * halfway through typing into a cell would find the cell gone from under them. This keeps
+   * everything that is still there as it was and only changes the values.
+   */
+  async refresh(): Promise<void> {
+    await this.fetch({
+      clearNewRecords: false,
+      setLoadingState: false,
+      clearMetaStatuses: false,
+      keepRows: true,
+    });
+  }
+
   async fetch(
     opts: {
       clearNewRecords?: boolean;
       setLoadingState?: boolean;
       clearMetaStatuses?: boolean;
+      /** See `refresh` */
+      keepRows?: boolean;
     } = {},
   ): Promise<void> {
     const options = {
       clearNewRecords: true,
       setLoadingState: true,
       clearMetaStatuses: true,
+      keepRows: false,
       ...opts,
     };
 
@@ -370,19 +391,34 @@ export class RecordsData {
           response.download_links,
         );
       }
-      this.fetchedRecordRows.set(
-        response.results.map(
-          (apiRecord) =>
-            new PersistedRecordRow({
-              record: apiRecord,
-            }),
-        ),
-      );
+      if (options.keepRows) {
+        const { rows, movedFromNewRecords } = this.carryRowsOver(
+          response.results,
+        );
+        // In this order, so that a row moving out of the added rows is never missing from both:
+        // the selection would move off it.
+        this.fetchedRecordRows.set(rows);
+        this.newRecords.update((added) =>
+          added.filter((row) => !movedFromNewRecords.has(row.identifier)),
+        );
+      } else {
+        this.fetchedRecordRows.set(
+          response.results.map(
+            (apiRecord) =>
+              new PersistedRecordRow({
+                record: apiRecord,
+              }),
+          ),
+        );
+      }
       this.state.set(States.Done);
       this.grouping.set(grouping);
       this.totalCount.set(totalCount);
       this.error.set(undefined);
     } catch (err) {
+      // What is on the screen is still what was there a moment ago, which is better than a table
+      // replaced by an error nobody asked for.
+      if (options.keepRows) return undefined;
       this.state.set(States.Error);
       this.error.set(
         err instanceof Error ? err.message : 'Unable to load records',
@@ -791,6 +827,61 @@ export class RecordsData {
     this.newRecords.update((rows) => rows.map(postProcessRecordRow));
 
     this.updateSummaryStores(responses);
+  }
+
+  /**
+   * Rows for records that have just arrived, each keeping the identity of the row that already
+   * showed the same record, matched by primary key.
+   *
+   * A record added here and saved moves up among the others, as it would on any fetch, but as the
+   * same row, so that somebody carrying on into its next cell carries on. A cell whose save is
+   * still on its way keeps what was typed into it: the answer may have been read before the save
+   * landed, and the save's own answer will set the cell when it comes.
+   */
+  private carryRowsOver(records: ApiRecord[]): {
+    rows: PersistedRecordRow[];
+    /** The identities of the rows added here that are now among the others */
+    movedFromNewRecords: Set<string>;
+  } {
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    const nameAsText = (record: ApiRecord) =>
+      defined(nameOfRecord(record, pkColumns), recordNameToText);
+    const shownByName = new Map<string, PersistedRecordRow>();
+    const persistedNewRecords = get(this.newRecords).filter(
+      isPersistedRecordRow,
+    );
+    for (const row of [
+      ...get(this.fetchedRecordRows),
+      ...persistedNewRecords,
+    ]) {
+      const name = nameAsText(row.record);
+      if (name !== undefined) shownByName.set(name, row);
+    }
+    const newRecordIds = new Set(persistedNewRecords.map((r) => r.identifier));
+    const movedFromNewRecords = new Set<string>();
+    const cellStatus = get(this.meta.cellModificationStatus);
+
+    const rows = records.map((record) => {
+      const name = nameAsText(record);
+      const previous = name === undefined ? undefined : shownByName.get(name);
+      if (!previous) return new PersistedRecordRow({ record });
+      if (newRecordIds.has(previous.identifier)) {
+        movedFromNewRecords.add(previous.identifier);
+      }
+      const kept = Object.keys(previous.record).filter(
+        (columnId) =>
+          cellStatus.get(getCellKey(previous.identifier, columnId))?.state ===
+          'processing',
+      );
+      return new PersistedRecordRow({
+        identifier: previous.identifier,
+        record: {
+          ...record,
+          ...Object.fromEntries(kept.map((c) => [c, previous.record[c]])),
+        },
+      });
+    });
+    return { rows, movedFromNewRecords };
   }
 
   async refreshRow(rowId: string): Promise<void> {
