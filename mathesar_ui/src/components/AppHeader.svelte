@@ -74,12 +74,13 @@
   $: database = $currentDatabase;
   $: upgradable = $releaseDataStore?.value?.upgradeStatus === 'upgradable';
   $: isNormalRoutingContext = commonData.routing_context === 'normal';
-  $: compactLayout = width < getCompactLayoutThreshold($breadcrumbItems.length);
   $: schema = getSchemaFromBreadcrumbItems($breadcrumbItems);
-  // The schema is in the top bar, so the drawer need only say which database it is.
-  $: drawerItems = schema
+  // The schema is in the top bar and the page names itself, so the trail need only say which
+  // database it is.
+  $: trailItems = schema
     ? $breadcrumbItems.filter(breadcrumbItemIsDatabase)
     : $breadcrumbItems;
+  $: compactLayout = width < getCompactLayoutThreshold(trailItems.length);
 </script>
 
 <header class="app-header" bind:clientWidth={width}>
@@ -111,7 +112,7 @@
         <LogoAndNameWithLink href="/" />
       {/if}
     {:else}
-      <Breadcrumb items={$breadcrumbItems} {compactLayout} />
+      <Breadcrumb items={trailItems} {schema} {compactLayout} />
     {/if}
   </div>
 
@@ -204,7 +205,7 @@
   {/if}
 </header>
 
-<NavigationDrawer bind:isOpen={drawerIsOpen} items={drawerItems} />
+<NavigationDrawer bind:isOpen={drawerIsOpen} items={trailItems} />
 
 <style lang="scss">
   .app-header {
