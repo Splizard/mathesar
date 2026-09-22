@@ -16,7 +16,8 @@
 <div>
   {$_('database_type')}:
   {#if type === DB_TYPES.ARRAY && itemType}
-    <span>{itemType}[]</span>
+    <!-- An array of enums or composites names the type its items are -->
+    <span>{originalType ?? itemType}[]</span>
   {:else if (type === DB_TYPES.ENUM || type === DB_TYPES.COMPOSITE) && originalType}
     <span>{originalType}</span>
   {:else if type === DB_TYPES.ENUM}

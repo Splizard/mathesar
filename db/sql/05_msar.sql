@@ -1438,6 +1438,15 @@ SELECT
         'composite_fields', msar.get_composite_fields(elem.oid)
       )
     ELSE '{}' END
+    || CASE WHEN elem.typtype = 'e' THEN
+      -- A column of an array of enums gives the values its items choose from
+      jsonb_build_object(
+        'original_type', elem.oid::regtype::text,
+        'enum_values',
+        (SELECT jsonb_agg(enumlabel ORDER BY enumsortorder)
+         FROM pg_catalog.pg_enum WHERE enumtypid = elem.oid)
+      )
+    ELSE '{}' END
     || CASE WHEN pgt.typtype = 'c' AND pgt.typnamespace <> 'mathesar_types'::regnamespace THEN
       jsonb_build_object(
         'original_type', base.typ::text,

@@ -9471,6 +9471,22 @@ END;
 $f$ LANGUAGE plpgsql;
 
 
+CREATE OR REPLACE FUNCTION test_column_info_of_enum_arrays() RETURNS SETOF TEXT AS $f$
+DECLARE
+  col_info jsonb;
+BEGIN
+  CREATE TYPE mood AS ENUM ('calm', 'cross');
+  CREATE TABLE moods (id integer PRIMARY KEY, many mood[]);
+  col_info := msar.get_column_info('moods'::regclass);
+  RETURN NEXT is(
+    col_info -> 1 -> 'type_options',
+    '{"item_type": "_enum", "original_type": "mood", "enum_values": ["calm", "cross"]}'::jsonb,
+    'an array of enums gives the values its items choose from'
+  );
+END;
+$f$ LANGUAGE plpgsql;
+
+
 CREATE OR REPLACE FUNCTION test_column_info_of_composite_arrays() RETURNS SETOF TEXT AS $f$
 DECLARE
   col_info jsonb;

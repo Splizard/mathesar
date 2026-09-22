@@ -2,6 +2,7 @@
   import { _ } from 'svelte-i18n';
 
   import type { RequestStatus } from '@mathesar/api/rest/utils/requestUtils';
+  import { getItemColumn } from '@mathesar/components/cell-fabric/data-types/arrayFactory';
   import ArrayElements from '@mathesar/components/cell-fabric/data-types/components/array/ArrayElements.svelte';
   import CompositeFields from '@mathesar/components/cell-fabric/data-types/components/composite/CompositeFields.svelte';
   import RangeBounds from '@mathesar/components/cell-fabric/data-types/components/range/RangeBounds.svelte';
@@ -70,9 +71,21 @@
 
   $: metadata = activePartedCell?.column.column.metadata ?? null;
 
-  /** The column of a value of the array, or of a field, for its cell to show */
-  function getPartColumnFabric(id: string, type: string) {
-    const column = { type, type_options: null, metadata };
+  /**
+   * The column of a value of the array, or of a field, for its cell to show,
+   * with what else its type needs, such as the values of an enum
+   */
+  function getPartColumnFabric(
+    id: string,
+    type: string,
+    typeOptions: Record<string, unknown> | null = null,
+  ) {
+    const column = {
+      type,
+      type_options: typeOptions,
+      nullable: true,
+      metadata,
+    };
     return {
       id,
       column,
@@ -83,9 +96,13 @@
     };
   }
 
+  $: itemColumn = activePartedCell?.isArray
+    ? getItemColumn(activePartedCell.column.column)
+    : undefined;
   $: itemColumnFabric = getPartColumnFabric(
     `${activePartedCell?.columnId ?? ''}-item`,
-    activePartedCell?.column.column.type_options?.item_type ?? 'string',
+    itemColumn?.type ?? 'string',
+    itemColumn?.type_options,
   );
   $: fields = (
     activePartedCell?.column.column.type_options?.composite_fields ?? []

@@ -2,6 +2,7 @@ import {
   type ColumnMetadata,
   getMetadataValue,
 } from '@mathesar/api/rpc/_common/columnDisplayOptions';
+import type { ColumnTypeOptions } from '@mathesar/api/rpc/columns';
 import type { DbType } from '@mathesar/AppTypes';
 import {
   FormattedInput,
@@ -30,6 +31,8 @@ export interface ArrayLikeColumn extends CellColumnLike {
     item_type: DbType;
     /** The fields of the items of an array of composites */
     composite_fields?: { name: string; type: DbType }[] | null;
+    /** The values the items of an array of enums choose from */
+    enum_values?: ColumnTypeOptions['enum_values'];
   } | null;
   metadata: ColumnMetadata | null;
 }
@@ -61,19 +64,36 @@ export function hasValuesShownOneByOne(column: ArrayLikeColumn): boolean {
   return typesShownOneByOne.includes(getItemDataType(column));
 }
 
+/**
+ * The column one of the array's values would be in: of the type of its items,
+ * with the fields of a composite or the values of an enum. Any value of an
+ * array may be NULL.
+ */
+export function getItemColumn(column: {
+  type_options: Pick<
+    ColumnTypeOptions,
+    'item_type' | 'composite_fields' | 'enum_values'
+  > | null;
+  metadata: ColumnMetadata | null;
+}) {
+  return {
+    type: column.type_options?.item_type ?? 'string',
+    type_options: {
+      composite_fields: column.type_options?.composite_fields ?? null,
+      enum_values: column.type_options?.enum_values ?? null,
+    },
+    nullable: true,
+    metadata: column.metadata,
+  };
+}
+
 /** The column of one of the array's values, for a cell of it to show */
 function getItemColumnFabric(
   componentFactoryMap: ComponentFactoryMap,
   column: ArrayLikeColumn,
 ) {
-  const itemDbType = column.type_options?.item_type ?? 'string';
-  const itemColumn = {
-    type: itemDbType,
-    type_options: {
-      composite_fields: column.type_options?.composite_fields ?? null,
-    },
-    metadata: column.metadata,
-  };
+  const itemColumn = getItemColumn(column);
+  const itemDbType = itemColumn.type;
   const cellInfo = getCellInfo(itemDbType, column.metadata);
   return {
     id: `${itemDbType}-item`,
@@ -100,13 +120,7 @@ function makeDisplayFormatter(
     if (elementCellFactory.getDisplayFormatter) {
       return String(
         elementCellFactory.getDisplayFormatter(
-          {
-            type: itemDbType,
-            type_options: {
-              composite_fields: column.type_options?.composite_fields ?? null,
-            },
-            metadata: column.metadata,
-          },
+          getItemColumn(column),
           config,
         )(cellValue),
       );
