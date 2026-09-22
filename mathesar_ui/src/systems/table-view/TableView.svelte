@@ -350,6 +350,9 @@
     grid-template: 1fr auto / minmax(0, 1fr);
     gap: var(--sm3);
     overflow: hidden;
+    /* So that what is stacked in here -- the inspector laid over the table -- is stacked only
+    against the table, and not in front of the navigation drawer. */
+    isolation: isolate;
   }
   .sheet-area {
     position: relative;

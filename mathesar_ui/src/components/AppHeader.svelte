@@ -18,6 +18,7 @@
     getDatabasePageUrl,
     getDocsLink,
     getMarketingLink,
+    getSchemaPageUrl,
   } from '@mathesar/routes/urls';
   import { databasesStore } from '@mathesar/stores/databases';
   import { getReleaseDataStoreFromContext } from '@mathesar/stores/releases';
@@ -35,9 +36,15 @@
   } from '@mathesar-component-library';
 
   import Breadcrumb from './breadcrumb/Breadcrumb.svelte';
-  import { getBreadcrumbItemsFromContext } from './breadcrumb/breadcrumbUtils';
+  import {
+    breadcrumbItemIsDatabase,
+    getBreadcrumbItemsFromContext,
+    getSchemaFromBreadcrumbItems,
+  } from './breadcrumb/breadcrumbUtils';
+  import EntitySelector from './breadcrumb/EntitySelector.svelte';
   import NavigationDrawer from './breadcrumb/NavigationDrawer.svelte';
   import LogoAndNameWithLink from './LogoAndNameWithLink.svelte';
+  import SchemaName from './SchemaName.svelte';
   import UiThemeSelect from './UiThemeSelect.svelte';
 
   const commonData = preloadCommonData();
@@ -68,6 +75,11 @@
   $: upgradable = $releaseDataStore?.value?.upgradeStatus === 'upgradable';
   $: isNormalRoutingContext = commonData.routing_context === 'normal';
   $: compactLayout = width < getCompactLayoutThreshold($breadcrumbItems.length);
+  $: schema = getSchemaFromBreadcrumbItems($breadcrumbItems);
+  // The schema is in the top bar, so the drawer need only say which database it is.
+  $: drawerItems = schema
+    ? $breadcrumbItems.filter(breadcrumbItemIsDatabase)
+    : $breadcrumbItems;
 </script>
 
 <header class="app-header" bind:clientWidth={width}>
@@ -86,7 +98,18 @@
       >
         <Icon {...iconNavigation} />
       </Button>
-      <LogoAndNameWithLink href="/" />
+      {#if schema}
+        <LogoAndNameWithLink href="/" compactLayout />
+        <a
+          class="schema-link"
+          href={getSchemaPageUrl(schema.database.id, schema.oid)}
+        >
+          <SchemaName {schema} />
+        </a>
+        <EntitySelector database={schema.database} {schema} />
+      {:else}
+        <LogoAndNameWithLink href="/" />
+      {/if}
     {:else}
       <Breadcrumb items={$breadcrumbItems} {compactLayout} />
     {/if}
@@ -181,7 +204,7 @@
   {/if}
 </header>
 
-<NavigationDrawer bind:isOpen={drawerIsOpen} items={$breadcrumbItems} />
+<NavigationDrawer bind:isOpen={drawerIsOpen} items={drawerItems} />
 
 <style lang="scss">
   .app-header {
@@ -207,6 +230,15 @@
     align-items: center;
     gap: var(--sm4);
     overflow: hidden;
+  }
+
+  .schema-link {
+    min-width: 0;
+    overflow: hidden;
+    color: inherit;
+    text-decoration: none;
+    font-size: var(--lg1);
+    font-weight: var(--font-weight-bold);
   }
 
   .right {
