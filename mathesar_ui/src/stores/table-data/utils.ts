@@ -260,6 +260,18 @@ export interface RecordGrouping {
   groups: RecordGroup[];
 }
 
+/** Names a group by its values, the same across fetches of it */
+export function getGroupKey(
+  group: RecordGroup,
+  grouping: Pick<RecordGrouping, 'columnIds' | 'preprocIds'>,
+): string {
+  return JSON.stringify([
+    grouping.columnIds,
+    grouping.preprocIds,
+    grouping.columnIds.map((columnId) => group.eqValue[columnId] ?? null),
+  ]);
+}
+
 function buildGroup(apiGroup: ApiGroup): RecordGroup {
   return {
     count: apiGroup.count,

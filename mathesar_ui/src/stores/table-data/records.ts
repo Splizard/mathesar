@@ -205,6 +205,13 @@ export class RecordsData {
 
   persistedNewRecords: Readable<PersistedRecordRow[]>;
 
+  /**
+   * The group each new record was added to from within the grouped view, keyed
+   * by row identifier, so it is shown in its group rather than at the bottom.
+   * Set before the row joins `newRecords`, which is what redraws the rows.
+   */
+  newRecordGroupKeys = new Map<string, string>();
+
   recordSummaries = new WritableMap<string, string>();
 
   linkedRecordSummaries = new AssociatedCellData<string>();
@@ -1015,12 +1022,21 @@ export class RecordsData {
     await this.createRecord(newRow);
   }
 
-  async addEmptyRecord(): Promise<void> {
+  /**
+   * @returns the identifier of the new record's row
+   */
+  async addEmptyRecord(
+    options: { values?: ApiRecord; groupKey?: string } = {},
+  ): Promise<string> {
     const row = new DraftRecordRow({
-      record: this.getEmptyApiRecord(),
+      record: { ...this.getEmptyApiRecord(), ...options.values },
     });
+    if (options.groupKey !== undefined) {
+      this.newRecordGroupKeys.set(row.identifier, options.groupKey);
+    }
     this.newRecords.update((existing) => existing.concat(row));
     await this.createRecord(row);
+    return row.identifier;
   }
 
   getCellValue(cellSelectionId: string): ResultValue | undefined {

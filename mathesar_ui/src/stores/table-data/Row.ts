@@ -12,6 +12,7 @@ export enum RowType {
   DraftRecord = 'draftRecord',
   PlaceholderRecord = 'placeholderRecord',
   GroupHeader = 'groupHeader',
+  GroupAddRecord = 'groupAddRecord',
   Help = 'help',
 }
 
@@ -126,6 +127,28 @@ export class GroupHeaderRow {
   }
 }
 
+/**
+ * Closes a group: adds a record to it, with the group's values already filled
+ * in.
+ */
+export class GroupAddRecordRow {
+  readonly identifier: string;
+
+  readonly groupKey: string;
+
+  /** What a record needs in order to land in this group */
+  readonly groupValues: ApiRecord;
+
+  readonly type = RowType.GroupAddRecord;
+
+  constructor(props: { groupKey: string; groupValues: ApiRecord }) {
+    // Stable for as long as the group is, so the row keeps its slot
+    this.identifier = `group-add-record-row-${props.groupKey}`;
+    this.groupKey = props.groupKey;
+    this.groupValues = props.groupValues;
+  }
+}
+
 export class HelpTextRow {
   identifier = getGloballyUniqueId('help-row');
 
@@ -136,7 +159,7 @@ export type ProvisionalRecordRow = DraftRecordRow | PlaceholderRecordRow;
 
 export type RecordRow = PersistedRecordRow | ProvisionalRecordRow;
 
-export type Row = RecordRow | GroupHeaderRow | HelpTextRow;
+export type Row = RecordRow | GroupHeaderRow | GroupAddRecordRow | HelpTextRow;
 
 export function isPersistedRecordRow(row: Row): row is PersistedRecordRow {
   return row.type === RowType.PersistedRecord;
@@ -160,6 +183,10 @@ export function isRecordRow(row: Row): row is RecordRow {
 
 export function isGroupHeaderRow(row: Row): row is GroupHeaderRow {
   return row.type === RowType.GroupHeader;
+}
+
+export function isGroupAddRecordRow(row: Row): row is GroupAddRecordRow {
+  return row.type === RowType.GroupAddRecord;
 }
 
 export function isHelpTextRow(row: Row): row is HelpTextRow {

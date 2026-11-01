@@ -40,7 +40,7 @@ import type { AssociatedCellValuesForSheet } from '../AssociatedCellData';
 
 import { ColumnsDataStore } from './columns';
 import { ConstraintsDataStore } from './constraints';
-import { Display } from './display';
+import { Display, type DisplayRecordRowDescriptor, RowOrigin } from './display';
 import {
   type JoinedColumn,
   SimpleManyToManyJoinedColumn,
@@ -51,6 +51,7 @@ import {
   type ProcessedColumnsStore,
 } from './processedColumns';
 import { RecordsData } from './records';
+import { getRowSelectionId } from './utils';
 
 /**
  * Whether this table's records can be named.
@@ -206,11 +207,6 @@ export class TabularData {
       contextualFilters,
       loadIntrinsicRecordSummaries: props.loadIntrinsicRecordSummaries,
     });
-    this.display = new Display({
-      meta: this.meta,
-      recordsData: this.recordsData,
-    });
-
     this.table = props.table;
 
     this.processedColumns = derived(
@@ -324,20 +320,40 @@ export class TabularData {
         ),
     );
 
+    this.display = new Display({
+      meta: this.meta,
+      recordsData: this.recordsData,
+      processedColumns: this.processedColumns,
+      canInsertRecords: this.canInsertRecords,
+    });
+
     const plane = derived(
       [
-        this.recordsData.selectableRowsMap,
+        this.display.displayRowDescriptors,
         this.displayedColumns,
         this.display.placeholderRowId,
         this.joinedColumns,
       ],
       ([
-        selectableRowsMap,
+        displayRowDescriptors,
         displayedColumns,
         placeholderRowId,
         joinedColumns,
       ]) => {
-        const rowIds = new Series([...selectableRowsMap.keys()]);
+        // In the order they are shown, which in a grouped view puts a record
+        // added to a group among that group's records
+        // A Series refuses duplicates, and a grouped page fetched under the
+        // previous grouping can briefly show a row twice
+        const rowIds = new Series([
+          ...new Set(
+            displayRowDescriptors
+              .filter(
+                (d): d is DisplayRecordRowDescriptor =>
+                  d.rowOrigin !== RowOrigin.StaticUiElement,
+              )
+              .map((d) => getRowSelectionId(d.row)),
+          ),
+        ]);
         const columnIds = new Series([...displayedColumns.keys()]);
         const rangeRestrictedColumnIds = new ImmutableSet(joinedColumns.keys());
         return new Plane(
@@ -473,8 +489,13 @@ export class TabularData {
     return pkColumns.map((column) => row.record[column.id]);
   }
 
-  async addNewRecord() {
-    const newRecord = await this.recordsData.addEmptyRecord();
+  /**
+   * @returns the identifier of the new record's row
+   */
+  async addNewRecord(
+    options: Parameters<RecordsData['addEmptyRecord']>[0] = {},
+  ) {
+    const newRecord = await this.recordsData.addEmptyRecord(options);
     const requiredColumnIds = get(this.columnsDataStore.columns)
       .filter((column) => {
         const hasDynamicDefault = column.default?.is_dynamic ?? false;

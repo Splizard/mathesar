@@ -5,15 +5,17 @@ import type Pagination from '@mathesar/utils/Pagination';
 import { assertExhaustive } from '@mathesar-component-library';
 
 import type { Meta } from './meta';
+import type { ProcessedColumns } from './processedColumns';
 import type { RecordsData } from './records';
 import {
   type DraftRecordRow,
+  GroupAddRecordRow,
   GroupHeaderRow,
   HelpTextRow,
   type PersistedRecordRow,
   PlaceholderRecordRow,
 } from './Row';
-import type { RecordGrouping } from './utils';
+import { type RecordGrouping, getGroupKey } from './utils';
 
 export interface ColumnPlacement {
   /** CSS value in px */
@@ -48,7 +50,7 @@ export interface DisplayRecordRowDescriptor {
 }
 
 export interface DisplayUiRowDescriptor {
-  row: HelpTextRow | GroupHeaderRow | PlaceholderRecordRow;
+  row: HelpTextRow | GroupHeaderRow | GroupAddRecordRow | PlaceholderRecordRow;
   rowOrigin: RowOrigin.StaticUiElement;
 }
 
@@ -69,15 +71,43 @@ export function getRowNumber(rowDescriptor: DisplayRowDescriptor): number {
   return assertExhaustive(rowDescriptor.rowOrigin);
 }
 
-function combineRecordRowsWithGroupHeaders({
+/**
+ * A record can be added to a group only where every value the group is made of
+ * can be written as it is into the new record: not where a column is grouped by
+ * something worked out from it (such as a date's month), nor where the column
+ * takes no value from the user.
+ */
+function canAddRecordsToGroups(
+  grouping: RecordGrouping,
+  processedColumns: ProcessedColumns,
+): boolean {
+  return grouping.columnIds.every((columnId, index) => {
+    if (grouping.preprocIds[index]) return false;
+    return processedColumns.get(String(columnId))?.isEditable ?? false;
+  });
+}
+
+export function combineRecordRowsWithGroupHeaders({
   recordRows,
+  newRecords,
+  newRecordGroupKeys,
   grouping,
   pagination,
+  totalCount,
+  canAddToGroups,
 }: {
   recordRows: PersistedRecordRow[];
+  newRecords: (PersistedRecordRow | DraftRecordRow)[];
+  newRecordGroupKeys: Map<string, string>;
   grouping?: RecordGrouping;
   pagination: Pagination;
-}): DisplayRowDescriptor[] {
+  totalCount: number;
+  canAddToGroups: boolean;
+}): {
+  rows: DisplayRowDescriptor[];
+  /** New records not shown within a group */
+  ungroupedNewRecords: DisplayRecordRowDescriptor[];
+} {
   const groupingColumnIds = grouping?.columnIds ?? [];
   const isResultGrouped = groupingColumnIds.length > 0;
 
@@ -85,19 +115,28 @@ function combineRecordRowsWithGroupHeaders({
     return index + pagination.offset + 1;
   }
 
+  // A live refresh brings a saved new record among the fetched rows a moment
+  // before it leaves `newRecords`; it is shown once, where it was fetched.
+  const fetchedIds = new Set(recordRows.map((row) => row.identifier));
+  const newRecordDescriptors = newRecords
+    .map(
+      (row, index): DisplayRecordRowDescriptor => ({
+        row,
+        rowNumber: pagination.offset + totalCount + index + 1,
+        rowOrigin: RowOrigin.NewlyCreatedViaUi,
+      }),
+    )
+    .filter((descriptor) => !fetchedIds.has(descriptor.row.identifier));
+
   if (isResultGrouped && grouping) {
     const combinedRows: DisplayRowDescriptor[] = [];
     let persistedRecordRowIndex = 0;
+    const shownNewRecordIds = new Set<string>();
 
     grouping.groups.forEach((group) => {
       const groupValues: ApiRecord = {};
       grouping.columnIds.forEach((columnId) => {
-        const stringColumnId = String(columnId);
-        if (group.eqValue[columnId] !== undefined) {
-          groupValues[stringColumnId] = group.eqValue[columnId];
-        } else {
-          groupValues[stringColumnId] = group.eqValue[columnId];
-        }
+        groupValues[String(columnId)] = group.eqValue[columnId];
       });
       combinedRows.push({
         row: new GroupHeaderRow({
@@ -123,15 +162,37 @@ function combineRecordRowsWithGroupHeaders({
         });
         persistedRecordRowIndex += 1;
       });
+
+      const groupKey = getGroupKey(group, grouping);
+      newRecordDescriptors.forEach((descriptor) => {
+        const { identifier } = descriptor.row;
+        if (newRecordGroupKeys.get(identifier) !== groupKey) return;
+        combinedRows.push(descriptor);
+        shownNewRecordIds.add(identifier);
+      });
+      if (canAddToGroups) {
+        combinedRows.push({
+          row: new GroupAddRecordRow({ groupKey, groupValues }),
+          rowOrigin: RowOrigin.StaticUiElement,
+        });
+      }
     });
-    return combinedRows;
+    return {
+      rows: combinedRows,
+      ungroupedNewRecords: newRecordDescriptors.filter(
+        (descriptor) => !shownNewRecordIds.has(descriptor.row.identifier),
+      ),
+    };
   }
 
-  return recordRows.map((row, index) => ({
-    row,
-    rowOrigin: RowOrigin.FetchedFromDb,
-    rowNumber: makeRowNumber(index),
-  }));
+  return {
+    rows: recordRows.map((row, index) => ({
+      row,
+      rowOrigin: RowOrigin.FetchedFromDb,
+      rowNumber: makeRowNumber(index),
+    })),
+    ungroupedNewRecords: newRecordDescriptors,
+  };
 }
 
 export class Display {
@@ -143,7 +204,17 @@ export class Display {
 
   placeholderRowId: Readable<string>;
 
-  constructor({ meta, recordsData }: { meta: Meta; recordsData: RecordsData }) {
+  constructor({
+    meta,
+    recordsData,
+    processedColumns,
+    canInsertRecords,
+  }: {
+    meta: Meta;
+    recordsData: RecordsData;
+    processedColumns: Readable<ProcessedColumns>;
+    canInsertRecords: Readable<boolean>;
+  }) {
     this.horizontalScrollOffset = writable(0);
     this.scrollOffset = writable(0);
 
@@ -157,28 +228,41 @@ export class Display {
         recordsData.totalCount,
         recordsData.grouping,
         meta.pagination,
+        processedColumns,
+        canInsertRecords,
       ],
-      ([fetchedRecordRows, newRecords, totalCount, grouping, pagination]) => {
-        let displayRowDescriptors: DisplayRowDescriptor[] =
-          combineRecordRowsWithGroupHeaders({
+      ([
+        fetchedRecordRows,
+        newRecords,
+        totalCount,
+        grouping,
+        pagination,
+        $processedColumns,
+        canInsert,
+      ]) => {
+        const { rows, ungroupedNewRecords } = combineRecordRowsWithGroupHeaders(
+          {
             recordRows: fetchedRecordRows,
+            newRecords,
+            newRecordGroupKeys: recordsData.newRecordGroupKeys,
             grouping,
             pagination,
-          });
+            totalCount: totalCount ?? 0,
+            canAddToGroups:
+              canInsert &&
+              !!grouping &&
+              canAddRecordsToGroups(grouping, $processedColumns),
+          },
+        );
+        let displayRowDescriptors = rows;
 
-        if (newRecords.length > 0) {
+        if (ungroupedNewRecords.length > 0) {
           displayRowDescriptors = displayRowDescriptors
             .concat({
               row: new HelpTextRow(),
               rowOrigin: RowOrigin.StaticUiElement,
             })
-            .concat(
-              newRecords.map((row, index) => ({
-                row,
-                rowNumber: pagination.offset + (totalCount ?? 0) + index + 1,
-                rowOrigin: RowOrigin.NewlyCreatedViaUi,
-              })),
-            );
+            .concat(ungroupedNewRecords);
         }
 
         const placeholderRow = new PlaceholderRecordRow({

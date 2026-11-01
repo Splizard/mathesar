@@ -15,11 +15,13 @@ export {
 export { type TableRecordsData } from './records';
 export {
   type GroupHeaderRow,
+  type GroupAddRecordRow,
   type HelpTextRow,
   type PlaceholderRecordRow,
   isRecordRow,
   isHelpTextRow,
   isGroupHeaderRow,
+  isGroupAddRecordRow,
   isPersistedRecordRow,
   isProvisionalRecordRow,
   isDraftRecordRow,

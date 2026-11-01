@@ -13,6 +13,7 @@
     getCellKey,
     getRowSelectionId,
     getTabularDataStoreFromContext,
+    isGroupAddRecordRow,
     isGroupHeaderRow,
     isHelpTextRow,
     isPersistedRecordRow,
@@ -24,6 +25,7 @@
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
   import { Icon } from '@mathesar-component-library';
 
+  import GroupAddRecord from './GroupAddRecord.svelte';
   import GroupHeader from './GroupHeader.svelte';
   import NewRecordMessage from './NewRecordMessage.svelte';
   import { getPlainCell } from './plainCell';
@@ -95,6 +97,23 @@
     e.stopPropagation();
     const recordStore = new RecordStore({ table, recordPk: String(recordId) });
     modalRecordView.open(recordStore);
+  }
+
+  /** Adds a record to the group this row closes, with its values filled in */
+  async function addRecordToGroup() {
+    if (!isGroupAddRecordRow(row)) return;
+    const { groupValues, groupKey } = row;
+    const rowId = await $tabularData.addNewRecord({
+      values: groupValues,
+      groupKey,
+    });
+    // Start where the group's values leave off
+    const columns = [...$processedColumns.values()];
+    const column =
+      getFirstEditableColumn(columns.filter((c) => !(c.id in groupValues))) ??
+      getFirstEditableColumn(columns);
+    if (!column) return;
+    selection.update((s) => s.ofOneCell(makeCellId(rowId, String(column.id))));
   }
 
   async function handleRowHeaderMouseDown(e: MouseEvent) {
@@ -215,6 +234,11 @@
           />
         {/if}
       {/each}
+    {:else if isGroupAddRecordRow(row)}
+      <GroupAddRecord
+        columnCount={$processedColumns.size}
+        onAdd={addRecordToGroup}
+      />
     {:else if isHelpTextRow(row)}
       <NewRecordMessage columnCount={$processedColumns.size} />
     {/if}
