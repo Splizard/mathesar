@@ -99,19 +99,28 @@
     modalRecordView.open(recordStore);
   }
 
-  /** Adds a record to the group this row closes, with its values filled in */
-  async function addRecordToGroup() {
+  /**
+   * Adds a record to the group this row closes, with its values filled in, and
+   * selects the clicked column's cell: or, where that cell holds a group value
+   * or cannot be edited, the first one the group left empty.
+   */
+  async function addRecordToGroup(clickedColumnId: string | undefined) {
     if (!isGroupAddRecordRow(row)) return;
     const { groupValues, groupKey } = row;
     const rowId = await $tabularData.addNewRecord({
       values: groupValues,
       groupKey,
     });
-    // Start where the group's values leave off
     const columns = [...$processedColumns.values()];
+    const clicked = clickedColumnId
+      ? $processedColumns.get(clickedColumnId)
+      : undefined;
     const column =
-      getFirstEditableColumn(columns.filter((c) => !(c.id in groupValues))) ??
-      getFirstEditableColumn(columns);
+      clicked && clicked.isEditable && !(clicked.id in groupValues)
+        ? clicked
+        : getFirstEditableColumn(
+            columns.filter((c) => !(c.id in groupValues)),
+          ) ?? getFirstEditableColumn(columns);
     if (!column) return;
     selection.update((s) => s.ofOneCell(makeCellId(rowId, String(column.id))));
   }
@@ -236,7 +245,11 @@
       {/each}
     {:else if isGroupAddRecordRow(row)}
       <GroupAddRecord
-        columnCount={$processedColumns.size}
+        {row}
+        columns={columnsToRender}
+        canUpdateRecords={$canUpdateRecords}
+        recordSummaries={$linkedRecordSummaries}
+        fileManifests={$fileManifests}
         onAdd={addRecordToGroup}
       />
     {:else if isHelpTextRow(row)}

@@ -845,14 +845,45 @@ export class RecordsData {
    * still on its way keeps what was typed into it: the answer may have been read before the save
    * landed, and the save's own answer will set the cell when it comes.
    */
+  private recordNameAsText(record: ApiRecord): string | undefined {
+    const pkColumns = get(this.columnsDataStore.pkColumns);
+    return defined(nameOfRecord(record, pkColumns), recordNameToText);
+  }
+
+  /**
+   * A live refresh can fetch a record before the reply that created it
+   * arrives, and so give it a row of its own. That row takes the new record's
+   * identity, which is the one any selection holds, so that the next refresh
+   * finds one row for it rather than two.
+   */
+  private adoptFetchedCopyOf(row: PersistedRecordRow): void {
+    const name = this.recordNameAsText(row.record);
+    if (name === undefined) return;
+    const rows = get(this.fetchedRecordRows);
+    const index = rows.findIndex(
+      (r) =>
+        r.identifier !== row.identifier &&
+        this.recordNameAsText(r.record) === name,
+    );
+    if (index === -1) return;
+    this.fetchedRecordRows.set(
+      rows.map((r, i) =>
+        i === index
+          ? new PersistedRecordRow({
+              identifier: row.identifier,
+              record: r.record,
+            })
+          : r,
+      ),
+    );
+  }
+
   private carryRowsOver(records: ApiRecord[]): {
     rows: PersistedRecordRow[];
     /** The identities of the rows added here that are now among the others */
     movedFromNewRecords: Set<string>;
   } {
-    const pkColumns = get(this.columnsDataStore.pkColumns);
-    const nameAsText = (record: ApiRecord) =>
-      defined(nameOfRecord(record, pkColumns), recordNameToText);
+    const nameAsText = (record: ApiRecord) => this.recordNameAsText(record);
     const shownByName = new Map<string, PersistedRecordRow>();
     const persistedNewRecords = get(this.newRecords).filter(
       isPersistedRecordRow,
@@ -989,6 +1020,7 @@ export class RecordsData {
           return entry;
         }),
       );
+      this.adoptFetchedCopyOf(newRow);
       return newRow;
     } catch (err) {
       this.meta.rowCreationStatus.set(row.identifier, {
