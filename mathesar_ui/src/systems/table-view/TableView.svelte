@@ -12,6 +12,7 @@
     iconClose,
   } from '@mathesar/component-library';
   import { Sheet } from '@mathesar/components/sheet';
+  import { parseCellId } from '@mathesar/components/sheet/cellIds';
   import { SheetClipboardHandler } from '@mathesar/components/sheet/clipboard';
   import { contextMenuContext } from '@mathesar/contexts/contextMenuContext';
   import { ROW_HEADER_WIDTH_PX } from '@mathesar/geometry';
@@ -26,6 +27,7 @@
     ID_ROW_CONTROL_COLUMN,
     getTabularDataStoreFromContext,
     isJoinedColumn,
+    isPlaceholderRecordRow,
   } from '@mathesar/stores/table-data';
   import { tableInspectorTab } from '@mathesar/stores/tableInspector';
   import { currentTablesMap } from '@mathesar/stores/tables';
@@ -83,6 +85,19 @@
     hasPrimaryKey,
   } = $tabularData);
   $: $tabularData, ($tableInspectorTab = 'table');
+  /** The placeholder row holding the active cell, if one does */
+  function getActivePlaceholder() {
+    const { activeCellId } = get(selection);
+    if (!activeCellId) return undefined;
+    const { rowId } = parseCellId(activeCellId);
+    const descriptor = get(display.displayRowDescriptors).find(
+      ({ row }) => row.identifier === rowId,
+    );
+    return descriptor && isPlaceholderRecordRow(descriptor.row)
+      ? descriptor.row
+      : undefined;
+  }
+
   $: clipboardHandler = new SheetClipboardHandler({
     copyingContext: {
       getRows: () =>
@@ -100,7 +115,10 @@
       getSheetColumns: () => [
         ...map(({ column }) => column, get(processedColumns).values()),
       ],
-      bulkDml: (args) => recordsData.bulkDml(args),
+      // Pasting into a placeholder row adds records from it, which a group's
+      // placeholder row gives its values
+      bulkDml: (args) =>
+        recordsData.bulkDml({ ...args, placeholder: getActivePlaceholder() }),
       confirm: (title) =>
         confirm({
           title,

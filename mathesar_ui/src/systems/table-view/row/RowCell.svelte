@@ -56,12 +56,8 @@
   const canViewLinkedEntities = true;
 
   $: recordsDataState = recordsData.state;
-  $: ({
-    linkedRecordSummaries,
-    joinedRecordSummaries,
-    fileManifests,
-    newRecords,
-  } = recordsData);
+  $: ({ linkedRecordSummaries, joinedRecordSummaries, fileManifests } =
+    recordsData);
   $: ({ column } = effectiveColumnFabric);
   $: columnId = effectiveColumnFabric.id;
   $: isWithinPlaceholderRow = isPlaceholderRecordRow(row);
@@ -97,16 +93,21 @@
   async function setValue(newValue: unknown) {
     if (newValue === value) return;
     const cells: NewCellValueRecipe[] = [{ columnId, value: newValue }];
-    await recordsData.bulkDml(
+    const { rowIds } = await recordsData.bulkDml(
       isWithinPlaceholderRow
-        ? { modificationRecipes: [], additionRecipes: [{ cells }] }
+        ? {
+            modificationRecipes: [],
+            additionRecipes: [{ cells }],
+            placeholder: row,
+          }
         : { modificationRecipes: [{ row, cells }], additionRecipes: [] },
     );
     if (isWithinPlaceholderRow) {
       // Re-focus the cell just edited. The placeholder row requires this extra
-      // logic because it gets a new id value after it's saved, and that ends up
-      // wiping out the fact that a cell in that row was selected.
-      const newRowId = $newRecords[$newRecords.length - 1].identifier;
+      // logic because the record gets a row of its own when it's saved, and
+      // that ends up wiping out the fact that a cell in that row was selected.
+      const newRowId = rowIds[0];
+      if (newRowId === undefined) return;
       selection.update((s) =>
         s.ofRowColumnIntersection([newRowId], [columnId]),
       );

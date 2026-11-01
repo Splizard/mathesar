@@ -58,29 +58,72 @@ export default class Plane {
 
   readonly rangeRestrictedColumnIds: ImmutableSet<string>;
 
+  /**
+   * Placeholder rows shown among the data rows, such as the one closing each
+   * group of a grouped table. Like the placeholder row at the bottom, they
+   * hold no data, and the active cell may move into them.
+   */
+  readonly innerPlaceholderRowIds: ImmutableSet<string>;
+
+  /**
+   * The data rows and inner placeholder rows in the order they are shown,
+   * which is the order the active cell moves through them.
+   */
+  private readonly rowOrder: Series<string>;
+
   constructor(
     rowIds: Series<string> = new Series(),
     columnIds: Series<string> = new Series(),
     placeholderRowId?: string,
     rangeRestrictedColumnIds: ImmutableSet<string> = new ImmutableSet(),
+    innerPlaceholders?: {
+      rowIds: ImmutableSet<string>;
+      /** Every data row and inner placeholder row, in the order shown */
+      order: Series<string>;
+    },
   ) {
     this.rowIds = rowIds;
     this.columnIds = columnIds;
     this.placeholderRowId = placeholderRowId;
     this.rangeRestrictedColumnIds = rangeRestrictedColumnIds;
+    this.innerPlaceholderRowIds =
+      innerPlaceholders?.rowIds ?? new ImmutableSet();
+    this.rowOrder = innerPlaceholders?.order ?? rowIds;
+  }
+
+  isPlaceholderRowId(rowId: string): boolean {
+    return (
+      rowId === this.placeholderRowId || this.innerPlaceholderRowIds.has(rowId)
+    );
   }
 
   /**
    * @returns the row id that should be used to represent the given row id in
-   * the plane. If the given row id is the placeholder row id, then the last
-   * row id in the plane will be returned. Otherwise, the given row id will be
-   * returned.
+   * the plane. The placeholder row at the bottom is represented by the last
+   * data row, and an inner placeholder row by the nearest data row above it
+   * (or below it, where there is none above). Other row ids are returned as
+   * they are.
    */
   private normalizeFlexibleRowId(rowId: string): string | undefined {
     if (rowId === this.placeholderRowId) {
       return this.rowIds.last;
     }
-    return rowId;
+    if (!this.innerPlaceholderRowIds.has(rowId)) {
+      return rowId;
+    }
+    const index = this.rowOrder.getIndex(rowId);
+    if (index === undefined) return this.rowIds.last;
+    const isDataRow = (id: string | undefined) =>
+      id !== undefined && !this.innerPlaceholderRowIds.has(id);
+    for (let i = index - 1; i >= 0; i -= 1) {
+      const id = this.rowOrder.at(i);
+      if (isDataRow(id)) return id;
+    }
+    for (let i = index + 1; i < this.rowOrder.length; i += 1) {
+      const id = this.rowOrder.at(i);
+      if (isDataRow(id)) return id;
+    }
+    return undefined;
   }
 
   /**
@@ -188,42 +231,38 @@ export default class Plane {
       return noAdjacentCell();
     }
 
+    const cellIn = (rowId: string): AdjacentCell => {
+      const newCellId = makeCellId(rowId, newColumnId);
+      return this.isPlaceholderRowId(rowId)
+        ? adjacentPlaceholderCell(newCellId)
+        : adjacentDataCell(newCellId);
+    };
+
+    const rowOffset = getRowOffset(direction);
+    if (rowOffset === 0) {
+      // Move laterally within the row
+      return cellIn(cell.rowId);
+    }
+
     if (cell.rowId === this.placeholderRowId) {
-      if (direction === Direction.Up) {
-        const lastRowId = this.rowIds.last;
-        if (lastRowId === undefined) {
-          // Can't go up from the placeholder row if there are no data rows
-          return noAdjacentCell();
-        }
-        // Move up from the placeholder row into the last data row
-        return adjacentDataCell(makeCellId(lastRowId, newColumnId));
-      }
       if (direction === Direction.Down) {
         // Can't go down from the placeholder row
         return noAdjacentCell();
       }
-      // Move laterally within the placeholder row
-      return adjacentPlaceholderCell(makeCellId(cell.rowId, newColumnId));
+      // Move up from the placeholder row into the last row above it
+      const lastRowId = this.rowOrder.last;
+      return lastRowId === undefined ? noAdjacentCell() : cellIn(lastRowId);
     }
 
-    const rowOffset = getRowOffset(direction);
-    const newRowId = this.rowIds.offset(cell.rowId, rowOffset);
+    const newRowId = this.rowOrder.offset(cell.rowId, rowOffset);
     if (newRowId === undefined) {
-      if (direction === Direction.Down) {
-        if (this.placeholderRowId === undefined) {
-          // Can't go down from the last data row if there is no placeholder row
-          return noAdjacentCell();
-        }
-        const newCellId = makeCellId(this.placeholderRowId, newColumnId);
-        // Move down from the last data row into the placeholder row
-        return adjacentPlaceholderCell(newCellId);
+      if (direction === Direction.Down && this.placeholderRowId !== undefined) {
+        // Move down from the last row into the placeholder row
+        return cellIn(this.placeholderRowId);
       }
-      // Can't move up from the first data row
       return noAdjacentCell();
     }
-
-    // Normal movement from one data cell to another data cell
-    return adjacentDataCell(makeCellId(newRowId, newColumnId));
+    return cellIn(newRowId);
   }
 
   get hasResultRows(): boolean {

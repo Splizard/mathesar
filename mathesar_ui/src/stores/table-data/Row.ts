@@ -12,7 +12,6 @@ export enum RowType {
   DraftRecord = 'draftRecord',
   PlaceholderRecord = 'placeholderRecord',
   GroupHeader = 'groupHeader',
-  GroupAddRecord = 'groupAddRecord',
   Help = 'help',
 }
 
@@ -128,24 +127,37 @@ export class GroupHeaderRow {
 }
 
 /**
- * Closes a group: adds a record to it, with the group's values already filled
- * in.
+ * The empty row closing a group, like the one at the bottom of the table but
+ * with the group's values already in their columns. Entering a value in it
+ * adds a record to the group.
  */
-export class GroupAddRecordRow {
-  readonly identifier: string;
-
+export class GroupPlaceholderRecordRow extends PlaceholderRecordRow {
   readonly groupKey: string;
 
   /** What a record needs in order to land in this group */
   readonly groupValues: ApiRecord;
 
-  readonly type = RowType.GroupAddRecord;
-
-  constructor(props: { groupKey: string; groupValues: ApiRecord }) {
-    // Stable for as long as the group is, so the row keeps its slot
-    this.identifier = `group-add-record-row-${props.groupKey}`;
+  constructor(props: {
+    groupKey: string;
+    groupValues: ApiRecord;
+    record: ApiRecord;
+  }) {
+    // Stable for as long as the group is, so a selection in it survives the
+    // rows being worked out again
+    super({
+      identifier: `group-placeholder-row-${props.groupKey}`,
+      record: props.record,
+    });
     this.groupKey = props.groupKey;
     this.groupValues = props.groupValues;
+  }
+
+  withRecord(updatedRecord: ApiRecord): GroupPlaceholderRecordRow {
+    return new GroupPlaceholderRecordRow({
+      groupKey: this.groupKey,
+      groupValues: this.groupValues,
+      record: updatedRecord,
+    });
   }
 }
 
@@ -159,7 +171,7 @@ export type ProvisionalRecordRow = DraftRecordRow | PlaceholderRecordRow;
 
 export type RecordRow = PersistedRecordRow | ProvisionalRecordRow;
 
-export type Row = RecordRow | GroupHeaderRow | GroupAddRecordRow | HelpTextRow;
+export type Row = RecordRow | GroupHeaderRow | HelpTextRow;
 
 export function isPersistedRecordRow(row: Row): row is PersistedRecordRow {
   return row.type === RowType.PersistedRecord;
@@ -185,8 +197,10 @@ export function isGroupHeaderRow(row: Row): row is GroupHeaderRow {
   return row.type === RowType.GroupHeader;
 }
 
-export function isGroupAddRecordRow(row: Row): row is GroupAddRecordRow {
-  return row.type === RowType.GroupAddRecord;
+export function isGroupPlaceholderRecordRow(
+  row: Row,
+): row is GroupPlaceholderRecordRow {
+  return row instanceof GroupPlaceholderRecordRow;
 }
 
 export function isHelpTextRow(row: Row): row is HelpTextRow {

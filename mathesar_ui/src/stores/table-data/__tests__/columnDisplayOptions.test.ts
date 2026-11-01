@@ -10,7 +10,10 @@ const metadataSetCalls: unknown[] = [];
 vi.mock('@mathesar/api/rpc', () => ({
   api: {
     columns: {
-      list_with_metadata: () => ({ run: () => Promise.resolve(listed), cancel: () => {} }),
+      list_with_metadata: () => ({
+        run: () => Promise.resolve(listed),
+        cancel: () => {},
+      }),
       metadata: {
         set: (params: unknown) => {
           metadataSetCalls.push(params);
@@ -47,7 +50,10 @@ function makeColumn(
 async function makeStore(columns: RawColumnWithMetadata[]) {
   listed.splice(0, listed.length, ...columns);
   metadataSetCalls.length = 0;
-  const store = new ColumnsDataStore({ database: { id: 1 }, table: { oid: 2 } });
+  const store = new ColumnsDataStore({
+    database: { id: 1 },
+    table: { oid: 2 },
+  });
   await store.fetch();
   return store;
 }
@@ -91,7 +97,9 @@ describe('setDisplayOptions', () => {
     expect(refetched).toBe(0);
 
     // A user column is different: what the back end sends back for the records depends on it.
-    await store.setDisplayOptions(new Map([[3, { user_display_field: 'email' }]]));
+    await store.setDisplayOptions(
+      new Map([[3, { user_display_field: 'email' }]]),
+    );
     expect(refetched).toBe(1);
   });
 });

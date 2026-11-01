@@ -54,10 +54,12 @@ import type { Joining } from './joining';
 import type { Meta } from './meta';
 import {
   DraftRecordRow,
+  type GroupPlaceholderRecordRow,
   PersistedRecordRow,
   type RecordRow,
   type Row,
   isDraftRecordRow,
+  isGroupPlaceholderRecordRow,
   isPersistedRecordRow,
 } from './Row';
 import type { SearchFuzzy } from './searchFuzzy';
@@ -174,6 +176,18 @@ function validateRowModificationRecipe(
 /** A recipe to add one row to the sheet */
 export interface RowAdditionRecipe {
   cells: NewCellValueRecipe[];
+}
+
+/** Fills in the group's values the recipe does not set itself */
+function withGroupValues(
+  recipe: RowAdditionRecipe,
+  group: GroupPlaceholderRecordRow,
+): RowAdditionRecipe {
+  const setColumnIds = new Set(recipe.cells.map((c) => String(c.columnId)));
+  const groupCells = Object.entries(group.groupValues)
+    .filter(([columnId]) => !setColumnIds.has(columnId))
+    .map(([columnId, value]) => ({ columnId, value }));
+  return { cells: [...groupCells, ...recipe.cells] };
 }
 
 function makeRowModificationRecipe(
@@ -639,14 +653,31 @@ export class RecordsData {
   async bulkDml({
     modificationRecipes,
     additionRecipes,
+    placeholder,
   }: {
     modificationRecipes: RowModificationRecipe[];
     additionRecipes: RowAdditionRecipe[];
+    /**
+     * The placeholder row the records are being added from. Records added from
+     * a group's placeholder row are given the group's values and shown in it.
+     */
+    placeholder?: RecordRow;
   }): Promise<{ rowIds: string[]; columnIds: string[] }> {
-    const convertedRecipes = additionRecipes.map(makeRowModificationRecipe);
+    const group =
+      placeholder && isGroupPlaceholderRecordRow(placeholder)
+        ? placeholder
+        : undefined;
+    const convertedRecipes = additionRecipes
+      .map((recipe) => (group ? withGroupValues(recipe, group) : recipe))
+      .map(makeRowModificationRecipe);
     const additionalRows = convertedRecipes
       .map(({ row }) => row)
       .filter(isDraftRecordRow);
+    if (group) {
+      additionalRows.forEach((row) =>
+        this.newRecordGroupKeys.set(row.identifier, group.groupKey),
+      );
+    }
 
     const pkColumns = this.getPkColumOrError();
     const unifiedRecipes = [...modificationRecipes, ...convertedRecipes];
@@ -832,6 +863,16 @@ export class RecordsData {
 
     this.fetchedRecordRows.update((rows) => rows.map(postProcessRecordRow));
     this.newRecords.update((rows) => rows.map(postProcessRecordRow));
+
+    const createdRowIds = new Set(
+      recipes
+        .filter(({ row }) => isDraftRecordRow(row))
+        .map((r) => r.row.identifier),
+    );
+    get(this.newRecords)
+      .filter(isPersistedRecordRow)
+      .filter((row) => createdRowIds.has(row.identifier))
+      .forEach((row) => this.adoptFetchedCopyOf(row));
 
     this.updateSummaryStores(responses);
   }
@@ -1054,21 +1095,12 @@ export class RecordsData {
     await this.createRecord(newRow);
   }
 
-  /**
-   * @returns the identifier of the new record's row
-   */
-  async addEmptyRecord(
-    options: { values?: ApiRecord; groupKey?: string } = {},
-  ): Promise<string> {
+  async addEmptyRecord(): Promise<void> {
     const row = new DraftRecordRow({
-      record: { ...this.getEmptyApiRecord(), ...options.values },
+      record: this.getEmptyApiRecord(),
     });
-    if (options.groupKey !== undefined) {
-      this.newRecordGroupKeys.set(row.identifier, options.groupKey);
-    }
     this.newRecords.update((existing) => existing.concat(row));
     await this.createRecord(row);
-    return row.identifier;
   }
 
   getCellValue(cellSelectionId: string): ResultValue | undefined {

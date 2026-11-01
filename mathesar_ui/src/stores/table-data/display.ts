@@ -9,8 +9,8 @@ import type { ProcessedColumns } from './processedColumns';
 import type { RecordsData } from './records';
 import {
   type DraftRecordRow,
-  GroupAddRecordRow,
   GroupHeaderRow,
+  GroupPlaceholderRecordRow,
   HelpTextRow,
   type PersistedRecordRow,
   PlaceholderRecordRow,
@@ -50,7 +50,7 @@ export interface DisplayRecordRowDescriptor {
 }
 
 export interface DisplayUiRowDescriptor {
-  row: HelpTextRow | GroupHeaderRow | GroupAddRecordRow | PlaceholderRecordRow;
+  row: HelpTextRow | GroupHeaderRow | PlaceholderRecordRow;
   rowOrigin: RowOrigin.StaticUiElement;
 }
 
@@ -95,6 +95,7 @@ export function combineRecordRowsWithGroupHeaders({
   pagination,
   totalCount,
   canAddToGroups,
+  emptyRecord = {},
 }: {
   recordRows: PersistedRecordRow[];
   newRecords: (PersistedRecordRow | DraftRecordRow)[];
@@ -103,6 +104,8 @@ export function combineRecordRowsWithGroupHeaders({
   pagination: Pagination;
   totalCount: number;
   canAddToGroups: boolean;
+  /** What a new record starts as, before the group's values */
+  emptyRecord?: ApiRecord;
 }): {
   rows: DisplayRowDescriptor[];
   /** New records not shown within a group */
@@ -172,7 +175,11 @@ export function combineRecordRowsWithGroupHeaders({
       });
       if (canAddToGroups) {
         combinedRows.push({
-          row: new GroupAddRecordRow({ groupKey, groupValues }),
+          row: new GroupPlaceholderRecordRow({
+            groupKey,
+            groupValues,
+            record: { ...emptyRecord, ...groupValues },
+          }),
           rowOrigin: RowOrigin.StaticUiElement,
         });
       }

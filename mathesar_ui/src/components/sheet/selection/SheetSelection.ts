@@ -423,9 +423,8 @@ export default class SheetSelection {
    */
   ofOneCell(cellId: string): SheetSelection {
     const { rowId, columnId } = parseCellId(cellId);
-    const { placeholderRowId } = this.plane;
     let makeBasis;
-    if (rowId === placeholderRowId) {
+    if (this.plane.isPlaceholderRowId(rowId)) {
       makeBasis = basisFromPlaceholderCell;
     } else if (this.plane.rangeRestrictedColumnIds.has(columnId)) {
       makeBasis = basisFromRangeRestrictedCell;

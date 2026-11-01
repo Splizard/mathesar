@@ -146,7 +146,11 @@
     try {
       await recordsData.bulkDml(
         isPlaceholderRecordRow(row)
-          ? { modificationRecipes: [], additionRecipes: [{ cells }] }
+          ? {
+              modificationRecipes: [],
+              additionRecipes: [{ cells }],
+              placeholder: row,
+            }
           : { modificationRecipes: [{ row, cells }], additionRecipes: [] },
       );
       saveState = { state: 'success' };

@@ -40,7 +40,7 @@ import type { AssociatedCellValuesForSheet } from '../AssociatedCellData';
 
 import { ColumnsDataStore } from './columns';
 import { ConstraintsDataStore } from './constraints';
-import { Display, type DisplayRecordRowDescriptor, RowOrigin } from './display';
+import { Display } from './display';
 import {
   type JoinedColumn,
   SimpleManyToManyJoinedColumn,
@@ -51,6 +51,11 @@ import {
   type ProcessedColumnsStore,
 } from './processedColumns';
 import { RecordsData } from './records';
+import {
+  isDraftRecordRow,
+  isGroupPlaceholderRecordRow,
+  isPersistedRecordRow,
+} from './Row';
 import { getRowSelectionId } from './utils';
 
 /**
@@ -341,26 +346,35 @@ export class TabularData {
         joinedColumns,
       ]) => {
         // In the order they are shown, which in a grouped view puts a record
-        // added to a group among that group's records
-        // A Series refuses duplicates, and a grouped page fetched under the
-        // previous grouping can briefly show a row twice
-        const rowIds = new Series([
-          ...new Set(
-            displayRowDescriptors
-              .filter(
-                (d): d is DisplayRecordRowDescriptor =>
-                  d.rowOrigin !== RowOrigin.StaticUiElement,
-              )
-              .map((d) => getRowSelectionId(d.row)),
-          ),
-        ]);
+        // added to a group among that group's records, and closes each group
+        // with its own placeholder row. A Series refuses duplicates, and a
+        // grouped page fetched under the previous grouping can briefly show a
+        // row twice.
+        const order: string[] = [];
+        const dataRowIds: string[] = [];
+        const groupPlaceholderRowIds: string[] = [];
+        const seen = new Set<string>();
+        for (const { row } of displayRowDescriptors) {
+          const isData = isPersistedRecordRow(row) || isDraftRecordRow(row);
+          const isGroupPlaceholder = isGroupPlaceholderRecordRow(row);
+          if (!isData && !isGroupPlaceholder) continue;
+          const id = getRowSelectionId(row);
+          if (seen.has(id)) continue;
+          seen.add(id);
+          order.push(id);
+          (isData ? dataRowIds : groupPlaceholderRowIds).push(id);
+        }
         const columnIds = new Series([...displayedColumns.keys()]);
         const rangeRestrictedColumnIds = new ImmutableSet(joinedColumns.keys());
         return new Plane(
-          rowIds,
+          new Series(dataRowIds),
           columnIds,
           placeholderRowId,
           rangeRestrictedColumnIds,
+          {
+            rowIds: new ImmutableSet(groupPlaceholderRowIds),
+            order: new Series(order),
+          },
         );
       },
     );
@@ -489,13 +503,8 @@ export class TabularData {
     return pkColumns.map((column) => row.record[column.id]);
   }
 
-  /**
-   * @returns the identifier of the new record's row
-   */
-  async addNewRecord(
-    options: Parameters<RecordsData['addEmptyRecord']>[0] = {},
-  ) {
-    const newRecord = await this.recordsData.addEmptyRecord(options);
+  async addNewRecord() {
+    const newRecord = await this.recordsData.addEmptyRecord();
     const requiredColumnIds = get(this.columnsDataStore.columns)
       .filter((column) => {
         const hasDynamicDefault = column.default?.is_dynamic ?? false;

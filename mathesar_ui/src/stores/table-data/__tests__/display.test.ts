@@ -3,7 +3,7 @@ import Pagination from '@mathesar/utils/Pagination';
 import { RowOrigin, combineRecordRowsWithGroupHeaders } from '../display';
 import {
   DraftRecordRow,
-  type GroupAddRecordRow,
+  GroupPlaceholderRecordRow,
   PersistedRecordRow,
   RowType,
 } from '../Row';
@@ -45,19 +45,23 @@ describe('combineRecordRowsWithGroupHeaders', () => {
     expect(rows.map((d) => d.row.type)).toEqual([
       RowType.GroupHeader,
       RowType.PersistedRecord,
-      RowType.GroupAddRecord,
+      RowType.PlaceholderRecord,
       RowType.GroupHeader,
       RowType.PersistedRecord,
-      RowType.GroupAddRecord,
+      RowType.PlaceholderRecord,
     ]);
-    const addRow = rows[2].row as GroupAddRecordRow;
+    const addRow = rows[2].row as GroupPlaceholderRecordRow;
+    expect(addRow).toBeInstanceOf(GroupPlaceholderRecordRow);
+    expect(addRow.record).toEqual({ 2: 'a' });
     expect(addRow.groupValues).toEqual({ 2: 'a' });
     expect(addRow.groupKey).toBe(getGroupKey(grouping.groups[0], grouping));
   });
 
   test('offers no add rows where records cannot be added to groups', () => {
     const { rows } = combine([], new Map(), false);
-    expect(rows.some((d) => d.row.type === RowType.GroupAddRecord)).toBe(false);
+    expect(rows.some((d) => d.row.type === RowType.PlaceholderRecord)).toBe(
+      false,
+    );
   });
 
   test('shows a record added to a group within that group', () => {

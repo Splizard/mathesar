@@ -13,8 +13,8 @@
     getCellKey,
     getRowSelectionId,
     getTabularDataStoreFromContext,
-    isGroupAddRecordRow,
     isGroupHeaderRow,
+    isGroupPlaceholderRecordRow,
     isHelpTextRow,
     isPersistedRecordRow,
     isPlaceholderRecordRow,
@@ -25,7 +25,6 @@
   import { modalRecordViewContext } from '@mathesar/systems/record-view-modal/modalRecordViewContext';
   import { Icon } from '@mathesar-component-library';
 
-  import GroupAddRecord from './GroupAddRecord.svelte';
   import GroupHeader from './GroupHeader.svelte';
   import NewRecordMessage from './NewRecordMessage.svelte';
   import { getPlainCell } from './plainCell';
@@ -99,36 +98,24 @@
     modalRecordView.open(recordStore);
   }
 
-  /**
-   * Adds a record to the group this row closes, with its values filled in, and
-   * selects the clicked column's cell: or, where that cell holds a group value
-   * or cannot be edited, the first one the group left empty.
-   */
-  async function addRecordToGroup(clickedColumnId: string | undefined) {
-    if (!isGroupAddRecordRow(row)) return;
-    const { groupValues, groupKey } = row;
-    const rowId = await $tabularData.addNewRecord({
-      values: groupValues,
-      groupKey,
-    });
-    const columns = [...$processedColumns.values()];
-    const clicked = clickedColumnId
-      ? $processedColumns.get(clickedColumnId)
-      : undefined;
-    const column =
-      clicked && clicked.isEditable && !(clicked.id in groupValues)
-        ? clicked
-        : getFirstEditableColumn(
-            columns.filter((c) => !(c.id in groupValues)),
-          ) ?? getFirstEditableColumn(columns);
-    if (!column) return;
-    selection.update((s) => s.ofOneCell(makeCellId(rowId, String(column.id))));
-  }
-
   async function handleRowHeaderMouseDown(e: MouseEvent) {
     if (!isPlaceholderRecordRow(row)) return;
 
     e.stopPropagation(); // Prevents cell selection from starting
+
+    if (isGroupPlaceholderRecordRow(row)) {
+      // Nothing is added until a value is entered: this only selects the
+      // first cell the group leaves empty
+      const { groupValues } = row;
+      const columns = [...$processedColumns.values()];
+      const column =
+        getFirstEditableColumn(columns.filter((c) => !(c.id in groupValues))) ??
+        getFirstEditableColumn(columns);
+      if (!column) return;
+      const cellId = makeCellId(row.identifier, String(column.id));
+      selection.update((s) => s.ofOneCell(cellId));
+      return;
+    }
 
     await $tabularData.addNewRecord();
 
@@ -228,6 +215,21 @@
               {plain.display}
             {/if}
           </div>
+        {:else if isGroupPlaceholderRecordRow(row) && columnId in row.groupValues}
+          <div class="group-value">
+            <RowCell
+              {selection}
+              {row}
+              rowHasErrors={hasWholeRowErrors}
+              {key}
+              modificationStatusMap={cellModificationStatus}
+              clientSideErrorMap={cellClientSideErrors}
+              value={row.record[columnId]}
+              {columnFabric}
+              {recordsData}
+              canUpdateRecords={$canUpdateRecords}
+            />
+          </div>
         {:else}
           <RowCell
             {selection}
@@ -243,15 +245,6 @@
           />
         {/if}
       {/each}
-    {:else if isGroupAddRecordRow(row)}
-      <GroupAddRecord
-        {row}
-        columns={columnsToRender}
-        canUpdateRecords={$canUpdateRecords}
-        recordSummaries={$linkedRecordSummaries}
-        fileManifests={$fileManifests}
-        onAdd={addRecordToGroup}
-      />
     {:else if isHelpTextRow(row)}
       <NewRecordMessage columnCount={$processedColumns.size} />
     {/if}
@@ -286,6 +279,20 @@
             > *
         ) {
         visibility: hidden;
+      }
+      // A group's placeholder row shows the group's values, faintly, as what
+      // the record will start with
+      .group-value {
+        display: contents;
+        color: var(--color-fg-base-muted);
+        :global(
+            [data-sheet-element='data-cell']
+              .cell-fabric
+              .cell-wrapper:not(.is-edit-mode)
+              > *
+          ) {
+          visibility: visible;
+        }
       }
     }
   }
