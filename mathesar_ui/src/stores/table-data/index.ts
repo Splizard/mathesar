@@ -21,6 +21,7 @@ export {
   isRecordRow,
   isHelpTextRow,
   isGroupHeaderRow,
+  isGroupsEndRow,
   isGroupPlaceholderRecordRow,
   isPersistedRecordRow,
   isProvisionalRecordRow,

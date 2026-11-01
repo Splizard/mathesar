@@ -3,6 +3,7 @@
   import { parseCellId } from '@mathesar/components/sheet/cellIds';
   import { getSheetContext } from '@mathesar/components/sheet/utils';
   import {
+    GROUPS_END_ROW_HEIGHT_PX,
     GROUP_HEADER_ROW_HEIGHT_PX,
     HELP_TEXT_ROW_HEIGHT_PX,
     ROW_HEIGHT_PX,
@@ -15,6 +16,7 @@
     type Row as RowType,
     getTabularDataStoreFromContext,
     isGroupHeaderRow,
+    isGroupsEndRow,
     isHelpTextRow,
     isPlaceholderRecordRow,
   } from '@mathesar/stores/table-data';
@@ -67,6 +69,9 @@
     }
     if (isGroupHeaderRow(row)) {
       return GROUP_HEADER_ROW_HEIGHT_PX;
+    }
+    if (isGroupsEndRow(row)) {
+      return GROUPS_END_ROW_HEIGHT_PX;
     }
     return ROW_HEIGHT_PX;
   }

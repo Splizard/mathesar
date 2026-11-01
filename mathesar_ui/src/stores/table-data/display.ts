@@ -11,6 +11,7 @@ import {
   type DraftRecordRow,
   GroupHeaderRow,
   GroupPlaceholderRecordRow,
+  GroupsEndRow,
   HelpTextRow,
   type PersistedRecordRow,
   PlaceholderRecordRow,
@@ -50,7 +51,7 @@ export interface DisplayRecordRowDescriptor {
 }
 
 export interface DisplayUiRowDescriptor {
-  row: HelpTextRow | GroupHeaderRow | PlaceholderRecordRow;
+  row: HelpTextRow | GroupHeaderRow | GroupsEndRow | PlaceholderRecordRow;
   rowOrigin: RowOrigin.StaticUiElement;
 }
 
@@ -259,9 +260,18 @@ export class Display {
               canInsert &&
               !!grouping &&
               canAddRecordsToGroups(grouping, $processedColumns),
+            emptyRecord: recordsData.getEmptyApiRecord(),
           },
         );
         let displayRowDescriptors = rows;
+
+        // Sets the groups apart from the rows that belong to none of them
+        if (grouping && grouping.groups.length > 0) {
+          displayRowDescriptors = displayRowDescriptors.concat({
+            row: new GroupsEndRow(),
+            rowOrigin: RowOrigin.StaticUiElement,
+          });
+        }
 
         if (ungroupedNewRecords.length > 0) {
           displayRowDescriptors = displayRowDescriptors

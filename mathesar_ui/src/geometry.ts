@@ -1,6 +1,8 @@
 export const ROW_HEIGHT_PX = 32;
 export const HELP_TEXT_ROW_HEIGHT_PX = 24;
 export const GROUP_HEADER_ROW_HEIGHT_PX = 64;
+/** The break between a grouped table's last group and the rows after it */
+export const GROUPS_END_ROW_HEIGHT_PX = 24;
 export const ROW_HEADER_WIDTH_PX = 50;
 export const DEFAULT_COLUMN_WIDTH_PX = 160;
 export const MIN_COLUMN_WIDTH_PX = 20;

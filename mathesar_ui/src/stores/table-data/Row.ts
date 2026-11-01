@@ -12,6 +12,7 @@ export enum RowType {
   DraftRecord = 'draftRecord',
   PlaceholderRecord = 'placeholderRecord',
   GroupHeader = 'groupHeader',
+  GroupsEnd = 'groupsEnd',
   Help = 'help',
 }
 
@@ -161,6 +162,13 @@ export class GroupPlaceholderRecordRow extends PlaceholderRecordRow {
   }
 }
 
+/** A break between a grouped table's last group and the rows after it */
+export class GroupsEndRow {
+  identifier = 'groups-end-row';
+
+  type = RowType.GroupsEnd;
+}
+
 export class HelpTextRow {
   identifier = getGloballyUniqueId('help-row');
 
@@ -171,7 +179,7 @@ export type ProvisionalRecordRow = DraftRecordRow | PlaceholderRecordRow;
 
 export type RecordRow = PersistedRecordRow | ProvisionalRecordRow;
 
-export type Row = RecordRow | GroupHeaderRow | HelpTextRow;
+export type Row = RecordRow | GroupHeaderRow | GroupsEndRow | HelpTextRow;
 
 export function isPersistedRecordRow(row: Row): row is PersistedRecordRow {
   return row.type === RowType.PersistedRecord;
@@ -201,6 +209,10 @@ export function isGroupPlaceholderRecordRow(
   row: Row,
 ): row is GroupPlaceholderRecordRow {
   return row instanceof GroupPlaceholderRecordRow;
+}
+
+export function isGroupsEndRow(row: Row): row is GroupsEndRow {
+  return row.type === RowType.GroupsEnd;
 }
 
 export function isHelpTextRow(row: Row): row is HelpTextRow {
